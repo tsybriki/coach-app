@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Coach App — доменная модель (v0.1)</title>
+<style>
+  :root {
+    --bg: #fdf6ed;
+    --card-bg: #fffefb;
+    --ink: #1a1a1a;
+    --muted: #6a6056;
+    --faint: #9a9085;
+    --border: #e6dac4;
+    --coral: #ff6b5a;
+    --teal: #14b8a6;
+    --mustard: #d4a017;
+    --terra: #c2410c;
+    --sky: #0284c7;
+    --grass: #65a30d;
+    --code-bg: #f4ede0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.55;
+    padding: 0 0 60px;
+    font-size: 16px;
+  }
+  code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  /* ---------- header ---------- */
+  header {
+    padding: 20px 16px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--card-bg);
+  }
+  header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  header .sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  header .meta { font-size: 11px; color: var(--faint); margin-top: 8px; }
+
+  /* ---------- sticky nav ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(253, 246, 237, 0.96);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+    padding: 8px 12px;
+    scrollbar-width: none;
+  }
+  nav::-webkit-scrollbar { display: none; }
+  nav a {
+    display: inline-block;
+    font-size: 12px;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 5px 10px;
+    margin-right: 4px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--card-bg);
+  }
+  nav a.on { color: #fff; background: var(--ink); border-color: var(--ink); }
+
+  main { padding: 0 14px; max-width: 780px; margin: 0 auto; }
+
+  section { margin-top: 34px; scroll-margin-top: 60px; }
+  .h2 {
+    display: flex; align-items: baseline; gap: 9px;
+    font-size: 17px; font-weight: 700;
+    padding-bottom: 7px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 14px;
+  }
+  .h2 .n { font-size: 12px; color: var(--coral); font-weight: 700; }
+  h3 { font-size: 15px; font-weight: 700; margin: 18px 0 8px; }
+  h4 { font-size: 13px; font-weight: 700; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  p { font-size: 15px; margin-bottom: 10px; }
+  ul, ol { margin: 0 0 12px 0; padding-left: 20px; }
+  li { font-size: 14.5px; margin-bottom: 5px; }
+  b, strong { font-weight: 700; }
+
+  /* ---------- cards ---------- */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+  .card > .ct {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 15px; font-weight: 700; margin-bottom: 3px;
+  }
+  .card > .ct .tag {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 2px 7px; border-radius: 999px;
+    background: var(--code-bg); color: var(--muted);
+  }
+  .role { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+
+  /* ---------- field list ---------- */
+  .fld { border-top: 1px dashed var(--border); padding: 7px 0; }
+  .fld:first-of-type { border-top: none; }
+  .fld .row1 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; }
+  .fld .fname { font-size: 13.5px; font-weight: 700; }
+  .fld .ftype { font-size: 11.5px; color: var(--sky); background: #e8f3fb; padding: 1px 6px; border-radius: 4px; }
+  .fld .freq { font-size: 11px; color: var(--faint); }
+  .fld .fdesc { font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+  .fld .fdesc em { color: var(--terra); font-style: normal; font-weight: 600; }
+
+  /* ---------- code ---------- */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 8px 0 12px;
+    -webkit-overflow-scrolling: touch;
+  }
+  pre code { white-space: pre; }
+  .inline { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+
+  /* ---------- callouts ---------- */
+  .note {
+    border-left: 3px solid var(--sky);
+    background: #f0f8fd;
+    padding: 10px 12px;
+    border-radius: 0 8px 8px 0;
+    font-size: 14px;
+    margin: 10px 0 14px;
+  }
+  .warn {
+    border-left: 3px solid var(--coral);
+    background: #fff2ef;
+    padding: 10px 12px;
+    border-radius: 0 8px 8px 0;
+    font-size: 14px;
+    margin: 10px 0 14px;
+  }
+  .dec {
+    border-left: 3px solid var(--grass);
+    background: #f3f9ec;
+    padding: 10px 12px;
+    border-radius: 0 8px 8px 0;
+    font-size: 14px;
+    margin: 10px 0 14px;
+  }
+  .note b, .warn b, .dec b { display: block; margin-bottom: 3px; }
+
+  /* ---------- tables ---------- */
+  .tw { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 8px 0 14px; }
+  table { border-collapse: collapse; width: 100%; min-width: 460px; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; background: var(--code-bg); }
+  td code { font-size: 11.5px; }
+
+  /* ---------- chips ---------- */
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 12px; }
+  .chip {
+    font-size: 11.5px; padding: 3px 9px; border-radius: 999px;
+    background: var(--code-bg); border: 1px solid var(--border); color: var(--muted);
+  }
+  .chip.c { background: #ffeceb; border-color: #ffc9c3; color: var(--terra); }
+  .chip.t { background: #e6f7f5; border-color: #b6e8e3; color: #0b7d71; }
+  .chip.m { background: #fdf3dd; border-color: #eddca8; color: #8a6a06; }
+  .chip.s { background: #e8f3fb; border-color: #c2e2f5; color: #026092; }
+  .chip.g { background: #eff7e6; border-color: #cfe5b8; color: #4a7a12; }
+
+  .legend { font-size: 12.5px; color: var(--faint); margin-top: 6px; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 26px 0 0; }
+  .end { text-align: center; font-size: 12px; color: var(--faint); padding: 26px 0 10px; }
+
+  /* ---------- mobile ---------- */
+  @media (max-width: 560px) {
+    body { font-size: 15px; }
+    main { padding: 0 11px; }
+    header { padding: 16px 14px 12px; }
+    header h1 { font-size: 18px; }
+    p { font-size: 14.5px; }
+    li { font-size: 14px; }
+    pre { font-size: 11px; padding: 10px; }
+    pre code { white-space: pre; }
+    table { min-width: 380px; font-size: 12.5px; }
+    th, td { padding: 6px 8px; }
+    .tw { position: relative; }
+    .tw::after {
+      content: '→ свайп';
+      position: absolute; right: 2px; bottom: 2px;
+      font-size: 9.5px; color: var(--faint);
+      background: var(--card-bg); padding: 0 4px; border-radius: 4px;
+      pointer-events: none;
+    }
+    .h2 { font-size: 16px; }
+    .fld .fdesc { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Coach App — доменная модель</h1>
+  <div class="sub">Как я её вижу: сущности, поля, инварианты, порты. Только модель, без кода.</div>
+  <div class="meta">v0.1 · draft · 25.10.2026 · сверено с <code>~/coach/state/*.json</code></div>
+</header>
+
+<nav>
+  <a href="#s1">1 · Слои</a>
+  <a href="#s2">2 · Step</a>
+  <a href="#s3">3 · Session</a>
+  <a href="#s4">4 · Week</a>
+  <a href="#s5">5 · Season</a>
+  <a href="#s6">6 · Goals</a>
+  <a href="#s7">7 · Preferences</a>
+  <a href="#s8">8 · Actual</a>
+  <a href="#s9">9 · Metric</a>
+  <a href="#s10">10 · Commands</a>
+  <a href="#s11">11 · Ports</a>
+  <a href="#s12">12 · Проекции UI</a>
+  <a href="#s13">13 · Дыры</a>
+  <a href="#s14">14 · Решения</a>
+</nav>
+
+<main>
+
+<section id="s1">
+  <div class="h2"><span class="n">01</span> Слои и правило зависимостей</div>
+
+  <p>Мозг — это не «сервис с ИИ». Это чистый код с четырьмя слоями, где зависимости идут строго вниз. Мозг не знает, где лежат файлы, что такое HTTP и что такое Garmin.</p>
+
+<pre><code>domain   Session · Step · Week · SeasonPlan · Preferences · Athlete · Actual
+         — чистые данные и правила над ними. Ноль I/O.
+
+services Planner · WeekBuilder · StepBuilder · Allocator
+         Replanner · Adjuster · GateEvaluator · Metrics
+         — сценарии: связывают домен и порты.
+
+ports    PlanRepo · ActualRepo · AthleteRepo · CalendarPort
+         ActivityPort · ProgressPort · LLM · Clock
+         — контракты. Форма данных и поведение при сбое зафиксированы ДО кода.
+
+adapters JsonPlanRepo · GarminActivityAdapter · StrydProgressAdapter
+         LlmNarrator · SystemClock
+         — знают про файлы, сеть, форматы.</code></pre>
+
+  <div class="dec">
+    <b>Правило одного источника правды</b>
+    Всё состояние — в <code>state/*.json</code> (<code>~/coach</code>). Клиент (телефон) — кэш снапшота, а не второй источник. Поэтому «правка в телефоне» = команда в outbox → сервер/мозг → снапшот.
+  </div>
+</section>
+
+<section id="s2">
+  <div class="h2"><span class="n">02</span> Step — ядро гибкости</div>
+
+  <p>Тренировка не должна храниться строкой. Единица смысла — <b>шаг</b>. Шаг отвечает на три независимых вопроса, и в текущих данных они смешаны в один плоский словарь:</p>
+
+  <div class="tw">
+  <table>
+    <tr><th>Вопрос</th><th>Поле</th><th>Значения</th></tr>
+    <tr><td><b>Что измеряем</b> — объём</td><td><code>dimension</code></td><td><code>time</code> · <code>distance</code> · <code>reps</code> · <code>effort_only</code></td></tr>
+    <tr><td><b>В чём задаём интенсивность</b></td><td><code>target</code></td><td><code>hr</code> (зона) · <code>pace</code> · <code>rpe</code> · <code>power</code> · <code>none</code></td></tr>
+    <tr><td><b>Как устроена структура</b></td><td><code>structure</code></td><td><code>flat</code> (шаги подряд) · <code>sets</code> (повторы с отдыхом)</td></tr>
+  </table>
+  </div>
+
+  <div class="warn">
+    <b>Поправка к твоей формулировке</b>
+    «Пульсовая зона / время / скорость / отрезок» — это не четыре вида шага. Это <b>два разных измерения</b>: объём (время/дистанция) и интенсивность (HR/темп/RPE). А «отрезок» — это не basis, а <b>структура</b> (повторы с отдыхом). Если смешать их в одно поле <code>basis</code>, получится неразличимое «distance+hr» против «time+hr» и любая валидация станет guess'ом.
+  </div>
+
+  <div class="card">
+    <div class="ct">Step <span class="tag">union</span></div>
+    <div class="role">Обязательные: <code>phase</code>, <code>dimension</code>, <code>target</code>, <code>duration_min</code>. Опционально: <code>distance_m</code>, <code>reps</code>, <code>notes</code>.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">phase</span><span class="ftype">enum</span></div><div class="fdesc">warmup · work · recovery · cooldown · rest · set · transition · main</div></div>
+    <div class="fld"><div class="row1"><span class="fname">dimension</span><span class="ftype">enum</span></div><div class="fdesc">time · distance · reps · effort_only. <em>Что мерим.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">target</span><span class="ftype">object</span></div><div class="fdesc"> discriminated union: <code>{type:'hr', zone:'Z5', bpm:164}</code> · <code>{type:'pace', from:'4:15', to:'3:50'}</code> · <code>{type:'rpe', rpe:8}</code> · <code>{type:'none'}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">duration_min</span><span class="ftype">int</span></div><div class="fdesc">длительность шага. Всегда считается — даже когда задан отрезок (для плана по времени).</div></div>
+    <div class="fld"><div class="row1"><span class="fname">distance_m</span><span class="ftype">int?</span></div><div class="fdesc">для dimension=distance. 800 / 200 / 250 (отдых) / 3000.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">reps</span><span class="ftype">int?</span></div><div class="fdesc">для dimension=reps — 3×45с планка, 2×12/стор.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">notes</span><span class="ftype">string?</span></div><div class="fdesc">пояснение для человека, не для логики.</div></div>
+  </div>
+
+  <h3>Шаг-повтор (set)</h3>
+  <p>Отрезок — это <b>структура</b>: список рабочих шагов и шагов отдыха. В текущих данных это <code>set_repeats</code> внутри шага с <code>phase='set'</code>.</p>
+
+<pre><code>Step {
+  phase: 'set'
+  dimension: 'distance'
+  label: '3×800 с прогрессией 4:15 → 3:50'
+  reps: 3
+  set_repeats: [
+    { phase:'work',     dimension:'distance', distance_m:800, target:{type:'pace', from:'4:15'} },
+    { phase:'recovery', dimension:'distance', distance_m:250, target:{type:'hr', zone:'Z1', bpm:115} }
+  ]
+}</code></pre>
+
+  <div class="chips">
+    <span class="chip c">time + hr</span>
+    <span class="chip c">time + pace</span>
+    <span class="chip c">distance + pace</span>
+    <span class="chip t">distance + hr</span>
+    <span class="chip m">reps</span>
+    <span class="chip s">sets</span>
+    <span class="chip g">без интенсивности</span>
+  </div>
+
+  <h4>Инварианты Step</h4>
+  <ul>
+    <li><code>duration_min &gt; 0</code> у каждого шага; сумма шагов = <code>duration_min</code> сессии.</li>
+    <li>Зона HR принадлежит <code>Athlete.hr_zones</code> — step не хранит свои границы зон, только <code>zone</code> и (опционально) <code>bpm</code>.</li>
+    <li>Темп хранится строкой <code>M:SS</code> на км; если VDOT изменился — темпы пересчитываются, а не хранятся навсегда.</li>
+    <li>Шаг без интенсивности (<code>target.type='none'</code>) — разминка/заминка/мобилити.</li>
+    <li>В структуре <code>sets</code> чередование work/recovery обязательно и нечётное число рабочих шагов.</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <div class="h2"><span class="n">03</span> Session — тренировка</div>
+
+  <div class="card">
+    <div class="ct">Session <span class="tag">value object</span></div>
+    <div class="role">Одна тренировка. Не хранится строкой. Собирается из шагов.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">id</span><span class="ftype">string</span></div><div class="fdesc">стабильный ключ в рамках недели. Сейчас — <code>пн-quality</code> (русский префикс дня). <em>Нужен латинский: <code>w3-mon-quality</code></em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">discipline</span><span class="ftype">enum</span></div><div class="fdesc">run · bike · swim · strength · mobility</div></div>
+    <div class="fld"><div class="row1"><span class="fname">subkind</span><span class="ftype">enum</span></div><div class="fdesc">easy · long_z2 · quality · tempo · intervals · recovery · stationary_z2 · core · brick · tt</div></div>
+    <div class="fld"><div class="row1"><span class="fname">focus</span><span class="ftype">string</span></div><div class="fdesc">что развивает: <code>Z2</code> · <code>vo2max</code> · <code>core</code> · <code>threshold</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">name</span><span class="ftype">string</span></div><div class="fdesc">человекочитаемое название: «Качественная: VO2max».</div></div>
+    <div class="fld"><div class="row1"><span class="fname">steps</span><span class="ftype">Step[]</span></div><div class="fdesc">структура тренировки.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">location</span><span class="ftype">enum</span></div><div class="fdesc">stadium · asphalt_commuter · home · home_stationary_bike · pool · stadium_or_pool</div></div>
+    <div class="fld"><div class="row1"><span class="fname">duration_min</span><span class="ftype">int</span></div><div class="fdesc">вычисляется из шагов, но хранится — для быстрых списков и агрегатов.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">rationale</span><span class="ftype">string</span></div><div class="fdesc">почему именно эта тренировка. <em>В данных — простыня на 300+ символов; в UI делится на короткое «почему» + разворачиваемое детали.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">priority</span><span class="ftype">int</span></div><div class="fdesc">0–100, что можно выкинуть при нехватке ресурса. Сейчас у всех 50 — <em>нужно довести до осмысленных значений</em>.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">status</span><span class="ftype">enum</span></div><div class="fdesc">planned · done · skipped · moved. <em>Сейчас отсутствует — но без него нельзя показать «план vs факт».</em></div></div>
+  </div>
+
+  <h3>Два вида сессий — разделить явно</h3>
+  <p>Сейчас в <code>slots</code> смешаны тренировки и силовые/мобилити-блоки. У них разная природа: у силовых нет темпа и пульсовой зоны, у беговых — нет упражнений.</p>
+
+  <div class="tw">
+  <table>
+    <tr><th>Тип</th><th>Шаги</th><th>Пример</th></tr>
+    <tr><td><b>Cardio</b></td><td>время/дистанция + target</td><td>Лёгкая пятёрка — Z1 30мин</td></tr>
+    <tr><td><b>Quality</b></td><td>sets с прогрессией</td><td>3×800 прогрессия + 4×200</td></tr>
+    <tr><td><b>Strength</b></td><td>упражнения: <code>{name, reps, rest}</code></td><td>Core circuit ×2: планка, bird-dog…</td></tr>
+    <tr><td><b>Mobility</b></td><td>одно упражнение + время</td><td>hip openers, glute bridge</td></tr>
+  </table>
+  </div>
+
+  <div class="note">
+    <b>Что это даёт</b>
+    UI умеет рендерить четыре разных карточки сессии вместо одной «как получится». Плюс разные чек-листы выполнения, разная логика «выполнено» и разные правила для Replanner (силовой блок можно перенести, 90-минутный лонг — нельзя без потери).
+  </div>
+</section>
+
+<section id="s4">
+  <div class="h2"><span class="n">04</span> Week — неделя</div>
+
+  <div class="card">
+    <div class="ct">Week <span class="tag">aggregate</span></div>
+    <div class="role">Семь дней, 5–12 сессий, цель недели, привязка к фазе сезона.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">season_week</span><span class="ftype">int</span></div><div class="fdesc">порядковый номер от старта сезона. <em>Не ISO-неделя.</em> W1 = 11–17.10.2026. В сезоне 49 недель.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">iso_week</span><span class="ftype">string</span></div><div class="fdesc">«2026-W44» — только для перекрёстных ссылок с внешними календарями.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">start_date · end_date</span><span class="ftype">date</span></div><div class="fdesc">неделя = вс→сб.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">sessions</span><span class="ftype">Session[]</span></div><div class="fdesc">упорядочены по времени суток.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">week_goal</span><span class="ftype">string</span></div><div class="fdesc">«Развиваем VO2max».</div></div>
+    <div class="fld"><div class="row1"><span class="fname">phase_id</span><span class="ftype">ref</span></div><div class="fdesc">→ <code>SeasonPlan.phases</code>.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">load_targets</span><span class="ftype">object</span></div><div class="fdesc"><code>{hours: 7.3, run_km: 35, sessions: 7, intensity_pct: 9.1, deload: false}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">load_compare</span><span class="ftype">object</span></div><div class="fdesc"><code>{status, target_h, actual_h, delta_pct, tol_pct}</code> — план vs факт за эту неделю.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">volume_check</span><span class="ftype">object</span></div><div class="fdesc"><code>{ok, target_h, available_h, gap_h, max_h, min_h}</code> — влезает ли неделя в лимиты.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">load_context</span><span class="ftype">string[]</span></div><div class="fdesc">контекст решений: факт прошлой недели против макро. <em>Читать в UI, но генерирует мозг.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">gates</span><span class="ftype">ControlPoint[]</span></div><div class="fdesc">контрольные точки этой недели (тесты с pass/fail).</div></div>
+    <div class="fld"><div class="row1"><span class="fname">applied_commands</span><span class="ftype">Command[]</span></div><div class="fdesc">какие команды уже применены к этой неделе (см. §10).</div></div>
+  </div>
+
+  <div class="note">
+    <b>Неделя не хранится в state/ как источник правды</b>
+    Сейчас <code>state/plan-w3.json</code> — это <em>сгенерированный артефакт</em> (31 КБ на неделю; 49 недель ≈ 1.5 МБ). Правда — <code>season_plan.json</code> + <code>weekly_macro</code> + <code>overrides</code>. Неделя = результат <code>WeekBuilder</code>. Это упрощает: пересборка недели — это перезапуск сборки, а не синхронизация 49 файлов.
+  </div>
+</section>
+
+<section id="s5">
+  <div class="h2"><span class="n">05</span> SeasonPlan — план сезона</div>
+
+  <div class="card">
+    <div class="ct">SeasonPlan <span class="tag">aggregate root</span></div>
+    <div class="role">Верхний агрегат. Содержит цели, фазы, макро, контрольные точки, правила.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">horizon</span><span class="ftype">object</span></div><div class="fdesc"><code>{start, end, season_id, season_week_count: 49}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">goals</span><span class="ftype">Goal[]</span></div><div class="fdesc">цели сезона — см. §6.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">phases</span><span class="ftype">Phase[]</span></div><div class="fdesc">11 фаз: <code>run_base</code> → <code>run_build</code> → <code>run_specific</code> → … → <code>tri_build</code>.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">weekly_macro</span><span class="ftype">Macro[]</span></div><div class="fdesc">28 записей — скелет сезона по неделям: км бега, длинная, качественная, силовая, вел, плавание, total_h, интенсивность, deload. <b>Это «сырьё» недель.</b></div></div>
+    <div class="fld"><div class="row1"><span class="fname">control_points</span><span class="ftype">ControlPoint[]</span></div><div class="fdesc">7 тестов внутри сезона (3К темповый, силовой, плавательный…).</div></div>
+    <div class="fld"><div class="row1"><span class="fname">races</span><span class="ftype">Race[]</span></div><div class="fdesc">календарь гонок: <code>{goal_id, date, name, start_time}</code>.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">volume_progression_rules</span><span class="ftype">object</span></div><div class="fdesc"><code>{weekly_increase_max_pct, step_weeks, step_hours, deload_every_n_weeks}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">rules</span><span class="ftype">string[]</span></div><div class="fdesc">жёсткие правила сезона. Например: «Race-pace блок в макро обязан выходить на 4:00/км». <em>Их проверяет Replanner, а не человек.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">chosen_allocation</span><span class="ftype">object</span></div><div class="fdesc">распределение усилий между целями: <code>{g_run_spring: 60%, g_tri_autumn: 40%}</code>.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">last_replan</span><span class="ftype">object</span></div><div class="fdesc"><code>{reason, at}</code> — когда и почему последний раз пересобирался сезон.</div></div>
+  </div>
+
+  <h3>Phase — фаза</h3>
+  <div class="tw">
+  <table>
+    <tr><th>Поле</th><th>Смысл</th></tr>
+    <tr><td><code>id</code>, <code>goal_id</code></td><td>привязка к цели</td></tr>
+    <tr><td><code>start</code>…<code>end</code></td><td>даты фазы</td></tr>
+    <tr><td><code>goal</code>, <code>focus</code></td><td>«Поднимаем базовый объём», «Аэробная основа под всё остальное»</td></tr>
+    <tr><td><code>hours_per_week_target</code></td><td>7.3</td></tr>
+    <tr><td><code>load_range_h</code></td><td>[4.96, 9.74] — коридор объёма</td></tr>
+    <tr><td><code>run_km_range</code></td><td>[27, 50]</td></tr>
+    <tr><td><code>sessions_target</code></td><td>6</td></tr>
+    <tr><td><code>intensity_pct_mean</code></td><td>10.9 % времени в интенсивных зонах</td></tr>
+    <tr><td><code>deload_weeks</code></td><td>[12] — номера недель разгрузки внутри фазы</td></tr>
+  </table>
+  </div>
+
+  <h3>ControlPoint — контрольная точка</h3>
+  <p>Тест внутри сезона, у которого есть процедура, метрика и заранее оговорённые последствия. Это то, что отличает план от wish-list.</p>
+
+  <div class="tw">
+  <table>
+    <tr><th>Поле</th><th>Пример</th></tr>
+    <tr><td><code>id</code>, <code>season_week</code></td><td><code>cp_3k_w4</code>, неделя 4</td></tr>
+    <tr><td><code>protocol</code></td><td>«разминка 15мин Z1 → 3К на 4:40/км → заминка 12мин Z1»</td></tr>
+    <tr><td><code>metric_target</code>, <code>target_value</code></td><td><code>time_sec</code>, 840 (14:00)</td></tr>
+    <tr><td><code>measures</code></td><td><code>[top_end_speed, vo2max_proxy]</code></td></tr>
+    <tr><td><code>pass_criteria</code></td><td>«≤ 14:00 при HR ≤ 165 — порог подтверждён»</td></tr>
+    <tr><td><code>fail_action</code></td><td>«> 14:00 или HR > 168 — порог ниже расчётного, лестницу сдвигаем на +1 неделю»</td></tr>
+    <tr><td><code>decision</code>, <code>decided_at</code></td><td>заполняется после прохождения: <code>pass|warn|fail</code></td></tr>
+  </table>
+  </div>
+</section>
+
+<section id="s6">
+  <div class="h2"><span class="n">06</span> Goal — цель</div>
+
+  <div class="card">
+    <div class="ct">Goal <span class="tag">value object</span></div>
+    <div class="role">Цель измерима. «Хочу 40:00» — не цель, а «time_sec ≤ 2400» — цель.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">id</span><span class="ftype">string</span></div><div class="fdesc"><code>g_run_spring</code> · <code>g_tri_autumn</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">discipline</span><span class="ftype">enum</span></div><div class="fdesc">run_10k · tri_olympic</div></div>
+    <div class="fld"><div class="row1"><span class="fname">race_date</span><span class="ftype">date</span></div><div class="fdesc">18.04.2027 · 12.09.2027</div></div>
+    <div class="fld"><div class="row1"><span class="fname">goal_metric</span><span class="ftype">object</span></div><div class="fdesc"><code>{type:'time_sec', target:2400, target_friendly:'40:00'}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">race_pace_min_per_km</span><span class="ftype">string</span></div><div class="fdesc">«4:00» — производное от цели, но хранится явно: <em>это темп, вокруг которого строится макро.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">realistic_fork</span><span class="ftype">object</span></div><div class="fdesc"><code>{best:'40:00', likely:'40:30', conservative:'41:00', pb:'40:04'}</code> — вилка, чтобы план не ломался от одной плохой гонки.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">priority</code>, <code>primary</code></span><span class="ftype">int · bool</span></div><div class="fdesc">какая цель главная — влияет на распределение объёма.</div></div>
+  </div>
+
+  <div class="dec">
+    <b>Цель → производные</b>
+    Из цели мозг выводит: race-pace темп (4:00/км), целевой VDOT (52), фазовые коридоры объёма, структуру race-pace блока. Ни одно из этих чисел не хранится «просто так» — всё либо в цели, либо выводится, либо помечено как override с причиной.
+  </div>
+</section>
+
+<section id="s7">
+  <div class="h2"><span class="n">07</span> Preferences и календарь</div>
+
+  <p>Это то, что ты назвал «дефолтный пользовательский календарь недель» + «доступность оборудования». Сейчас это <code>state/constraints.json</code>, и я бы не называл это preferences — это <b>ограничения</b>. Разделить на два типа объектов.</p>
+
+  <div class="card">
+    <div class="ct">WeeklyPreferences <span class="tag">user prefs</span></div>
+    <div class="role">Как обычно выглядит твоя неделя. Используется, чтобы <b>наполнить</b> неделю сессиями, а не ограничить её.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">slots</span><span class="ftype">map</span></div><div class="fdesc">день → список окон вида <code>{kind, time, duration_min, tags}</code>. Пн 07:00 бег 40мин, Вт 18:00 вел 60мин, Ср 17:00 длинный…</div></div>
+    <div class="fld"><div class="row1"><span class="fname">equipment_windows</span><span class="ftype">list</span></div><div class="fdesc">окна доступа к ресурсу: <code>{resource:'pool', days:['ПН','ПТ'], valid_until:'2026-12-31'}</code>. <em>Бассейн доступен ПН и ПТ — значит, плавание не предлагаем в СР.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">preferred_slots</span><span class="ftype">map</span></div><div class="fdesc">предпочтение по типу тренировки: <code>long_run → [СБ 08:00]</code>, <code>intervals → [ВТ 18:00, ЧТ 18:00]</code>.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">blackouts</span><span class="ftype">list</span></div><div class="fdesc">жёсткие запреты: <code>{day:'СР', part:'вечер', reason:'семейный тайм'}</code>.</div></div>
+  </div>
+
+  <div class="card">
+    <div class="ct">Constraints <span class="tag">guardrails</span></div>
+    <div class="role">Жёсткие границы, нарушить которые нельзя никогда.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">min_total_hours_per_week</span><span class="ftype">number</span></div><div class="fdesc">2</div></div>
+    <div class="fld"><div class="row1"><span class="fname">max_total_hours_per_week</span><span class="ftype">number</span></div><div class="fdesc">11</div></div>
+    <div class="fld"><div class="row1"><span class="fname">forbidden</span><span class="ftype">map</span></div><div class="fdesc">текстовые запреты по дням и времени.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">injuries</span><span class="ftype">ref</span></div><div class="fdesc">→ <code>Athlete.injuries</code>: спина — превентивный core 2×/нед, без СБУ в фазах W4–W11.</div></div>
+  </div>
+
+  <div class="note">
+    <b>Разделение важно для UX</b>
+    Preferences — то, что ты настраиваешь («по понедельникам бег в 7 утра»). Constraints — то, что защищает тебя («не больше 11 часов», «в среду вечером интенсивных нельзя»). В UI это два разных экрана с разной степенью жёсткости, и пересечение с сезонными правилами должно быть <b>видно до применения</b>, а не после.
+  </div>
+</section>
+
+<section id="s8">
+  <div class="h2"><span class="n">08</span> Actual и «план vs факт»</div>
+
+  <div class="card">
+    <div class="ct">ActualSession <span class="tag">value object</span></div>
+    <div class="role">Что фактически сделано. Источник — Garmin Connect; для бега — Stryd как source of truth по мощности/темпу.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">date · discipline</span><span class="ftype">date · enum</span></div><div class="fdesc">что и когда</div></div>
+    <div class="fld"><div class="row1"><span class="fname">duration_min · distance_m</span><span class="ftype">int</span></div><div class="fdesc">объём</div></div>
+    <div class="fld"><div class="row1"><span class="fname">hr_avg · hr_max · hr_zones_time</span><span class="ftype">int · map</span></div><div class="fdesc">пульс: средний, максимум, минуты в каждой зоне</div></div>
+    <div class="fld"><div class="row1"><span class="fname">elevation_m · power</span><span class="ftype">int?</span></div><div class="fdesc">для вел/бег</div></div>
+    <div class="fld"><div class="row1"><span class="fname">source</span><span class="ftype">enum</span></div><div class="fdesc">garmin · stryd · manual</div></div>
+  </div>
+
+  <div class="card">
+    <div class="ct">WeekComparison <span class="tag">projection</span></div>
+    <div class="role">Проекция «план vs факт». Это то, что ты хочешь видеть на экране.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">per_session</span><span class="ftype">list</span></div><div class="fdesc">для каждой запланированной сессии: план (объём, зона, темп) vs факт (объём, фактические минуты в зоне, темп).</div></div>
+    <div class="fld"><div class="row1"><span class="fname">per_metric</span><span class="ftype">list</span></div><div class="fdesc"><code>[{metric:'run_km', planned:35, actual:32.4, delta_pct:-7.4}]</code> — те же числа, что в <code>load_compare</code>, но по каждой метрике, а не только по часам.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">missed</span><span class="ftype">list</span></div><div class="fdesc">что пропущено целиком.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">deviations</span><span class="ftype">list</span></div><div class="fdesc">существенные отклонения с объяснением. Сейчас пустой список при заполненных фактических данных — <em>дыра.</em></div></div>
+  </div>
+
+  <div class="warn">
+    <b>Направление «план vs факт» сейчас одностороннее</b>
+    Факт живёт в Garmin, план — в <code>state/</code>. Связки «вот эта плановая сессия ↔ вот эта фактическая активность» нет. Нужен <b>matcher</b>: по дате + дисциплине + времени + объёму, с порогом уверенности и ручным подтверждением спорных случаев. Без него «выполнено / не выполнено» в UI будет угадыванием.
+  </div>
+</section>
+
+<section id="s9">
+  <div class="h2"><span class="n">09</span> Метрика прогресса</div>
+
+  <p>Ты назвал VDOT — и это правильный выбор: он переводит форму в одно число, которое можно поставить рядом с целью (46.4 сейчас → 52 цель) и которое не зависит от того, какой тренировкой ты это набрал.</p>
+
+  <div class="card">
+    <div class="ct">ProgressMetric <span class="tag">value object</span></div>
+
+    <div class="fld"><div class="row1"><span class="fname">vdot</span><span class="ftype">number</span></div><div class="fdesc">текущий (48 заявлен, 46.4 по факту 10К 44:06) и целевой (52).</div></div>
+    <div class="fld"><div class="row1"><span class="fname">trend</span><span class="ftype">enum</span></div><div class="fdesc">improving · stable · plateau · declining · recovering_after_injury</div></div>
+    <div class="fld"><div class="row1"><span class="fname">race_pace_equivalent</span><span class="ftype">string</span></div><div class="fdesc">«4:24/км» — текущий темп, эквивалентный текущему VDOT.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">gap_to_goal</span><span class="ftype">object</span></div><div class="fdesc"><code>{sec_per_km: 24, pct: 10.3}</code> — расстояние до цели в тех же единицах, что и цель.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">samples</span><span class="ftype">list</span></div><div class="fdesc">история: <code>{date, vdot, source, confidence}</code>. <em>Confidence обязателен: VDOT из разовой 10К ≠ VDOT из серии за 6 недель.</em></div></div>
+  </div>
+
+  <div class="note">
+    <b>Второй источник — обязателен</b>
+    VDOT из Stryd (GT/VO2) и VDOT из таблицы Дэниэлса по результату 10К — это разные вещи. Хранить оба, помечать источник, и в UI показывать диапазон «46.4–48», а не ложную точность. Когда расходятся — это сигнал, а не повод выбрать «правильное».
+  </div>
+</section>
+
+<section id="s10">
+  <div class="h2"><span class="n">10</span> Команды над планом</div>
+
+  <p>«Неделя = выходная», «неделя = сниженный объём», «перенести неделю», «запросить корректировку» — это не правки файлов, а <b>команды</b>. Мозг принимает команду, пересобирает, отдаёт diff. UI показывает diff <b>до</b> применения.</p>
+
+  <div class="card">
+    <div class="ct">PlanCommand <span class="tag">command</span></div>
+    <div class="role">Универсальная форма всех операций. Каждая команда обязана иметь причину.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">id</span><span class="ftype">uuid</span></div><div class="fdesc">для идемпотентности (повтор из outbox не должен примениться дважды).</div></div>
+    <div class="fld"><div class="row1"><span class="fname">type</span><span class="ftype">enum</span></div><div class="fdesc">см. список ниже.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">args</span><span class="ftype">object</span></div><div class="fdesc">параметры команды.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">reason</span><span class="ftype">string</span></div><div class="fdesc">обязательно. <em>Команда без причины — не команда, а каприз.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">issued_at · issued_by</span><span class="ftype">ts · enum</span></div><div class="fdesc">когда и кем: <code>user | brain | gate</code>.</div></div>
+  </div>
+
+  <h4>Типы команд</h4>
+  <div class="chips">
+    <span class="chip c">set_week_mode</span>
+    <span class="chip c">reduce_week_load</span>
+    <span class="chip c">shift_week</span>
+    <span class="chip m">replace_session</span>
+    <span class="chip m">swap_sessions</span>
+    <span class="chip t">move_session</span>
+    <span class="chip t">skip_session</span>
+    <span class="chip s">regenerate_week</span>
+    <span class="chip s">replan_season</span>
+    <span class="chip g">record_actual</span>
+    <span class="chip g">decide_gate</span>
+    <span class="chip">ask_brain</span>
+  </div>
+
+  <div class="tw">
+  <table>
+    <tr><th>Команда</th><th>Что делает</th><th>Влияет на</th></tr>
+    <tr><td><code>set_week_mode</code></td><td>неделя = rest | deload | normal | recovery</td><td>эту неделю + хвост сезона</td></tr>
+    <tr><td><code>reduce_week_load</code></td><td>понизить объём на X%</td><td>эту неделю</td></tr>
+    <tr><td><code>shift_week</code></td><td>перенести неделю на +1/−1</td><td>хвост сезона, возможно фазу</td></tr>
+    <tr><td><code>replace_session</code></td><td>заменить сессию на вариант X</td><td>эту неделю</td></tr>
+    <tr><td><code>move_session</code></td><td>перенести сессию на другой день</td><td>эту неделю</td></tr>
+    <tr><td><code>skip_session</code></td><td>выкинуть сессию</td><td>эту неделю + цель по объёму</td></tr>
+    <tr><td><code>regenerate_week</code></td><td>пересобрать неделю по макро</td><td>эту неделю</td></tr>
+    <tr><td><code>replan_season</code></td><td>пересобрать сезон (после травмы/провала CP)</td><td>всё</td></tr>
+    <tr><td><code>decide_gate</code></td><td>зафиксировать pass/warn/fail у контрольной точки</td><td>хвост сезона</td></tr>
+  </table>
+  </div>
+
+  <h3>Ответ мозга на команду</h3>
+<pre><code>{
+  command_id: 'c-8f2a',
+  status: 'proposed',        // proposed | applied | rejected
+  diff: [
+    { scope:'week', target:'W3', change:'mode', from:'normal', to:'deload' },
+    { scope:'week', target:'W3', change:'slots', removed:['ср-long_run'] },
+    { scope:'week', target:'W4', change:'load', from:7.3, to:6.9 },
+    { scope:'season', target:'W4..W49', change:'phase_shift', weeks:+1 }
+  ],
+  consequences: [
+    'Объём W3: 6.5 → 5.2 ч (−20%), в коридоре фазы [4.96, 9.74]',
+    'Длинный Z2 90мин смещён на W4 — прогресс к фазе run_build не пострадает',
+    'Сдвиг фазы не требуется: цель 18.04 сохраняется'
+  ],
+  warnings: [ 'Потеря 1.4 ч объёма за неделю — компенсируется деload-неделей W12' ],
+  requires_confirmation: true
+}</code></pre>
+
+  <div class="dec">
+    <b>Три уровня последствий</b>
+    <code>local</code> — меняется только эта неделя, применяется сразу. <code>ripple</code> — меняются следующие N недель, показывается diff и ждёт подтверждения. <code>season</code> — меняется цель/фазы/гоночный календарь, всегда ждёт подтверждения и всегда показывает цену (сдвиг даты, потеря объёма, риск для цели).
+  </div>
+
+  <div class="note">
+    <b>Про «перенос недели» — ключевой вопрос</b>
+    Если неделю сдвигают, объём не исчезает. Варианты: (а) <b>потеря</b> — неделя вычитается из общего объёма, и если горизонт не резиновый, цель под угрозой; (b) <b>сдвиг фазы</b> — объём сохраняется, но всё смещается, гонка может стать недостижимой. Правильный ответ зависит от того, где в сезоне стоит неделя. Мозг должен выбирать сам и объяснять, а не спрашивать «как хочешь».
+  </div>
+</section>
+
+<section id="s11">
+  <div class="h2"><span class="n">11</span> Порты — контракты</div>
+
+  <p>Порты фиксируются <b>до</b> реализации. Для каждого: форма данных, поведение при сбое, деградация вместо отказа.</p>
+
+  <div class="card">
+    <div class="ct">PlanRepo</div>
+    <div class="role">Чтение и запись плана.</div>
+    <div class="fld"><div class="row1"><span class="fname">read_season_plan</span><span class="ftype">→ SeasonPlan</span></div><div class="fdesc">с валидацией схемы и миграцией старой версии.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">read_macro</span><span class="ftype">→ Macro[]</span></div><div class="fdesc">скелет по неделям.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">read_overrides</span><span class="ftype">→ Override[]</span></div><div class="fdesc">append-only журнал.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">append_command</span><span class="ftype">→ Command</span></div><div class="fdesc">атомарная запись (временный файл → переименование).</div></div>
+    <div class="fld"><div class="row1"><span class="fname">read_actual</span><span class="ftype">→ ActualSession[]</span></div><div class="fdesc">кэш факта + свежесть.</div></div>
+  </div>
+
+  <div class="card">
+    <div class="ct">CalendarPort</div>
+    <div class="role">Внешние календари — источник пожеланий по расписанию.</div>
+    <div class="fld"><div class="row1"><span class="fname">fetch_events</span><span class="ftype">→ CalendarEvent[]</span></div><div class="fdesc">с таймаутом и деградацией: если календарь недоступен — используем кэш и помечаем «данные неполные».</div></div>
+    <div class="fld"><div class="row1"><span class="fname">push_session</span><span class="ftype">→ bool</span></div><div class="fdesc">выгрузить тренировку в календарь. Необязательная: план не должен падать, если календарь не пишется.</div></div>
+  </div>
+
+  <div class="card">
+    <div class="ct">ActivityPort · ProgressPort</div>
+    <div class="role">Внешние источники факта и прогресса.</div>
+    <div class="fld"><div class="row1"><span class="fname">fetch_activities</span><span class="ftype">→ ActualSession[]</span></div><div class="fdesc">Garmin. Retry с backoff, деградация — показать последний кэш с меткой «от 25.10, 11:04».</div></div>
+    <div class="fld"><div class="row1"><span class="fname">fetch_progress</span><span class="ftype">→ ProgressSample[]</span></div><div class="fdesc">Stryd: VO2max / GT. <em>Stryd — source of truth для бега; Garmin RD не используем (нагрудный ремень).</em></div></div>
+  </div>
+
+  <div class="card">
+    <div class="ct">LLMPort · ClockPort</div>
+    <div class="role">Границы, где внешний мир и время.</div>
+    <div class="fld"><div class="row1"><span class="fname">narrate</span><span class="ftype">→ string</span></div><div class="fdesc"><b>только текст</b>: объяснить план, предложить варианты, сформулировать вопрос. Никогда — не вычислять числа. Детерминированная заглушка без ключа.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">now</span><span class="ftype">→ datetime</span></div><div class="fdesc">инъекция времени — чтобы тесты были детерминированы.</div></div>
+  </div>
+</section>
+
+<section id="s12">
+  <div class="h2"><span class="n">12</span> Проекции для UI</div>
+
+  <p>UI не знает доменную модель. Он получает готовые проекции — и это позволяет держать клиент тонким, а офлайн-кэш — предсказуемым.</p>
+
+  <div class="tw">
+  <table>
+    <tr><th>Экран</th><th>Проекция</th><th>Размер</th></tr>
+    <tr><td>Неделя</td><td><code>WeekListView</code> — сессии по дням, статусы, объём, кнопка «запросить корректировку»</td><td>~8 КБ</td></tr>
+    <tr><td>Сессия</td><td><code>SessionDetailView</code> — шаги с целями, «почему», гараж-редактор</td><td>~4 КБ</td></tr>
+    <tr><td>Сезон</td><td><code>SeasonView</code> — 49 недель, полоса фаз, отметки CP и гонок, «где я»</td><td>~15 КБ</td></tr>
+    <tr><td>План vs факт</td><td><code>ComparisonView</code> — дельта по метрикам + по сессиям</td><td>~6 КБ</td></tr>
+    <tr><td>Команда</td><td><code>CommandProposalView</code> — diff, последствия, предупреждения, кнопки «применить/отклонить»</td><td>~3 КБ</td></tr>
+  </table>
+  </div>
+
+  <div class="note">
+    <b>Офлайн-пакет</b>
+    На старте клиент тянет: текущую неделю (полная), ±1 неделю (сокращённая), сезон (скелет без недельных деталей), athlete/constraints. Итого ~40 КБ — помещается в кэш и обновляется быстро. Полные детали соседних недель — по запросу, с кэшированием.
+  </div>
+
+  <h4>Кэш и outbox</h4>
+  <ul>
+    <li><b>IndexedDB</b> (не localStorage — там строковые лимиты и синхронный API): снапшот + метаданные свежести.</li>
+    <li><b>Outbox</b>: очередь команд с идентификаторами; при появлении сети — push, при конфликте — сервер возвращает текущее состояние, клиент переспрашивает пользователя.</li>
+    <li><b>Service worker</b>: отдаёт кэш мгновенно; помечает «показано устаревшее, обновляю…».</li>
+    <li><b>Конфликт правок</b>: план — источник правды на сервере; клиент не пишет в план напрямую, только через команды.</li>
+  </ul>
+</section>
+
+<section id="s13">
+  <div class="h2"><span class="n">13</span> Дыры в текущих данных</div>
+
+  <p>Что нашлось при сверке модели с <code>~/coach/state/</code>. Не «идеалы», а конкретные расхождения, которые сломают UI, если не закрыть.</p>
+
+  <div class="tw">
+  <table>
+    <tr><th>#</th><th>Дыра</th><th>Что делать</th></tr>
+    <tr><td>1</td><td>Поле <code>basis</code> смешивает объём, интенсивность и структуру</td><td>Разделить на <code>dimension</code> / <code>target</code> / <code>structure</code>. Миграция JSON.</td></tr>
+    <tr><td>2</td><td>Нет <code>status</code> у сессии</td><td>Добавить; без него «план vs факт» не рисуется.</td></tr>
+    <tr><td>3</td><td>Нет связи план↔факт (matcher)</td><td>Отдельный сервис сопоставления + ручное подтверждение спорных.</td></tr>
+    <tr><td>4</td><td><code>priority</code> у всех сессий = 50</td><td>Наполнить осмысленными значениями — иначе нечем жертвовать при нехватке ресурса.</td></tr>
+    <tr><td>5</td><td>Силовые и кардио-сессии в одной структуре</td><td>Разделить типы сессий (§3).</td></tr>
+    <tr><td>6</td><td>Справочные поля внутри боевых объектов (<code>_note</code>, <code>_source</code>, <code>pace_vdot</code>, <code>quality_*</code> на слоте)</td><td>Вынести в метаданные/справочники; в боевой модели — только доменные поля.</td></tr>
+    <tr><td>7</td><td>В <code>weekly_macro</code> 28 недель при 49 в сезоне</td><td>Проверить: нед. 29–49 не описаны макро, а <code>tri</code>-фазы есть.</td></tr>
+    <tr><td>8</td><td>Русские id сессий (<code>пн-quality</code>)</td><td>Латинские стабильные id, человекочитаемое имя — отдельно.</td></tr>
+    <tr><td>9</td><td>Нет <code>deviations</code> при заполненном факте</td><td>Мозг должен порождать отклонения сам.</td></tr>
+    <tr><td>10</td><td>Replanner и Adjuster — стабы (Phase 1)</td><td>Это ядро фичи «операции с планом». Писать в первую очередь после модели.</td></tr>
+  </table>
+  </div>
+</section>
+
+<section id="s14">
+  <div class="h2"><span class="n">14</span> Что нужно решить</div>
+
+  <p>Три развилки меняют модель, а не детали реализации. Остальное — работа.</p>
+
+  <div class="card">
+    <div class="ct"><span class="n">A</span> Где живёт сервер</div>
+    <div class="role">Вариант 1 — сервер на этой машине + доступ по сети: полноценные команды с телефона, но нужен доступ извне (туннель/домен). Вариант 2 — PWA без сервера: чтение офлайн бесплатно, но «запросить корректировку» и правки работают только дома, синхронизация — экспорт/импорт JSON. Вариант 3 — гибрид: сервер только для команд, чтение — полностью офлайн.</div>
+  </div>
+
+  <div class="card">
+    <div class="ct"><span class="n">B</span> Цена переноса недели</div>
+    <div class="role">Потеря объёма или сдвиг фазы — и что показывать: «цель под угрозой» или «сдвигаем дату».</div>
+  </div>
+
+  <div class="card">
+    <div class="ct"><span class="n">C</span> Граница полномочий LLM</div>
+    <div class="role">Моё предложение: LLM формулирует и объясняет, домен считает и применяет, результат всегда показывается как diff до применения, а LLM-ответы хранятся как текст рядом с решением (не как основание).</div>
+  </div>
+
+  <div class="dec">
+    <b>Порядок, который я предлагаю</b>
+    1. Закрыть §13 дыры 1–5 в домене (миграция данных, без этого UI будет угадывать).<br>
+    2. Написать контракты портов + типы (§2, §11) как схему — до реализации.<br>
+    3. Собрать Read-путь: сезон → неделя → сессия → факт. Это то, что нужно для первого офлайн-клиента.<br>
+    4. Write-путь: команды → Replanner → diff → применение.<br>
+    5. Приложение: PWA-клиент, офлайн-кэш, outbox.
+  </div>
+</section>
+
+<hr>
+<p class="end">Coach App · доменная модель v0.1 · только модель, кода нет · 25.10.2026</p>
+
+</main>
+</body>
+</html>

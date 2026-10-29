@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Coach App — domain: тренировка</title>
+<style>
+  :root {
+    --bg: #fdf6ed; --card-bg: #fffefb; --ink: #1a1a1a; --muted: #6a6056; --faint: #9a9085;
+    --border: #e6dac4; --coral: #ff6b5a; --teal: #14b8a6; --mustard: #d4a017;
+    --terra: #c2410c; --sky: #0284c7; --grass: #65a30d; --code-bg: #f4ede0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.55; font-size: 16px;
+    padding-bottom: 60px;
+  }
+  code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  header { padding: 20px 16px 14px; border-bottom: 1px solid var(--border); background: var(--card-bg); }
+  header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  header .sub { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+  header .meta { font-size: 11px; color: var(--faint); margin-top: 8px; }
+
+  nav {
+    position: sticky; top: 0; z-index: 10; background: rgba(253,246,237,0.96);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--border);
+    overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap;
+    padding: 8px 12px; scrollbar-width: none;
+  }
+  nav::-webkit-scrollbar { display: none; }
+  nav a {
+    display: inline-block; font-size: 12px; color: var(--muted); text-decoration: none;
+    padding: 5px 10px; margin-right: 4px; border: 1px solid var(--border);
+    border-radius: 999px; background: var(--card-bg);
+  }
+  main { padding: 0 14px; max-width: 780px; margin: 0 auto; }
+
+  section { margin-top: 34px; scroll-margin-top: 60px; }
+  .h2 {
+    display: flex; align-items: baseline; gap: 9px; font-size: 17px; font-weight: 700;
+    padding-bottom: 7px; border-bottom: 2px solid var(--ink); margin-bottom: 14px;
+  }
+  .h2 .n { font-size: 12px; color: var(--coral); font-weight: 700; }
+  h3 { font-size: 15px; font-weight: 700; margin: 20px 0 8px; }
+  h4 { font-size: 12px; font-weight: 700; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  p { font-size: 15px; margin-bottom: 10px; }
+  ul, ol { margin: 0 0 12px; padding-left: 20px; }
+  li { font-size: 14.5px; margin-bottom: 5px; }
+
+  .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+  .card > .ct { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; margin-bottom: 3px; }
+  .card > .ct .tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 999px; background: var(--code-bg); color: var(--muted); }
+  .role { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+
+  .fld { border-top: 1px dashed var(--border); padding: 7px 0; }
+  .fld:first-of-type { border-top: none; }
+  .fld .row1 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; }
+  .fname { font-size: 13.5px; font-weight: 700; }
+  .ftype { font-size: 11.5px; color: var(--sky); background: #e8f3fb; padding: 1px 6px; border-radius: 4px; }
+  .fdesc { font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+  .fdesc em { color: var(--terra); font-style: normal; font-weight: 600; }
+
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; overflow-x: auto; font-size: 12px; line-height: 1.5; margin: 8px 0 12px; -webkit-overflow-scrolling: touch; }
+  pre code { white-space: pre; }
+  .inline { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+
+  .note { border-left: 3px solid var(--sky); background: #f0f8fd; padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 14px; margin: 10px 0 14px; }
+  .warn { border-left: 3px solid var(--coral); background: #fff2ef; padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 14px; margin: 10px 0 14px; }
+  .dec { border-left: 3px solid var(--grass); background: #f3f9ec; padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 14px; margin: 10px 0 14px; }
+  .note b, .warn b, .dec b { display: block; margin-bottom: 3px; }
+
+  .tw { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 8px 0 14px; position: relative; }
+  table { border-collapse: collapse; width: 100%; min-width: 440px; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; background: var(--code-bg); }
+  td code { font-size: 11.5px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 12px; }
+  .chip { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; background: var(--code-bg); border: 1px solid var(--border); color: var(--muted); }
+  .chip.c { background: #ffeceb; border-color: #ffc9c3; color: var(--terra); }
+  .chip.t { background: #e6f7f5; border-color: #b6e8e3; color: #0b7d71; }
+  .chip.m { background: #fdf3dd; border-color: #eddca8; color: #8a6a06; }
+  .chip.s { background: #e8f3fb; border-color: #c2e2f5; color: #026092; }
+  .chip.g { background: #eff7e6; border-color: #cfe5b8; color: #4a7a12; }
+
+  /* chain diagram */
+  .chain { display: flex; flex-direction: column; gap: 0; margin: 12px 0 18px; }
+  .chain .node {
+    background: var(--card-bg); border: 1.5px solid var(--ink); border-radius: 10px;
+    padding: 10px 13px; position: relative;
+  }
+  .chain .node .nm { font-size: 14.5px; font-weight: 700; }
+  .chain .node .ds { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+  .chain .node .ar { position: absolute; left: 15px; bottom: -19px; font-size: 12px; color: var(--terra); font-weight: 700; }
+  .chain .node .ar span { font-size: 10.5px; color: var(--muted); font-weight: 400; }
+  .chain .gap { height: 22px; position: relative; }
+  .chain .gap::before { content: '↓'; position: absolute; left: 15px; top: 0; font-size: 14px; color: var(--terra); font-weight: 700; }
+  .chain .node.lvl1 { border-color: var(--terra); }
+  .chain .node.lvl2 { border-color: var(--mustard); }
+  .chain .node.lvl3 { border-color: var(--sky); }
+  .chain .node.lvl4 { border-color: var(--teal); }
+
+  /* worked example */
+  .we { border: 1.5px solid var(--ink); border-radius: 12px; background: var(--card-bg); overflow: hidden; margin-bottom: 14px; }
+  .we > .wh { background: var(--ink); color: #fff; padding: 9px 13px; font-size: 13px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .we > .wh .lvl { font-size: 10px; background: rgba(255,255,255,0.18); padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+  .we > .wb { padding: 12px 13px; }
+  .we .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); font-weight: 700; margin-bottom: 3px; }
+  .we .v { font-size: 14px; margin-bottom: 11px; }
+  .we .v:last-child { margin-bottom: 0; }
+  .we .v b { font-weight: 700; }
+  .we .arrowdown { color: var(--terra); font-weight: 700; font-size: 13px; margin: 2px 0 11px; }
+  .steps { margin: 0; padding: 0; list-style: none; }
+  .steps li { border-left: 2px solid var(--border); padding: 3px 0 3px 10px; margin-bottom: 2px; font-size: 13px; }
+  .steps li.w { border-left-color: var(--terra); }
+  .steps li.r { border-left-color: var(--sky); }
+  .steps .ph { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
+  .steps .tx { font-size: 13.5px; }
+  .steps .tx b { font-weight: 700; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 26px 0 0; }
+  .end { text-align: center; font-size: 12px; color: var(--faint); padding: 26px 0 10px; }
+
+  @media (max-width: 560px) {
+    body { font-size: 15px; }
+    main { padding: 0 11px; }
+    header { padding: 16px 14px 12px; }
+    header h1 { font-size: 18px; }
+    p { font-size: 14.5px; }
+    li { font-size: 14px; }
+    pre { font-size: 11px; padding: 10px; }
+    table { min-width: 380px; font-size: 12.5px; }
+    th, td { padding: 6px 8px; }
+    .tw::after { content: '→ свайп'; position: absolute; right: 2px; bottom: 2px; font-size: 9.5px; color: var(--faint); background: var(--card-bg); padding: 0 4px; border-radius: 4px; pointer-events: none; }
+    .h2 { font-size: 16px; }
+    .fdesc { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Domain: тренировка</h1>
+  <div class="sub">Четыре уровня — Goal, Plan, Session, Step — и правила, по которым одно превращается в другое.</div>
+  <div class="meta">v0.1 · только домен тренировки · 25.10.2026</div>
+</header>
+
+<nav>
+  <a href="#chain">Цепочка</a>
+  <a href="#goal">Goal</a>
+  <a href="#plan">Plan</a>
+  <a href="#session">Session</a>
+  <a href="#step">Step</a>
+  <a href="#worked">Пример</a>
+  <a href="#rules">Правила</a>
+</nav>
+
+<main>
+
+<section id="chain">
+  <div class="h2"><span class="n">00</span> Как связаны уровни</div>
+
+  <p>Четыре сущности. Каждая отвечает на свой вопрос, и между ними есть только два направления связи: <b>сверху вниз</b> (цель порождает тренировку) и <b>снизу вверх</b> (выполненная тренировка корректирует цель).</p>
+
+  <div class="chain">
+    <div class="node lvl1">
+      <div class="nm">Goal — зачем</div>
+      <div class="ds">Измеримая цель: 10К за 40:00, 18.04.2027. VDOT 46.4 сейчас → 52 цель.</div>
+      <div class="ar">порождает <span>фазы, объём, структуру</span></div>
+    </div>
+    <div class="gap"></div>
+    <div class="node lvl2">
+      <div class="nm">Plan — что и когда</div>
+      <div class="ds">Сезон (49 недель, фазы, макро) и неделя (сессии по дням). Цель раскладывается в скелет.</div>
+      <div class="ar">наполняется <span>сессиями по календарю</span></div>
+    </div>
+    <div class="gap"></div>
+    <div class="node lvl3">
+      <div class="nm">Session — одна тренировка</div>
+      <div class="ds">«Качественная: VO2max», 51 мин, стадион. Дисциплина, subkind, цель, логика, шаги.</div>
+      <div class="ar">собирается из <span>шагов</span></div>
+    </div>
+    <div class="gap"></div>
+    <div class="node lvl4">
+      <div class="nm">Step — мельчайшее действие</div>
+      <div class="ds">15 мин Z1 разминка · 800 м @ 4:15 Z5 · 250 м Z1 отдых. Объём + интенсивность.</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Направления связи</b>
+    <b>Вниз:</b> Goal → Phase → Macro(неделя) → Session → Step. Каждый уровень добавляет детализацию, ничего не выбрасывая.<br>
+    <b>Вверх:</b> Actual (факт) → Session выполнена → неделя → прогресс (VDOT) → «достижима ли цель». Факт — единственный источник, который двигает Goal.
+  </div>
+
+  <div class="dec">
+    <b>Что это даёт мозгу</b>
+    Одно место отвечает за «правильно ли это построено»: <b>Step</b> — нижний уровень, где нет никакой предметной логики, только объём, интенсивность и структура. Всё, что предметное (темп 4:15, зона Z5, объём 3200 м), живёт на верхних уровнях и попадает вниз через конкретные поля. Поэтому «заменить структуру тренировки» = заменить список шагов, не трогая цель, фазу и календарь.
+  </div>
+</section>
+
+<section id="goal">
+  <div class="h2"><span class="n">01</span> Goal</div>
+
+  <div class="card">
+    <div class="ct">Goal <span class="tag">value object</span></div>
+    <div class="role">Цель обязана быть измеримой. «Хочу 40:00» — это намерение. «time_sec ≤ 2400, 18.04.2027» — это цель, из которой можно вывести план.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">id</span><span class="ftype">string</span></div><div class="fdesc"><code>g_run_spring</code> · <code>g_tri_autumn</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">discipline</span><span class="ftype">enum</span></div><div class="fdesc">run_10k · tri_olympic</div></div>
+    <div class="fld"><div class="row1"><span class="fname">race_date</span><span class="ftype">date</span></div><div class="fdesc">18.04.2027 (гонка) · 12.09.2027 (триатлон)</div></div>
+    <div class="fld"><div class="row1"><span class="fname">goal_metric</span><span class="ftype">object</span></div><div class="fdesc"><code>{type:'time_sec', target:2400, target_friendly:'40:00'}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">race_pace_min_per_km</span><span class="ftype">string</span></div><div class="fdesc">«4:00». <em>Производное от цели, но хранится явно — это темп, вокруг которого строится вся иерархия.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">realistic_fork</span><span class="ftype">object</span></div><div class="fdesc"><code>{best:'40:00', likely:'40:30', conservative:'41:00', pb:'40:04'}</code> — вилка, чтобы одна плохая гонка не ломала план.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">priority · primary</span><span class="ftype">int · bool</span></div><div class="fdesc">какая цель главная → влияет на распределение объёма (сейчас 60% / 40%).</div></div>
+  </div>
+
+  <h3>Производные от цели</h3>
+  <p>Цель — единственное место, где задаются числа верхнего уровня. Всё остальное выводится и может быть переопределено <b>только с причиной</b>.</p>
+
+  <div class="tw">
+  <table>
+    <tr><th>Производная</th><th>Как</th><th>Значение сейчас</th></tr>
+    <tr><td>Race pace</td><td>2400 с / 10 км</td><td>4:00/км</td></tr>
+    <tr><td>Целевой VDOT</td><td>обратная таблица Дэниэлса</td><td>52</td></tr>
+    <tr><td>Текущий VDOT</td><td>факт 10К 44:06</td><td>46.4</td></tr>
+    <tr><td>Разрыв</td><td>цель − факт</td><td>24 с/км (+10.3 %)</td></tr>
+    <tr><td>Темп Z2</td><td>от VDOT через Дэниэлса</td><td>5:40–5:50</td></tr>
+    <tr><td>Темп порога</td><td>от VDOT через Дэниэлса</td><td>4:10–4:20</td></tr>
+    <tr><td>HR-зоны</td><td>Karvonen от HRmax/RHR</td><td>7 зон, LTH 164</td></tr>
+  </table>
+  </div>
+
+  <div class="warn">
+    <b>Цена VDOT</b>
+    Темпы в шагах сейчас захардкожены как строки («4:15», «5:35»). При смене VDOT они устаревают и никто об этом не узнает. В домене темп должен <b>вычисляться из профиля</b>, а в Step храниться как <code>{type:'pace', from, to}</code> + <code>pace_basis_vdot</code> — тогда «VDOT вырос» автоматически меняет все темпы, а старая строка не может выжить незаметно.
+  </div>
+</section>
+
+<section id="plan">
+  <div class="h2"><span class="n">02</span> Plan</div>
+
+  <p>План двухуровневый: <b>сезон</b> задаёт скелет на 49 недель, <b>неделя</b> — это конкретные тренировки по дням. Связь между ними: макро недели говорит, что должно быть, а календарь и предпочтения — <b>где именно</b> это стоит.</p>
+
+  <div class="card">
+    <div class="ct">SeasonPlan <span class="tag">aggregate root</span></div>
+    <div class="role">Верхний агрегат. Содержит цели, фазы, макро-скелет, контрольные точки, правила.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">goals</span><span class="ftype">Goal[]</span></div><div class="fdesc">цели сезона.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">phases</span><span class="ftype">Phase[]</span></div><div class="fdesc">11 фаз. У каждой: <code>{start, end, goal, focus, hours_per_week_target, load_range_h, run_km_range, sessions_target, intensity_pct_mean, deload_weeks}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">weekly_macro</span><span class="ftype">Macro[]</span></div><div class="fdesc">скелет по неделям: <code>{season_week, run_km, long_km, quality{goal,scale,variant_id,work_m}, core, bike, swim, total_h, intensity_pct, deload, sessions_target}</code>. <b>Это «что должно быть», без «когда именно».</b></div></div>
+    <div class="fld"><div class="row1"><span class="fname">control_points</span><span class="ftype">ControlPoint[]</span></div><div class="fdesc">7 тестов внутри сезона — с процедурой, метрикой и последствиями.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">rules</span><span class="ftype">string[]</span></div><div class="fdesc">жёсткие правила: «race-pace блок обязан выходить на 4:00/км». <em>Проверяет Replanner, а не человек.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">volume_progression_rules</span><span class="ftype">object</span></div><div class="fdesc"><code>{weekly_increase_max_pct, step_weeks, step_hours, deload_every_n_weeks}</code></div></div>
+  </div>
+
+  <div class="card">
+    <div class="ct">Week <span class="tag">aggregate</span></div>
+    <div class="role">Неделя — результат сборки, а не источник правды. Пересобрать неделю = перезапустить сборку.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">season_week</span><span class="ftype">int</span></div><div class="fdesc">порядковый номер от старта сезона. <em>Не ISO-неделя.</em> W1 = 11–17.10.2026, неделя = вс→сб.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">iso_week</span><span class="ftype">string</span></div><div class="fdesc">«2026-W44» — только для внешних календарей.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">sessions</span><span class="ftype">Session[]</span></div><div class="fdesc">7–12 тренировок, упорядочены по времени суток.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">week_goal</span><span class="ftype">string</span></div><div class="fdesc">«Развиваем VO2max» — какая из задач недели главная.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">phase_id</span><span class="ftype">ref</span></div><div class="fdesc">→ фаза сезона.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">load_targets</span><span class="ftype">object</span></div><div class="fdesc"><code>{hours:7.3, run_km:35, sessions:7, intensity_pct:9.1, deload:false}</code> — то, что обещала макро.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">load_compare</span><span class="ftype">object</span></div><div class="fdesc"><code>{status, target_h:6.24, actual_h:6.5, delta_pct:4.2, tol_pct:10}</code> — исполнение.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">volume_check</span><span class="ftype">object</span></div><div class="fdesc"><code>{ok, target_h:7.3, available_h:10.0, gap_h:-2.7, max_h:11, min_h:2}</code> — влезает ли неделя в лимиты.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">gates</span><span class="ftype">ControlPoint[]</span></div><div class="fdesc">контрольные точки этой недели.</div></div>
+  </div>
+
+  <h3>Как макро превращается в неделю</h3>
+  <p>Это ядро планировщика, и оно объясняет, почему в данных так много разных полей.</p>
+
+<pre><code>Macro недели W3:
+  run_km: 35   long_km: 14   quality: {goal:'vo2max', scale:'medium', variant_id:'3x800prog+4x200', work_m:3200}
+  core: '2×25м'   bike: '1×60м'   swim: '1×30м'   total_h: 6.24
+
+         ↓  CalendarPort + WeeklyPreferences + Constraints
+         ↓  (что доступно, когда, каким ресурсом)
+
+Неделя W3:
+  ВС 12:00  run/easy        30мин  Z1
+  ПН 06:30  strength/core   25мин
+  ПН 18:45  run/quality     51мин  ← из quality: vo2max + medium + variant
+  ВТ 07:00  run/easy        30мин  Z2
+  ВТ 18:30  run/easy        40мин  Z2   ← добор km до 35
+  СР 17:00  run/long_z2     90мин  14К
+  ЧТ 19:00  bike/stationary 45мин
+  ПТ 20:00  swim/easy       45мин
+  СБ 09:00  strength/core   35мин  ← core + mobility</code></pre>
+
+  <div class="note">
+    <b>Три слоя ограничений на неделю</b>
+    <b>1.</b> Macro говорит, <em>что</em> должно быть (35 км бега, одна качественная, силовая, вел, плавание).<br>
+    <b>2.</b> Календарь и preferences говорят, <em>когда</em> это может стоять (пн 18:45, ср 17:00) и <em>чем</em> (бассейн доступен пн и пт — значит плавание в пятницу, не в среду).<br>
+    <b>3.</b> Constraints говорят, <em>что запрещено</em> (ср вечер — интенсивных нельзя; ≤ 11 ч в неделю).<br>
+    Если слои противоречат друг другу — приоритет: Constraints &gt; Preferences &gt; Macro. Macro — мягкий: он говорит «нужно», но может быть урезан.
+  </div>
+</section>
+
+<section id="session">
+  <div class="h2"><span class="n">03</span> Session</div>
+
+  <div class="card">
+    <div class="ct">Session <span class="tag">value object</span></div>
+    <div class="role">Одна тренировка. Не строка. Собирается из шагов, несёт цель, логику и приоритет.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">id</span><span class="ftype">string</span></div><div class="fdesc">стабильный ключ в рамках недели. <em>Сейчас русский (<code>пн-quality</code>) — надо латиницей: <code>w3-mon-quality</code>.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">discipline</span><span class="ftype">enum</span></div><div class="fdesc">run · bike · swim · strength · mobility</div></div>
+    <div class="fld"><div class="row1"><span class="fname">subkind</span><span class="ftype">enum</span></div><div class="fdesc">easy · long_z2 · quality · tempo · intervals · recovery · stationary_z2 · core · brick · tt</div></div>
+    <div class="fld"><div class="row1"><span class="fname">focus</span><span class="ftype">string</span></div><div class="fdesc">что развивает: <code>Z2</code> · <code>vo2max</code> · <code>core</code> · <code>threshold</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">name</span><span class="ftype">string</span></div><div class="fdesc">«Качественная: VO2max» — человекочитаемое имя, отдельно от id.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">steps</span><span class="ftype">Step[]</span></div><div class="fdesc">структура тренировки — единственное, что делает её выполнимой.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">location</span><span class="ftype">enum</span></div><div class="fdesc">stadium · asphalt_commuter · home · home_stationary_bike · pool · stadium_or_pool</div></div>
+    <div class="fld"><div class="row1"><span class="fname">duration_min</span><span class="ftype">int</span></div><div class="fdesc">вычисляется из шагов, но хранится — для списков и агрегатов.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">priority</span><span class="ftype">int</span></div><div class="fdesc">0–100: что можно выкинуть при нехватке ресурса. <em>Сейчас у всех 50 — бессмысленно.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">status</span><span class="ftype">enum</span></div><div class="fdesc">planned · done · skipped · moved. <em>Сейчас отсутствует — без него не рисуется «план vs факт».</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">rationale</span><span class="ftype">string</span></div><div class="fdesc">почему именно эта тренировка. <em>Сейчас — простыня на 300+ символов. В UI: короткое «почему» + разворачиваемое детали.</em></div></div>
+  </div>
+
+  <h3>Три вида сессий</h3>
+  <p>Сейчас силовые и кардио лежат в одной структуре, хотя это разные вещи: у силовой нет темпа и пульсовой зоны, у кардио нет упражнений.</p>
+
+  <div class="tw">
+  <table>
+    <tr><th>Вид</th><th>Шаги устроены как</th><th>Пример</th></tr>
+    <tr><td><b>Cardio</b></td><td>объём (время/дистанция) + интенсивность (HR/темп)</td><td>Лёгкая пятёрка — Z1 30мин</td></tr>
+    <tr><td><b>Quality</b></td><td>наборы с прогрессией: работа + отдых</td><td>3×800 прогрессия + 4×200</td></tr>
+    <tr><td><b>Strength</b></td><td>упражнения: <code>{name, reps, rest}</code></td><td>Core circuit ×2: планка, bird-dog…</td></tr>
+  </table>
+  </div>
+
+  <div class="note">
+    <b>Зачем разделять</b>
+    Разные карточки в UI (у силовой — список упражнений, у качественной — интервальная сетка). Разные правила для Replanner: силовой блок можно перенести на другой день без потерь, 90-минутный лонг — нельзя, это ключ фазы. Разные чек-листы выполнения.
+  </div>
+
+  <h3>subkind — это не ярлык, а рецепт</h3>
+  <p><code>subkind</code> определяет, <b>по какому шаблону</b> собираются шаги. Это то, что позволяет генерировать тренировки, а не хранить их: <code>easy</code> → разминка Z1 + Z2 + заминка; <code>long_z2</code> → то же, но 90 мин; <code>quality</code> → структура из макро (variant).</p>
+
+  <div class="chips">
+    <span class="chip c">easy</span>
+    <span class="chip c">long_z2</span>
+    <span class="chip c">quality</span>
+    <span class="chip m">tempo</span>
+    <span class="chip m">intervals</span>
+    <span class="chip s">recovery</span>
+    <span class="chip t">stationary_z2</span>
+    <span class="chip g">core</span>
+    <span class="chip">tt</span>
+  </div>
+</section>
+
+<section id="step">
+  <div class="h2"><span class="n">04</span> Step</div>
+
+  <p>Шаг — единственное место в домене, где нет предметной логики. Только три вещи: <b>что делаем</b> (объём), <b>с какой интенсивностью</b> (цель), <b>как устроена структура</b>.</p>
+
+  <div class="warn">
+    <b>Поправка к исходной формулировке</b>
+    «Пульсовая зона / время / скорость / отрезок» — это не четыре вида шага. Это <b>два независимых измерения</b> плюс <b>структура</b>:<br>
+    · объём — <code>time</code> · <code>distance</code> · <code>reps</code><br>
+    · интенсивность — <code>hr</code> · <code>pace</code> · <code>rpe</code> · <code>none</code><br>
+    · структура — <code>flat</code> (шаги подряд) · <code>sets</code> (повторы с отдыхом)<br>
+    «Отрезок» — это структура, а не способ задания интенсивности. В одном поле <code>basis</code> варианты «distance+hr» и «time+hr» становятся неразличимы, и любая валидация превращается в угадывание.
+  </div>
+
+  <div class="card">
+    <div class="ct">Step <span class="tag">union</span></div>
+    <div class="role">Обязательно: <code>phase</code>, <code>dimension</code>, <code>target</code>, <code>duration_min</code>. Опционально: <code>distance_m</code>, <code>reps</code>, <code>label</code>, <code>notes</code>.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">phase</span><span class="ftype">enum</span></div><div class="fdesc">warmup · work · recovery · cooldown · rest · set · transition · main</div></div>
+    <div class="fld"><div class="row1"><span class="fname">dimension</span><span class="ftype">enum</span></div><div class="fdesc">time · distance · reps. <em>Что мерим.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">target</span><span class="ftype">union</span></div><div class="fdesc"><code>{type:'hr', zone:'Z5', bpm:164}</code> · <code>{type:'pace', from:'4:15', to:'3:50'}</code> · <code>{type:'rpe', rpe:8}</code> · <code>{type:'none'}</code> — <em>в чём задаём интенсивность</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">duration_min</span><span class="ftype">int</span></div><div class="fdesc">длительность. Всегда считается — даже для отрезков, чтобы план был в часах.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">distance_m</span><span class="ftype">int?</span></div><div class="fdesc">800 · 250 (отдых) · 200 · 3000</div></div>
+    <div class="fld"><div class="row1"><span class="fname">reps</span><span class="ftype">int?</span></div><div class="fdesc">3×45с планка · 2×12/стор</div></div>
+    <div class="fld"><div class="row1"><span class="fname">notes</span><span class="ftype">string?</span></div><div class="fdesc">пояснение для человека, не для логики.</div></div>
+  </div>
+
+  <h3>Шаг-набор (set)</h3>
+  <p>Отрезок — это список рабочих шагов и шагов отдыха. В текущих данных — <code>set_repeats</code> внутри шага с <code>phase='set'</code>.</p>
+
+<pre><code>Step {
+  phase: 'set'
+  dimension: 'distance'
+  label: '3×800м с прогрессией 4:15 → 3:50'
+  reps: 3
+  set_repeats: [
+    { phase:'work',     dimension:'distance', distance_m:800, target:{type:'pace', from:'4:15'} },
+    { phase:'recovery', dimension:'distance', distance_m:250, target:{type:'hr', zone:'Z1', bpm:115} },
+    { phase:'work',     dimension:'distance', distance_m:800, target:{type:'pace', from:'4:00'} },
+    { phase:'recovery', dimension:'distance', distance_m:250, target:{type:'hr', zone:'Z1', bpm:115} },
+    { phase:'work',     dimension:'distance', distance_m:800, target:{type:'pace', from:'3:50'} }
+  ]
+}</code></pre>
+
+  <h4>Инварианты</h4>
+  <ul>
+    <li><code>duration_min &gt; 0</code> у каждого шага; сумма шагов = <code>duration_min</code> сессии.</li>
+    <li>Зона HR принадлежит <code>Athlete.hr_zones</code> — шаг не хранит границы зон, только <code>zone</code> и (опционально) <code>bpm</code>.</li>
+    <li>В наборе чередование work/recovery обязательно; нечётное число рабочих шагов.</li>
+    <li>Шаг с <code>target.type='none'</code> — разминка/заминка/мобилити.</li>
+    <li>Прогрессия внутри набора выражается <code>pace.from → pace.to</code>, а не двумя разными шагами.</li>
+  </ul>
+
+  <div class="note">
+    <b>Сильная сторона этой модели</b>
+    «3×800 с прогрессией 4:15 → 3:50» — это <b>один</b> шаг с полем прогрессии, а не три шага. Поэтому такой тренировкой можно управлять: сдвинуть прогрессию (4:15 → 4:05 → 3:45) — один параметр; сравнить с прошлой неделей — один параметр; понять, что изменилось — один diff вместо сравнения списков шагов.
+  </div>
+</section>
+
+<section id="worked">
+  <div class="h2"><span class="n">05</span> Сквозной пример</div>
+
+  <p>Одна реальная тренировка из W3, показанная на каждом уровне. Так видно, что уровни не дублируют друг друга, а добавляют смысл.</p>
+
+  <div class="we">
+    <div class="wh"><span>Goal</span><span class="lvl">уровень 1</span></div>
+    <div class="wb">
+      <div class="k">Цель</div>
+      <div class="v"><b>10К за 40:00</b> (4:00/км) · S25 Berlin · 18.04.2027</div>
+      <div class="k">Разрыв</div>
+      <div class="v">сейчас 44:06 (4:24/км) · VDOT 46.4 → цель 52 · <b>−24 с/км</b></div>
+      <div class="k">Правило сезона</div>
+      <div class="v">«Race-pace блок обязан выходить на 4:00/км — иначе цель недостижима»</div>
+    </div>
+  </div>
+
+  <div class="we">
+    <div class="wh"><span>Plan · фаза run_base</span><span class="lvl">уровень 2</span></div>
+    <div class="wb">
+      <div class="k">Фаза</div>
+      <div class="v">W1–W12 · «Поднимаем базовый объём» · 7.3 ч/нед · коридор 4.96–9.74 ч · 27–50 км бега · 6 сессий · интенсивность 10.9 %</div>
+      <div class="k">Макро W3</div>
+      <div class="v">35 км бега · длинная 14 км · качественная <b>vo2max / medium</b> · силовая 2×25 · вел 1×60 · плавание 1×30 · <b>6.24 ч</b></div>
+      <div class="k">Контрольная точка рядом</div>
+      <div class="v">W4 · 3К темповый · ≤ 14:00 при HR ≤ 165, иначе лестница сдвигается на +1 неделю</div>
+    </div>
+  </div>
+
+  <div class="we">
+    <div class="wh"><span>Session · пн-quality</span><span class="lvl">уровень 3</span></div>
+    <div class="wb">
+      <div class="k">Тренировка</div>
+      <div class="v"><b>Качественная: VO2max</b> · пн 18:45 · 51 мин · стадион</div>
+      <div class="k">Шаблон</div>
+      <div class="v">run / quality / focus Z6 · вариант <code>3x800prog+4x200</code> · работа 3200 м</div>
+      <div class="k">Почему именно так</div>
+      <div class="v">Возврат в бег после travel-недели W2 (100 % вел, 90 км, бега 0). Объём — по макро W3: 35 км бега, long Z2 14 км. Структуру задаёт override: 3×800 с прогрессией 4:15→3:50 + 4×200 @ 3:45 — работа 3200 м. Опора (реальная сессия): 3070 м, порог 2763 м. Прежние 6×400 @ 4:00 дали бы 2400 м на 18 % меньше работы при пульсе Z4 — без нагрузки.</div>
+    </div>
+  </div>
+
+  <div class="we">
+    <div class="wh"><span>Step</span><span class="lvl">уровень 4</span></div>
+    <div class="wb">
+      <div class="k">Структура</div>
+      <ul class="steps">
+        <li><span class="ph">warmup</span><br><span class="tx"><b>15 мин</b> · Z1 (100–118)</span></li>
+        <li class="w"><span class="ph">work · набор 1</span><br><span class="tx"><b>3 × 800 м</b> · Z5, пульс 164 · прогрессия темпа <b>4:15 → 4:00 → 3:50</b> · отдых 250 м Z1</span></li>
+        <li class="w"><span class="ph">work · набор 2</span><br><span class="tx"><b>4 × 200 м</b> · Z6, пульс 172 · темп <b>3:45</b> · отдых 200 м Z1</span></li>
+        <li><span class="ph">cooldown</span><br><span class="tx"><b>12 мин</b> · Z1</span></li>
+      </ul>
+      <div class="k">Итог</div>
+      <div class="v">51 мин · работа 3200 м · пульс доходит до Z6</div>
+    </div>
+  </div>
+
+  <div class="dec">
+    <b>Что видно из примера</b>
+    Цель задаёт 4:00/км → фаза задаёт объём → макро говорит «одна vo2max medium» → шаблон и календарь решают, что это пн 18:45 на стадионе → шаги дают исполнение. <b>Ни один уровень не вычисляет то, что уже решено выше</b>, и ни один не хранит лишнего. Правка на любом уровне не требует правок на остальных — она инициирует пересборку вниз.
+  </div>
+</section>
+
+<section id="rules">
+  <div class="h2"><span class="n">06</span> Правила домена</div>
+
+  <h3>Инварианты (нарушить нельзя)</h3>
+  <ol>
+    <li>Сумма <code>duration_min</code> шагов = <code>duration_min</code> сессии.</li>
+    <li>Зона шага ∈ <code>Athlete.hr_zones</code>.</li>
+    <li>У сессии есть ≥ 1 шаг; у шага есть <code>dimension</code> и <code>target</code>.</li>
+    <li>Каждая сессия недели принадлежит одному <code>discipline</code> и одному дню.</li>
+    <li>Объём недели ≤ <code>max_total_hours_per_week</code> и ≥ <code>min_total_hours_per_week</code>.</li>
+    <li>Каждая сессия с причиной изменения — только через <code>Command</code> с заполненным <code>reason</code>.</li>
+    <li>Каждый шаг в наборе — либо <code>work</code>, либо <code>recovery</code>; набор начинается и заканчивается на <code>work</code>.</li>
+    <li>Фаза недели определяется только <code>season_week</code> — не датой, не ISO-неделей.</li>
+  </ol>
+
+  <h3>Производные — вычисляются, не хранятся</h3>
+  <ul>
+    <li>Темпы шагов — от <code>Athlete.vdot</code> через таблицы Дэниэлса. Хранить строкой без ссылки на VDOT нельзя.</li>
+    <li>Границы HR-зон — от HRmax/RHR/LTH. Шаг знает только имя зоны.</li>
+    <li>Объём недели, интенсивность в % — из шагов.</li>
+    <li>Фаза недели — из <code>season_week</code> и диапазонов фаз.</li>
+    <li>Плановые километры по дисциплине — из шагов.</li>
+  </ul>
+
+  <h3>Дыры, которые бьют именно по этой части домена</h3>
+  <div class="tw">
+  <table>
+    <tr><th>#</th><th>Дыра</th><th>Следствие</th></tr>
+    <tr><td>1</td><td><code>basis</code> смешивает объём, интенсивность и структуру</td><td>нельзя валидировать, нельзя сравнивать тренировки между собой</td></tr>
+    <tr><td>2</td><td>нет <code>status</code> у сессии</td><td>нет «план vs факт»</td></tr>
+    <tr><td>3</td><td>нет связи план↔факт</td><td>«выполнено» — угадывание</td></tr>
+    <tr><td>4</td><td><code>priority</code> = 50 у всех</td><td>нечем жертвовать при нехватке ресурса</td></tr>
+    <tr><td>5</td><td>силовая и кардио в одной структуре</td><td>одна карточка на все случаи</td></tr>
+    <tr><td>6</td><td>темпы захардкожены, <code>pace_vdot</code> живёт рядом</td><td>при смене VDOT темпы устареют молча</td></tr>
+    <tr><td>7</td><td>справочные поля (<code>_note</code>, <code>_source</code>, <code>quality_*</code>) внутри боевых объектов</td><td>формат не сменить без переписывания потребителей</td></tr>
+    <tr><td>8</td><td>русские id сессий</td><td>ломаются URL и синхронизация</td></tr>
+  </table>
+  </div>
+
+  <div class="dec">
+    <b>Порядок</b>
+    1. Закрыть дыры 1–6 в домене + миграция данных.<br>
+    2. Зафиксировать контракты (порты, форма JSON) — до кода.<br>
+    3. Read-путь: Goal → Plan → Session → Step, плюс факт.<br>
+    4. Write-путь: команды → пересборка → diff.<br>
+    5. Клиент.
+  </div>
+</section>
+
+<hr>
+<p class="end">Coach App · domain: тренировка v0.1 · Goal → Plan → Session → Step · 25.10.2026</p>
+
+</main>
+</body>
+</html>

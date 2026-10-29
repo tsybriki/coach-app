@@ -1,0 +1,971 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Спортивный слой Hermes — полная архитектура</title>
+<style>
+:root{
+  --bg:#0f1115; --panel:#161a22; --panel2:#1d222c; --border:#2a3140;
+  --text:#e6e9ef; --muted:#9aa3b2; --accent:#7aa2ff; --accent2:#5cd6c0;
+  --warn:#ff9b6a; --good:#7ee787;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;
+  -webkit-text-size-adjust:100%}
+.wrap{max-width:760px;margin:0 auto;padding:20px 16px 64px}
+header{margin-bottom:28px}
+header h1{font-size:22px;line-height:1.25;margin:0 0 6px}
+header .subtitle{color:var(--muted);font-size:14px;margin:0}
+.block{background:var(--panel);border:1px solid var(--border);border-radius:14px;
+  padding:18px 14px;margin-bottom:14px}
+.block h2{font-size:16px;margin:0 0 14px;color:var(--accent);
+  letter-spacing:.2px}
+.summary{color:var(--muted);font-size:14px;margin:0 0 10px;line-height:1.45}
+.path{margin:0 0 12px}
+.path code{font-size:13px;color:var(--accent2);background:var(--panel2);
+  padding:3px 8px;border-radius:6px;border:1px solid var(--border)}
+.problems,.checklist{margin:0;padding-left:20px;font-size:14px;line-height:1.55}
+.problems li,.checklist li{margin-bottom:8px}
+.card{background:var(--panel2);border:1px solid var(--border);border-radius:10px;
+  padding:12px;margin-top:6px}
+.card-title{font-size:12px;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.5px;margin-bottom:6px}
+.card ul{margin:0;padding-left:18px;font-size:13px}
+.modules{display:grid;gap:8px}
+.module{background:var(--panel2);border:1px solid var(--border);border-radius:10px;
+  padding:10px 12px}
+.module-name code{font-size:13px;color:var(--accent2)}
+.module-purpose{font-size:13px;color:var(--text);margin-top:4px;line-height:1.4}
+.rule{margin-top:10px;padding:10px 12px;background:rgba(255,155,106,.08);
+  border-left:3px solid var(--warn);border-radius:6px;font-size:13px}
+.skills{display:grid;gap:6px;margin-bottom:10px}
+.skill-row{display:flex;gap:8px;align-items:center;background:var(--panel2);
+  border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px}
+.skill-name{font-family:;color:var(--accent);min-width:170px;font-weight:500}
+.skill-arrow{color:var(--muted)}
+.skill-uses{color:var(--muted);font-size:12px}
+.skill-aliases{font-size:11px;color:var(--muted);opacity:.7;margin-top:2px;font-style:italic}
+.preamble{padding:10px 12px;background:rgba(122,162,255,.08);border-left:3px solid var(--accent);
+  border-radius:6px;font-size:13px;margin:0}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table.fixes{width:100%;border-collapse:collapse;font-size:13px}
+table.fixes th,table.fixes td{text-align:left;padding:10px 8px;
+  border-bottom:1px solid var(--border);vertical-align:top;line-height:1.45}
+table.fixes th{color:var(--muted);font-weight:500;font-size:12px;
+  text-transform:uppercase;letter-spacing:.5px}
+table.fixes td.pain{color:var(--warn);width:38%}
+table.fixes td.fix{color:var(--text)}
+.flow{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.step{display:flex;gap:12px;background:var(--panel2);border:1px solid var(--border);
+  border-radius:10px;padding:12px}
+.step-n{flex:0 0 28px;height:28px;border-radius:50%;background:var(--accent);
+  color:#0f1115;display:flex;align-items:center;justify-content:center;
+  font-weight:600;font-size:14px}
+.step-body{flex:1;min-width:0}
+.step-name{font-weight:600;font-size:14px;color:var(--accent2);margin-bottom:4px}
+.step-what{font-size:13px;line-height:1.5;color:var(--text)}
+.key{margin-top:14px;padding:12px;background:rgba(94,214,192,.08);
+  border-left:3px solid var(--good);border-radius:6px;font-size:13px;line-height:1.5}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+footer{margin-top:24px;text-align:center;color:var(--muted);font-size:11px}
+
+/* state-files: collapsible <details> */
+.state-files{display:grid;gap:8px}
+.state-file{background:var(--panel2);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.state-file summary{cursor:pointer;padding:12px 14px;display:flex;align-items:center;gap:10px;list-style:none}
+.state-file summary::-webkit-details-marker{display:none}
+.state-file summary::before{content:'▶';font-size:11px;color:var(--muted);transition:transform .15s;display:inline-block;width:14px}
+.state-file[open] summary::before{transform:rotate(90deg)}
+.sf-name{font-weight:600;color:var(--accent2);font-size:14px}
+.sf-path{font-size:11px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--bg);padding:2px 6px;border-radius:4px;border:1px solid var(--border)}
+.sf-body{padding:0 14px 14px;border-top:1px solid var(--border);margin-top:0}
+.sf-purpose{margin:10px 0;font-size:13px;line-height:1.5;color:var(--text)}
+.sf-body pre{margin:6px 0;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.sf-body pre code{font-size:11.5px;line-height:1.45;color:var(--accent2);white-space:pre-wrap;word-break:break-word}
+.ex-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:8px;margin-bottom:2px}
+.sf-how ul{margin:4px 0 0;padding-left:18px;font-size:12.5px;line-height:1.5}
+.sf-how li{margin-bottom:4px}
+</style>
+</head><body><div class="wrap">
+<header><h1>Спортивный слой Hermes — полная архитектура</h1>
+<p class="subtitle">v37: починка v36 — ReferenceError в renderHrStructure (s vs st). Добавлен smoke test с реальным node.js — рендерит каждый слот через eval JS.</p></header>
+
+<section class="block" id="tldr">
+  <h2>TL;DR — что это и зачем</h2>
+  <ol class="problems"><li>Один JSON-файл правды на каждый срез (athlete / season_plan с goals[] и phases_for_goals / constraints / progress / overrides / fit_store).</li><li>Вся арифметика идёт в Python (lib/). Модель вызывается через одну обёртку ask_model.py с JSON-schema. Skill'ы не пишут промпты руками.</li><li>4 точки расширения: metrics/, season_replan, plan_generate (с constraints + volume_progression + goal_allocator), analyze (4 режима).</li><li>Несколько целей в одном сезоне: goals[] (например spring 10K + autumn Olympic triathlon). plan_generate распределяет объём через goal_allocator.py — оптимум с учётом adaptation_rates, trade-off'ы показывает явно, решение за Кириллом.</li><li>control_points живут в season_plan с привязкой goal_id; общие (discipline-agnostic) — без goal_id.</li><li>constraints — рамка. plan_generate читает, coach-plan-adjust правит (с подтверждением).</li><li>FIT retention = 14 дней → удалить.</li><li>Все спортивные skill'ы названы по схеме 'coach-&lt;area&gt;-&lt;verb&gt;'.</li><li>Каждое решение моделью логируется в decisions/. Retention-проход логирует, что удалено.</li><li>Вес: weight_history[] в athlete.json + авто-синк из Garmin через cron + одна строка в weekly_report + ручная правка через coach-plan-adjust. Без целевого веса, без BMI/калорий, без алертов. Минимум.</li><li>Zwift search: coach-plan-zwift — по критериям (дисциплина, длительность, зоны, тип) ищет workouts на WhatsOnZwift, предлагает 2-4 варианта, Кирилл выбирает, zwift_sync.py конвертит → отправляется в Garmin Connect. Становится частью plan-wN.</li><li>Inline Zwift: plan_generate ВНУТРИ одной операции дёргает coach-plan-zwift, если размещённый bike/brick-слот удовлетворяет правилу из constraints.auto_zwift (например duration_min ≤ 90 + location='home_stationary_bike'). Кирилл НЕ ходит отдельно — он видит уже снабжённый workout_ref план. Если правило не сработало (например, outdoor вело) — слот остаётся с duration_min, без workout_ref. Два этапа слиты в один.</li><li>HTML = обязательная часть выхода (v19): coach-plan-week / coach-plan-season / coach-plan-adjust ВСЕГДА порождают пару state/plan-wN.json + state/plan-wN.html через lib.plan_runtime. generate_plan_with_html(). Один entry point. Нет JSON без HTML, нет HTML без JSON.</li><li>Structure в каждом slot (v20): каждый run/bike/swim слот имеет list[step] с warmup/work/cooldown + зонами (по пульсу для лёгких/длинных, по темпу для интервалов). OFP (intervals) — отдельный kind со своей структурой (exercises, reps). HTML: &lt;details&gt; в каждой карточке слота, тап = раскрыть детальную работу (steps, zones, reps).</li><li>v21: render_html использует двухэкранную mobile-first навигацию. Picker (список compact-карточек) → тап → cardWrap (детальная карточка с back-button + структура + inventory). Inline JS (vanilla, &lt; 5 КБ) без fetch, без framework, без backend. Hash routing (#list / #slot-N). Адаптивно: тот же HTML хорошо работает на Android Telegram preview.</li><li>v22: убраны tracker-плашка и tag (run/bike/swim) из compact-карточки. На карточке осталась только иконка вида спорта (🏃🚴🏊💪🔄🎯) и идея тренировки. Навигация: anchor &lt;a href='#slot-N'&gt; + preventDefault + showCard inline JS. Hash routing: #list / #slot-N. DOMContentLoaded fallback для прямых ссылок.</li><li>v23 (фикс навигации): picker/cardWrap переключаются через inline style.display — не classList. Inline style имеет выше CSS-специфичности. Inline onclick=&quot;showCard(N)&quot; на каждом button — срабатывает даже если Telegram preview перехватывает addEventListener.</li><li>v24 (фикс навигации #3): querySelectorAll('.slot-card').forEach удалён. Только inline onclick=&quot;showCard(N);&quot;. pushState оставлен (нужен для back-button). 27/27 tests passing.</li><li>v25 (фикс навигации #4): inline JS навигация полностью убрана. Все 8 детальных карточек сразу в DOM в &lt;section id='card-N'&gt;. Picker → anchor href='#card-N' → CSS :target делает видимой нужную. Back → anchor href='#list'. body:has(.card-detail:target) скрывает picker. Без onclick, без addEventListener, без pushState, без classList, без style.display. Только нативный HTML. Работает в браузере, в Telegram preview, в file://.</li><li>v26 (фикс навигации #5): полностью переписал на архитектуру из w1-mobile.html. picker (visible по умолчанию) + cardWrap (hidden) + backBtn + cardHost. Inline &lt;script type='application/json' id='plan-data'&gt; + loadPlan() + buildPicker() + showSlot() + showPicker() + popstate listener. history.pushState для back-button. classList.add/remove hidden/visible для переключения экранов. renderCard() рендерит details в cardHost.innerHTML. Точная копия логики w1-mobile.html. 27/27 tests passing.</li><li>v27 (цельная конфета): навигация из w1-mobile.html + форматирование из v18. buildPicker: plan-title + totals (planned/target/delta) + HR-зоны бейджики + phase-card + control-points + 8 slot-кнопок с иконкой вида спорта + day/time/duration + focus-пилюля. renderCard: иконка вида спорта + название + day/time/duration + meta-row (location/focus/subkind/Zwift-pending) + inventory + structure. Всё работает на JS (как в w1-mobile.html), без CSS-only ухищрений. 27/27 tests passing.</li><li>v28: training week = Sun-Sat (было Mon-Sun). W1 = 2026-10-11..17 окт. season_start_date = 2026-10-11 (Sun). season_week_count = 49 (было 48). race_run 18 апр = W28 (было W27, потому что race_date всегда воскресенье, и сдвиг = +1 W). race_tri 12 сен = W49 (было W48). iso_week берётся по понедельнику (Mon=W42 для W1), чтобы season_week не зависел от Sun-старта. Все фазы сдвинуты на -1 день.</li><li>v29 (факт-лог W1): Кирилл записал реальные тренировки 11-17 окт. plan-w1.json перезаписан: 6 сессий / 5.2ч / 45.7К. ВС 10:00 10К test = 44:06 (baseline spring-10k-2027). ПН 18:30 pool 3К. ВТ 09:00 easy 1.5К + 18:30 5К Z2 + 3К прогрессия. СР 17:00 long Z2 1ч. ЧТ 10:30 cross Z2 11.2К. ПТ+СБ — отдых. renderCard: actual-блок зелёным (✅ Факт: distance / time / pace / HR / RPE). buildPicker: actual-badge в заголовке, totals показывает сессий/факт/объём, summary-карточка с буллетами, slot-completed бордер зелёным, ✓ в длительности. 27/27 tests passing.</li><li>v30 (ПТ recovery swim): добавлен плановый слот ПТ 18:00 — пул 45мин Z1. FIT-файлов за W1 нет (state/fit_store/ пустой, cron не подтянул). Анализ по факт-логу: 5 дней бега, 45.7К, 2 пиковые (10К test 44:06 + 5К Z2 + 3К Z3). Мышцы ног устали, HR-cost повышен. Пул = active recovery без ударной нагрузки. В карточке ПТ нет actual-блока (это план, не факт) — только structure + rationale. 27/27 tests passing.</li><li>v31 (ПТ tempo + ОФП): 5мин Z1 warmup → 6×(150м @ 3:40/км Z4 + 250м трусцы Z1) → 5мин Z1 cooldown. Затем ОФП circuit: 12 упражнений подряд (резинка + коврик). Бег: ягодицы+кор circuit — banded clamshell L/R, glute bridge, bird-dog, banded side walk, dead bug, single-leg glute bridge, banded hip abduction, plank, banded kickback, side plank L/R. Итого: 6.1ч / 7 слотов (6 факт + 1 план). 27/27 tests passing.</li><li>v32 (разделение типов): brick слот (run+OFП вместе) запрещён. Каждый день может иметь N слотов разных kind, но в picker они отдельные карточки. ПТ: 2 слота — 18:30 run (5К + 6×150/250) + 19:00 ofp (12 упр circuit). renderOfpStructure: каждое упражнение — карточка с .ex-num (номер в кружке), .ex-name (имя, accent), .ex-side (L/R бейдж), .ex-band (🎗 иконка), .ex-focus-pill (фокус), .ex-reps (× reps моноширинно), .ex-why (notes italic). 27/27 tests passing.</li><li>v33 (починка Totals): Кирилл попросил унифицировать totals — всегда показывать план/target/дельта. Раньше actual-режим показывал 'сессий/факт/объём' (по факт-логу), non-actual — 'planned/target/delta'. v32 разломал это (план-неделя не показывал target). v33: ВСЕГДА считаем planned = sum(duration_min всех слотов) / target = phase.hours_per_week_target / delta = planned - target. Лейблы: 'план-неделя' (это сумма запланированных тренировок на этой неделе) / 'долгосрочн' (это target из долгосрочного плана) / 'дельта'. Зелёный если план ≥ долгосрочн, красный если &lt; 0. 27/27 tests passing.</li><li>v34 (лейблы totals): Кирилл попросил убрать русские лейблы, которые обрезались ('план-неделя', 'долгосрочн', 'дельта'). Заменены на 'planned' / 'expected' / 'delta' (короткие английские слова — не обрезаются). 27/27 tests passing.</li><li>v35 (basis-aware rendering): Кирилл попросил убрать time/distance путаницу в set-блоках. step.basis='time' (default) → показываем duration_min + hr_target. step.basis='distance' → показываем distance_m + pace_min_per_km, duration_min НЕ выводится. Sub-шаги (set_repeats[]) никогда не показывают notes (Кирилл: 'буквы дальше - бесполезны'). Top-level set: reps + total time (time) или total distance (distance). ПТ tempo: basis=distance, sub-шаги 150м Z4 + 250м Z1 (no notes), top-level 900м × 6. ВТ key_progression: basis=time (default), sub-шаги 4мин Z3 + 2мин Z1, top-level 30мин × 5. HR-сессии: step.hr_target (например 165), показывается как 'HR 165'. Модель может наполнять любым basis, рендер работает одинаково. 28/28 tests passing.</li><li>v36 (починка v35): Кирилл: 'зачем умножил 6 на 150? Не пиши объём, просто интервалы. Подпись внизу убери, она уродская.' Убрал totalM логику. Теперь top-level set header = просто label (step.label или 'set') + × N. Убрал notes полностью (sub-шаги + top-level). step.label='интервалы' для ПТ tempo, 'ОФП circuit' для ПТ OFP. В header'е теперь: 'интервалы × 6', без объёма. Sub-шаги без notes. Top-level без notes. 28/28 tests passing.</li><li>v37 (починка v36): Кирилл: 'сломал рендеринг карточек, пустая страница с кнопкой назад'. Нашёл ReferenceError в renderHrStructure: в top-level одиночном шаге использовалось s.pace_min_per_km (где s был не определён, потому что в этом блоке переменная называется st). v35 прошёл smoke-тесты, потому что тесты не запускали JS-рендеринг — только проверяли наличие строк в source. v37 добавляет test_render_html_every_slot_renders: рендерит HTML, вытаскивает JS-исходник, eval'ит в node, вызывает renderCard для каждого из 8 слотов W1. Ловит любые ReferenceError / TypeError в renderHrStructure. 29/29 tests passing.</li></ol>
+</section>
+
+<section class="block" id="goals">
+  <h2>Множественные цели — как устроено</h2>
+  <p class="summary">Один season_plan с goals[]. phase принадлежит goal. goal_allocator распределяет часы/нед между целями с учётом adaptation_rates.</p><p class="path"><code>~/.hermes/coach/state/season_plan.json</code></p><div class='modules'><div class='module'><div class='module-name'><code>goals[]</code></div><div class='module-purpose'>цели сезона: [{id, discipline:'run_10k'|'tri_olympic'|..., race_date, goal_metric:{type,target}, priority:1..n, primary:true|false, notes}].</div></div><div class='module'><div class='module-name'><code>phases[]</code></div><div class='module-purpose'>теперь с goal_id. Каждая фаза принадлежит одной цели. Пример: [run_base, run_build, run_specific, run_taper, race_1, transition, tri_base, tri_build, tri_specific, tri_taper, race_2].</div></div><div class='module'><div class='module-name'><code>adaptation_rates[]</code></div><div class='module-purpose'>per-discipline коэффициенты восприимчивости к нагрузке: {run:1.0, swim:0.55, bike:0.7, strength:1.5}. ЧСС-час бега ≠ ЧСС-час велосипеда. Используется goal_allocator для распределения часов между целями.</div></div><div class='module'><div class='module-name'><code>control_points[]</code></div><div class='module-purpose'>теперь с goal_id для целевых TT и без goal_id для общих метрик (HR drift, cadence).</div></div><div class='module'><div class='module-name'><code>races[]</code></div><div class='module-purpose'>сохраняется как список гонок (по одной на goal с race_date).</div></div><div class='module'><div class='module-name'><code>transition_phases</code></div><div class='module-purpose'>фаза перехода между целями (run taper → tri base). Снижение объёма одной дисциплины + вход в другую.</div></div></div><p class="rule"><strong>Правило:</strong> goals задаёт coach-plan-season при создании сезона на основе интервью. Изменение goals = season_replan с reason='add_goal' / 'swap_goal' / 'drop_goal'.</p>
+</section>
+
+<section class="block" id="weight">
+  <h2>Вес — минимум без переусложнения</h2>
+  <p class="summary">Просто следим. Без целей, без BMI, без алертов.</p><p class="path"><code>~/.hermes/coach/state/athlete.json (поле) + lib/garmin_weight.py</code></p><div class='modules'><div class='module'><div class='module-name'><code>athlete.weight_kg_current</code></div><div class='module-purpose'>последний известный вес, обновляется при любом новом измерении.</div></div><div class='module'><div class='module-name'><code>athlete.weight_history[]</code></div><div class='module-purpose'>[{date, kg, source:'garmin'|'manual'}] — append-only. Без лимита на размер (одна запись в день максимум = ~100 записей/год).</div></div><div class='module'><div class='module-name'><code>lib/garmin_weight.py</code></div><div class='module-purpose'>читает последний вес из Garmin (garth или garminconnect). Вызывается из cron eae7b0d88b4a (ежедневно 02:00). Если новых данных нет — no-op.</div></div><div class='module'><div class='module-name'><code>weekly_report.weight_line</code></div><div class='module-purpose'>одна строка в сводке недели: «Вес: 101.7 кг (Δ −0.3 за 7д, тренд ↓)».</div></div><div class='module'><div class='module-name'><code>coach-fit-review (опц.)</code></div><div class='module-purpose'>при coaching/lookback и ≥ 4 нед истории weight_history — показывает рядом с метриками тренд веса за период. Без валидации, без cited_principle для самого веса.</div></div><div class='module'><div class='module-name'><code>coach-plan-adjust (ручная)</code></div><div class='module-purpose'>по команде «я взвесился — 95.8» пишет в weight_history с source='manual', обновляет weight_kg_current.</div></div></div><p class="rule"><strong>Правило:</strong> НЕТ: target_weight, BMI, калорий, алертов на дельту. ЕСТЬ: текущий вес + история + строка в weekly_report. Всё остальное — потом, если понадобится.</p>
+</section>
+
+<section class="block" id="allocator">
+  <h2>goal_allocator.py — как распределяется объём</h2>
+  <ol class="flow">
+        <li class="step">
+          <div class="step-n">1</div>
+          <div class="step-body">
+            <div class="step-name">Вход</div>
+            <div class="step-what">goals[], phases_for_each_goal с hours_per_week_target, constraints.weekly_windows, adaptation_rates.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">2</div>
+          <div class="step-body">
+            <div class="step-name">Нормализация</div>
+            <div class="step-what">Перевод raw hours → effective_cost hours через adaptation_rates (ЧСС-час бега = 1.0, вел = 0.7, плав = 0.55). Это «истинная» стоимость тренировки для организма.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">3</div>
+          <div class="step-body">
+            <div class="step-name">Балансировка</div>
+            <div class="step-what">Подбираем долю effective_cost часов каждой цели так, чтобы не превышать constraints.max_total_effective_cost_per_week. Первая цель (primary) получает baseline, остальные делят остаток.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">4</div>
+          <div class="step-body">
+            <div class="step-name">Candidates</div>
+            <div class="step-what">goal_allocator возвращает 2-3 варианта распределения: 'primary-приоритет', 'баланс 60/40', 'баланс 50/50'. Для каждого: что выигрывает, что проигрывает, на сколько часов.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">5</div>
+          <div class="step-body">
+            <div class="step-name">Trade-off показ</div>
+            <div class="step-what">Кирилл видит: «вариант A: 10К получает 5.5ч, triathlon получает 4.5ч (риск: triathlon run-leg просядет на 5-8 сек/км). Вариант B: 10К 4.5ч, triathlon 5.5ч (риск: 10К медленнее на 10-15 сек/км)».</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">6</div>
+          <div class="step-body">
+            <div class="step-name">Решение</div>
+            <div class="step-what">Кирилл выбирает. coach-plan-season фиксирует: chosen_allocation + reason (чтобы потом, при replan, было видно, чем он руководствовался).</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">7</div>
+          <div class="step-body">
+            <div class="step-name">plan_generate применяет</div>
+            <div class="step-what">phases[] в season_plan.json обновляются hours_per_week_target в соответствии с chosen_allocation. Дальше — обычная сборка W_N.</div>
+          </div>
+        </li>
+        </ol>
+  <p class="key"><strong>Ключ к предсказуемости:</strong> goal_allocator НЕ выбирает за Кирилла. Он даёт 2-3 варианта с явным trade-off'ом. Решение — человек. Это про оптимум-как-подсказка, а не оптимум-как-default.</p>
+</section>
+
+<section class="block" id="state_files">
+  <h2>State-файлы — что лежит и как наполнять (кликни, чтобы развернуть)</h2>
+  <p class="summary">Каждый файл — одна ответственность. Снапшоты ниже вытащены из существующих данных; добавлять новое не нужно.</p>
+  <div class="state-files">
+        <details class="state-file">
+          <summary>
+            <span class="sf-name">athlete.json</span>
+            <span class="sf-path">~/.hermes/coach/state/athlete.json</span>
+          </summary>
+          <div class="sf-body">
+            <p class="sf-purpose">Идентичность спортсмена. Меняется редко (травмы, новые PB, смена целей).</p>
+            <div class="ex-label">format_example</div><pre><code>{
+  'goals': ['spring_10k_2027_under_41', 'tri_olympic_2027_finish'],
+  'current_form': { 'vo2max': 51, 'race_pace_10k': '44:06' },
+  'form_trend_4w': 'recovering_after_back_injury',
+  'hr_zones': { 'hr_max': 182, 'rhr': 54, 'zones': { 'Z1': '110-125', 'Z2': '125-140', 'Z2': '125-145', 'Z3': '145-160', 'Z4': '160-170', 'Z5': '170-182' } },
+  'injuries': [{ 'date': '2026-09', 'type': 'back_pinched_nerve', 'status': 'resolved_w_care' }],
+  'adaptation_rates': { 'run': 1.0, 'bike': 0.7, 'swim': 0.55, 'strength': 1.5 },
+  'weight_kg_current': 101.7,
+  'weight_history': [
+    { 'date': '2026-09-30', 'kg': 101.7, 'source': 'manual' },
+    { 'date': '2026-10-07', 'kg': 101.4, 'source': 'garmin' },
+    { 'date': '2026-10-12', 'kg': 101.1, 'source': 'garmin' }
+  ]
+}</code></pre><div class="ex-label">current_snapshot</div><pre><code>Источник: spring-10k-2027-v2.md (анкета), MEMORY.md (HR-зоны). adaptation_rates по умолчанию (HR-cost нормирован на бег).</code></pre>
+            <div class="sf-how">
+              <div class="ex-label">how_to_fill</div>
+              <ul><li>coach-onboarding при первом заполнении — выгружает из Garmin (Intervals.icu / Renpho) + планов + истории писем.</li><li>Вручную: при смене PB, травме, изменении веса, смене глобальной цели.</li><li>Зоны HR: обновлять 1× в 6 мес или после burnout-блока.</li></ul>
+            </div>
+          </div>
+        </details>
+        
+        <details class="state-file">
+          <summary>
+            <span class="sf-name">season_plan.json (v9 · с goals[])</span>
+            <span class="sf-path">~/.hermes/coach/state/season_plan.json</span>
+          </summary>
+          <div class="sf-body">
+            <p class="sf-purpose">Долгосрочный план. goals[], phases_for_goals с goal_id, control_points[] (с goal_id или без), races[], adaptation_rates, volume_progression_rules.</p>
+            <div class="ex-label">format_example</div><pre><code>{
+  'horizon': { 'start': '2026-10-12', 'end': '2027-10-01' },
+  'goals': [
+    { 'id': 'g_run_spring', 'dishipline': 'run_10k', 'race_date': '2027-04-18', 'goal_metric': { 'type': 'time_sec', 'target': 2460 }, 'priority': 1, 'primary': true },
+    { 'id': 'g_tri_autumn', 'dishipline': 'tri_olympic', 'race_date': '2027-09-12', 'goal_metric': { 'type': 'finish_under', 'target_sec': 9900 }, 'priority': 2, 'primary': false }
+  ],
+  'phases': [
+    { 'id': 'run_base',     'goal_id': 'g_run_spring', 'start': '2026-10-12', 'end': '2027-01-03', 'hours_per_week_target': 5 },
+    { 'id': 'run_build',    'goal_id': 'g_run_spring', 'start': '2027-01-04', 'end': '2027-02-21', 'hours_per_week_target': 7 },
+    { 'id': 'run_specific', 'goal_id': 'g_run_spring', 'start': '2027-02-22', 'end': '2027-04-04', 'hours_per_week_target': 8 },
+    { 'id': 'run_taper',    'goal_id': 'g_run_spring', 'start': '2027-04-05', 'end': '2027-04-17', 'hours_per_week_target': 4 },
+    { 'id': 'race_run',     'goal_id': 'g_run_spring', 'start': '2027-04-18', 'end': '2027-04-18', 'event': true },
+    { 'id': 'transition',   'goal_id': 'g_tri_autumn', 'start': '2027-04-19', 'end': '2027-05-09', 'hours_per_week_target': 5, 'notes': 'снижение бега, вход в плавание/вело' },
+    { 'id': 'tri_base',     'goal_id': 'g_tri_autumn', 'start': '2027-05-10', 'end': '2027-06-20', 'hours_per_week_target': 6 },
+    { 'id': 'tri_build',    'goal_id': 'g_tri_autumn', 'start': '2027-06-21', 'end': '2027-08-08', 'hours_per_week_target': 8 },
+    { 'id': 'tri_specific', 'goal_id': 'g_tri_autumn', 'start': '2027-08-09', 'end': '2027-09-05', 'hours_per_week_target': 10 },
+    { 'id': 'tri_taper',    'goal_id': 'g_tri_autumn', 'start': '2027-09-06', 'end': '2027-09-11', 'hours_per_week_target': 5 },
+    { 'id': 'race_tri',     'goal_id': 'g_tri_autumn', 'start': '2027-09-12', 'end': '2027-09-12', 'event': true }
+  ],
+  'control_points': [
+    { 'id': 'cp_3k_w4',   'goal_id': 'g_run_spring', 'date': '2026-11-06', 'what': '3K time trial', 'metric_target': 'time_sec', 'measures': ['top_end_speed'] },
+    { 'id': 'cp_5k_w8',   'goal_id': 'g_run_spring', 'date': '2026-12-04', 'what': '5K max',        'metric_target': 'time_sec', 'measures': ['vo2max'] },
+    { 'id': 'cp_5k_w16',  'goal_id': 'g_run_spring', 'date': '2027-01-22', 'what': '2-3×3K avg',    'metric_target': 'avg_time_sec', 'measures': ['threshold_pace'] },
+    { 'id': 'cp_olympic_sim_w32', 'goal_id': 'g_tri_autumn', 'date': '2027-07-31', 'what': 'Olympic-distance brick (swim-bike-run)', 'metric_target': 'finish_sec', 'measures': ['transition_efficiency', 'race_pace_10k_under_fatigue'] },
+    { 'id': 'cp_general_hr_drift', 'goal_id': null, 'date': '2026-12-15', 'what': 'HR drift baseline', 'metric_target': 'drift_bpm_per_km', 'measures': ['hr_drift'] }
+  ],
+  'races': [
+    { 'goal_id': 'g_run_spring', 'date': '2027-04-18', 'name': 'S25 Berlin 10K', 'start_time': '10:30' },
+    { 'goal_id': 'g_tri_autumn', 'date': '2027-09-12', 'name': 'Olympic triathlon (TBD venue)', 'start_time': 'TBD' }
+  ],
+  'chosen_allocation': { 'snapshot_date': '2026-10-13', 'strategy': 'balanced_60_40', 'g_run_spring_eff_pct': 60, 'g_tri_autumn_eff_pct': 40, 'reason': 'primary 10K требует объёма, triathlon build требует времени на вело+плав' },
+  'volume_progression_rules': { 'weekly_increase_max_pct': 10, 'step_weeks': 3, 'step_hours': 1, 'deload_every_n_weeks': 4 }
+}</code></pre><div class="ex-label">current_snapshot</div><pre><code>Источник: spring-10k-2027-v2.md. Цели: g_run_spring (10К 18.04.2027) + g_tri_autumn (олимпийка 12.09.2027). 11 фаз с явным goal_id. 5 control_points (4 привязаны к goal, 1 общий).</code></pre>
+            <div class="sf-how">
+              <div class="ex-label">how_to_fill</div>
+              <ul><li>coach-onboarding или coach-plan-season при первом заполнении.</li><li>Правит coach-plan-season при replan (reason='add_goal' / 'swap_goal' / 'drop_goal' / 'change_allocation').</li><li>chosen_allocation фиксируется после явного решения Кирилла по кандидатам от goal_allocator.</li></ul>
+            </div>
+          </div>
+        </details>
+        
+        <details class="state-file">
+          <summary>
+            <span class="sf-name">constraints.json</span>
+            <span class="sf-path">~/.hermes/coach/state/constraints.json</span>
+          </summary>
+          <div class="sf-body">
+            <p class="sf-purpose">Окна доступного времени, предпочтения, запреты. Рамка для W_N.</p>
+            <div class="ex-label">format_example</div><pre><code>{
+  'version': 1,
+  'updated_at': '2026-10-13T20:00:00+00:00',
+  'weekly_windows': { 'ПН': [...], 'ВТ': [...], ... },
+  'preferred_slots': { 'ofp': ['morning'], 'long_run': [...], 'intervals': [...], 'tempo': [...], 'long_bike': ['sunday_or_wed'], 'swim': ['wed_evening_or_friday_evening'] },
+  'forbidden': { 'СР вечер': 'интенсивные запрещены (семейный тайм)', 'ПТ поздний вечер': 'только easy / мобилити' },
+  'min_total_hours_per_week': 2,
+  'max_total_hours_per_week': 11
+}</code></pre><div class="ex-label">current_snapshot</div><pre><code>Источник: spring-10k-2027-v2.md, раздел 'ДОСТУПНЫЕ ОКНА НЕДЕЛИ'. Итого ~480–530 мин ≈ 8–9 ч. Сб = 0.</code></pre>
+            <div class="sf-how">
+              <div class="ex-label">how_to_fill</div>
+              <ul><li>coach-onboarding при первом заполнении.</li><li>Правит coach-plan-adjust ТОЛЬКО по явному запросу Кирилла.</li><li>Любая правка инкрементит version + пишет updated_at.</li></ul>
+            </div>
+          </div>
+        </details>
+        
+        <details class="state-file">
+          <summary>
+            <span class="sf-name">season_progress.json</span>
+            <span class="sf-path">~/.hermes/coach/state/season_progress.json</span>
+          </summary>
+          <div class="sf-body">
+            <p class="sf-purpose">Факт выполнения: actual_metrics по control_points (с goal_id) + сводки по неделям.</p>
+            <div class="ex-label">format_example</div><pre><code>{
+  'weeks': { '2026-W42': { 'goal_breakdown': { 'g_run_spring': 6.5, 'g_tri_autumn': 0 }, 'planned_hours': 6.5, 'actual_hours': 6.2 } },
+  'control_points': { 'cp_3k_w4': { 'status': 'pending' } },
+  'deviations': []
+}</code></pre><div class="ex-label">current_snapshot</div><pre><code>W42 — пока только g_run_spring (10К фаза), факт по 4 окт Вс — 13.6К за 70мин.</code></pre>
+            <div class="sf-how">
+              <div class="ex-label">how_to_fill</div>
+              <ul><li>fit_ingest при загрузке FIT за дату control_point → пишет actual_metrics в season_progress.control_points[id].</li><li>coach-plan-week после закрытия W_N пишет weeks[iso] сводку + goal_breakdown.</li><li>Вручную: weekly review добавляет deviations / notes.</li></ul>
+            </div>
+          </div>
+        </details>
+        
+        <details class="state-file">
+          <summary>
+            <span class="sf-name">overrides.json</span>
+            <span class="sf-path">~/.hermes/coach/state/overrides.json</span>
+          </summary>
+          <div class="sf-body">
+            <p class="sf-purpose">Ручные правки Кирилла на W_N.</p>
+            <div class="ex-label">format_example</div><pre><code>{
+  'version': 1,
+  'overrides': [
+    { 'week': '2026-W42', 'add_swim_sessions': 1, 'reorder': [['ПН', 'bassik'], ['ВТ', 'easy']], 'shift_week_start': null, 'reason': 'спина ноет — пропустить ВТ утро', 'created_at': '2026-10-12T20:00:00+00:00' }
+  ]
+}</code></pre><div class="ex-label">current_snapshot</div><pre><code>Файл пустой. Пока правок не было.</code></pre>
+            <div class="sf-how">
+              <div class="ex-label">how_to_fill</div>
+              <ul><li>Кирилл голосовой/текстовой командой: 'сдвинь W_N, в среду не могу' → coach-plan-week пишет override.</li><li>Каждый override имеет reason.</li><li>История не очищается.</li></ul>
+            </div>
+          </div>
+        </details>
+        
+        <details class="state-file">
+          <summary>
+            <span class="sf-name">fit_store/</span>
+            <span class="sf-path">~/.hermes/coach/state/fit_store/</span>
+          </summary>
+          <div class="sf-body">
+            <p class="sf-purpose">Сырые FIT-файлы. Живут 14 дней, потом удаляются fit_retention.py.</p>
+            <div class="ex-label">format_example</div><pre><code>fit_store/2026-10/2026-10-13_running.garmin.fit
+fit_store/index.json: { 'fits': [ { 'id', 'path', 'date', 'type':'running'|'cycling'|'swimming', 'source', 'created_at', 'expires_at' } ] }</code></pre><div class="ex-label">current_snapshot</div><pre><code>Сейчас FIT'ы лежат вне fit_store — вcoach/runs/ и coach/ofp/swim-logs/. Известные: 2026-10-07_sharpening.fit (run), 2026-10-05_pool_swim.fit (swim).</code></pre>
+            <div class="sf-how">
+              <div class="ex-label">how_to_fill</div>
+              <ul><li>fit_ingest: 'загрузи FIT за сегодня' — копирует в fit_store/YYYY-MM/, обновляет index.json.</li><li>Если дата FIT совпала с control_point — fit_ingest пишет actual_metrics в season_progress.control_points[id].</li><li>fit_retention раз в неделю удаляет FIT с expires_at &lt; now.</li></ul>
+            </div>
+          </div>
+        </details>
+        </div>
+</section>
+
+<section class="block" id="problems">
+  <h2>Что сейчас не так (диагноз)</h2>
+  <ol class="problems"><li>9 спортивных skill'ов с тонкими SKILL.md — описывают что делать, но не как общаются между собой.</li><li>Три места для одних и техных фактов: plan-w1.json рядом с w1-mobile-v2.html, cards.md рядом с points-journal.md.</li><li>Skill'ы сами пишут промпты к модели. Python-кода с жёстким контрактом почти нет. Галлюцинации в числах.</li><li>Каждая сессия стартует с нуля: цели, форма, зоны, расписание агент собирает из обрывков MEMORY.md.</li><li>HTML-рендер размазан по 4 skill'ам.</li><li>Нет слоя для долгосрочного плана и его перепланирования.</li><li>Нет места для ручных overrides Кирилла.</li><li>Нет способа загрузить FIT-файл одной командой и получить разбор нужной глубины.</li><li>Нет привязки «тренерского взгляда» к источнику.</li><li>control_points в v6 жили внутри plan-wN.json — неправильно.</li><li>Нет constraints.</li><li>Нет volume_progression.</li><li>v8: одна цель = одна гонка. Реальность: Кирилл хочет 10К весной + олимпийку осенью. Без multiple goals plan_generate не справится — нечего оптимизировать.</li></ol>
+</section>
+
+<section class="block" id="data">
+  <h2>Где какие данные лежат — раскладка</h2>
+  <p class="summary">Каждый файл = одна ответственность. season_plan теперь хранит goals[] и phases с goal_id.</p><p class="path"><code>~/.hermes/coach/state/</code></p><div class='modules'><div class='module'><div class='module-name'><code>athlete.json</code></div><div class='module-purpose'>идентичность: цели (несколько), форма, HR-зоны, травмы, adaptation_rates.</div></div><div class='module'><div class='module-name'><code>season_plan.json</code></div><div class='module-purpose'>goals[], phases[] с goal_id, control_points[] (goal_id или null), races[], adaptation_rates, chosen_allocation, volume_progression_rules.</div></div><div class='module'><div class='module-name'><code>control_points/</code></div><div class='module-purpose'>индекс для быстрого поиска по дате/типу/goal.</div></div><div class='module'><div class='module-name'><code>constraints.json</code></div><div class='module-purpose'>weekly_windows + preferred_slots + forbidden + min/max hours/week.</div></div><div class='module'><div class='module-name'><code>season_progress.json</code></div><div class='module-purpose'>actual_metrics по control_points (с goal_id) + сводки по неделям с goal_breakdown.</div></div><div class='module'><div class='module-name'><code>overrides.json</code></div><div class='module-purpose'>ручные правки на W_N.</div></div><div class='module'><div class='module-name'><code>fit_store/</code></div><div class='module-purpose'>сырые FIT. 14 дней.</div></div><div class='module'><div class='module-name'><code>fit_store/index.json</code></div><div class='module-purpose'>указатель FIT (с type: running|cycling|swimming).</div></div><div class='module'><div class='module-name'><code>coaching_corpus/</code></div><div class='module-purpose'>принципы с source.</div></div><div class='module'><div class='module-name'><code>season_plan.archive/</code></div><div class='module-purpose'>старые season_plan.</div></div><div class='module'><div class='module-name'><code>decisions/</code></div><div class='module-purpose'>audit-trail: решения + retention.</div></div></div>
+</section>
+
+<section class="block" id="season_plan_shape">
+  <h2>season_plan.json — структура (v9, с goals[])</h2>
+  <ol class="problems"><li>goals[]: [{id, discipline, race_date, goal_metric, priority, primary}] — цели сезона.</li><li>phases[]: [{id, goal_id, start, end, hours_per_week_target?}] — каждая фаза принадлежит goal (или null для общих).</li><li>transition_phases: явный тип для перехода между goal.</li><li>control_points[]: [{id, goal_id|null, date, what, metric_target, measures, protocol?}].</li><li>races[]: [{goal_id, date, name, start_time}].</li><li>chosen_allocation: {strategy, g_xxx_eff_pct, reason, snapshot_date} — зафиксированное решение Кирилла.</li><li>adaptation_rates[]: per-discipline коэффициенты (используются goal_allocator).</li><li>fit_ingest матчит FIT-дату с CP и пишет actual_metrics в season_progress.control_points[id].</li></ol>
+</section>
+
+<section class="block" id="constraints">
+  <h2>constraints.json — окна, предпочтения, запреты</h2>
+  <p class="summary">Без этого plan_generate лепит «из фантазий».</p><p class="path"><code>~/.hermes/coach/state/constraints.json</code></p><div class='modules'><div class='module'><div class='module-name'><code>weekly_windows</code></div><div class='module-purpose'>по дням недели окна (start, end, duration_min, location).</div></div><div class='module'><div class='module-name'><code>preferred_slots</code></div><div class='module-purpose'>по виду — предпочтительные слоты (ofp, long_run, intervals, tempo, long_bike, swim, brick).</div></div><div class='module'><div class='module-name'><code>forbidden</code></div><div class='module-purpose'>запреты по видам в конкретные дни.</div></div><div class='module'><div class='module-name'><code>min_total_hours_per_week</code></div><div class='module-purpose'>нижняя граница.</div></div><div class='module'><div class='module-name'><code>max_total_hours_per_week</code></div><div class='module-purpose'>верхняя граница.</div></div><div class='module'><div class='module-name'><code>auto_zwift</code></div><div class='module-purpose'>правила для inline Zwift-поиска внутри plan_generate: {enabled:true, duration_min_max:90, locations:['home_stationary_bike'], kinds:['bike','brick'], focus_must_have_any:['Z2','Z3','intervals','endurance'], candidates_max:3}. Когда slot удовлетворяет — plan_generate дёргает coach-plan-zwift inline, без отдельной команды Кирилла.</div></div></div><p class="rule"><strong>Правило:</strong> constraints редактируются Кириллом или через coach-plan-adjust с подтверждением. plan_generate только ЧИТАЕТ. auto_zwift управляет тем, что идёт в Zwift-поиск автоматически. По умолчанию enabled=true, ≤ 90 мин, location=home, kind in [bike, brick]. Зима: всё вело дома → почти все bike-слоты получат workout_ref. Лето/путешествия: Кирилл выключает auto_zwift.enabled, slot-ы остаются duration-only.</p>
+</section>
+
+<section class="block" id="volume">
+  <h2>volume_progression + goal_allocator — поведение plan_generate</h2>
+  <ol class="flow">
+        <li class="step">
+          <div class="step-n">1</div>
+          <div class="step-body">
+            <div class="step-name">Вход сезона</div>
+            <div class="step-what">season_plan.json → goals[], phases[] с goal_id, hours_per_week_target.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">2</div>
+          <div class="step-body">
+            <div class="step-name">Вход constraints</div>
+            <div class="step-what">weekly_windows, preferred_slots, forbidden.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">3</div>
+          <div class="step-body">
+            <div class="step-name">Normalize</div>
+            <div class="step-what">goal_allocator переводит raw hours → effective_cost hours через adaptation_rates.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">4</div>
+          <div class="step-body">
+            <div class="step-name">Candidates</div>
+            <div class="step-what">goal_allocator возвращает 2-3 варианта распределения (primary-приоритет / 60-40 / 50-50) с явным trade-off.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">5</div>
+          <div class="step-body">
+            <div class="step-name">Кирилл решает</div>
+            <div class="step-what">Применяется chosen_allocation. phases[].hours_per_week_target обновляется.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">6</div>
+          <div class="step-body">
+            <div class="step-name">volume_check</div>
+            <div class="step-what">STOP + diff + согласование при gap.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">7</div>
+          <div class="step-body">
+            <div class="step-name">Раскладка</div>
+            <div class="step-what">plan_generate раскладывает по weekly_windows с preferred_slots + запреты.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">8</div>
+          <div class="step-body">
+            <div class="step-name">Прогрессия</div>
+            <div class="step-what">Каждая W_N получает hours_target с учётом volume_progression_rules.</div>
+          </div>
+        </li>
+        </ol>
+  <p class="key"><strong>Ключ к предсказуемости:</strong> Цели делят объём через goal_allocator. Объём — сезонный параметр. plan_generate НЕ фантазирует.</p>
+</section>
+
+<section class="block" id="lib">
+  <h2>Слой 1 · Python toolkit</h2>
+  <p class="summary">Сюда ходят skill'ы. Модель только отсюда.</p><p class="path"><code>~/.hermes/coach/lib/</code></p><div class='modules'><div class='module'><div class='module-name'><code>parse_fit.py</code></div><div class='module-purpose'>FIT → dict.</div></div><div class='module'><div class='module-name'><code>fit_ingest.py</code></div><div class='module-purpose'>FIT → fit_store/ + (если CP-дата) actual_metrics.</div></div><div class='module'><div class='module-name'><code>fit_retention.py</code></div><div class='module-purpose'>еженедельно: FIT &gt; 14 дней → удалить.</div></div><div class='module'><div class='module-name'><code>garmin_weight.py</code></div><div class='module-purpose'>раз в день (cron eae7b0d88b4a): читает последний вес из Garmin. Если новее последней записи в athlete.weight_history — append (source='garmin').</div></div><div class='module'><div class='module-name'><code>weekly_report.py</code></div><div class='module-purpose'>athlete + 3 FIT + метрики → сводка недели (с goal_breakdown если целей &gt; 1, +1 строка про вес).</div></div><div class='module'><div class='module-name'><code>analyze.py</code></div><div class='module-purpose'>analyze(fit_id, mode, context). mode ∈ {quick, contextual, coaching, lookback}. Lookback берёт CP из season_progress с фильтром по goal_id.</div></div><div class='module'><div class='module-name'><code>plan_adjust.py</code></div><div class='module-purpose'>«сегодня перегруз» → diff JSON.</div></div><div class='module'><div class='module-name'><code>plan_generate.py</code></div><div class='module-purpose'>season_plan (goals + phases_for_goals + chosen_allocation) + athlete + constraints + overrides → plan-wN.json с CP-слотами.</div></div><div class='module'><div class='module-name'><code>goal_allocator.py</code></div><div class='module-purpose'>goals[] + phases[] + adaptation_rates + constraints → candidates[] с явным trade-off. Не выбирает за Кирилла.</div></div><div class='module'><div class='module-name'><code>season_replan.py</code></div><div class='module-purpose'>новый season_plan.json (с поддержкой goals[]) + diff + archive.</div></div><div class='module'><div class='module-name'><code>volume_check.py</code></div><div class='module-purpose'>phase_target vs constraints → STOP/OK + suggestion.</div></div><div class='module'><div class='module-name'><code>render_html.py</code></div><div class='module-purpose'>plan/diff/report → self-contained HTML.</div></div><div class='module'><div class='module-name'><code>ask_model.py</code></div><div class='module-purpose'>единственная обёртка над LLM + JSON-schema + cited_principle.</div></div><div class='module'><div class='module-name'><code>metrics/</code></div><div class='module-purpose'>одна метрика = один файл. registry.py + @register.</div></div><div class='module'><div class='module-name'><code>coaching_corpus/</code></div><div class='module-purpose'>принципы с source. Добавляются olympic-specific (transition, brick, race_pace_under_fatigue).</div></div><div class='module'><div class='module-name'><code>zwift_search.py</code></div><div class='module-purpose'>парсит WhatsOnZwift по критериям → candidates[]. Read-only, не хранит state.</div></div><div class='module'><div class='module-name'><code>zwift_sync.py</code></div><div class='module-purpose'>тонкая обёртка над garmin_tools/zwift_sync.py. URL → workout JSON → Garmin Connect.</div></div><div class='module'><div class='module-name'><code>plan_runtime.py</code></div><div class='module-purpose'>runtime entry point. generate_plan_with_html(season_week) → plan-wN.json + plan-wN.html. Каждая coach-plan-* skill вызывает его. v19: HTML — обязательная часть выхода.</div></div><div class='module'><div class='module-name'><code>step_builder.py</code></div><div class='module-purpose'>строит list[step] для каждого subkind. build_structure() для run/bike/swim/brick (warmup/work/cooldown, intervals с reps), ofp_structure() для OFP (упражнения в circuit).</div></div></div><p class="rule"><strong>Правило:</strong> Модель только через ask_model.py. fit_retention — единственная, кто удаляет FIT. plan_generate читает constraints, не правит. goal_allocator — только candidates, никогда default. coach-plan-zwift вызывает zwift_search.py (read-only) и zwift_sync.py (write через garmin_tools). coach-plan-* skills вызывают plan_runtime.generate_plan_with_html() — единственная точка где генерится и JSON и HTML. Нет обходного пути.</p>
+</section>
+
+<section class="block" id="metrics">
+  <h2>Точка расширения 1 · метрики</h2>
+  <p class="summary">Изолированный слой с registry. Новые метрики (brick, transition) добавляются @register.</p><p class="path"><code>~/.hermes/coach/lib/metrics/</code></p><div class='modules'><div class='module'><div class='module-name'><code>registry.py</code></div><div class='module-purpose'>@register.</div></div><div class='module'><div class='module-name'><code>_template.py</code></div><div class='module-purpose'>шаблон.</div></div><div class='module'><div class='module-name'><code>hr_drift.py</code></div><div class='module-purpose'>HR drift.</div></div><div class='module'><div class='module-name'><code>cadence_30s.py</code></div><div class='module-purpose'>30s rolling cadence.</div></div><div class='module'><div class='module-name'><code>pace_variability.py</code></div><div class='module-purpose'>std/mean темпа.</div></div><div class='module'><div class='module-name'><code>training_effect.py</code></div><div class='module-purpose'>TE aerobic/anaerobic.</div></div><div class='module'><div class='module-name'><code>fatigue_score.py</code></div><div class='module-purpose'>композит.</div></div><div class='module'><div class='module-name'><code>transition_efficiency.py</code></div><div class='module-purpose'>скорость трансфера T1/T2 в триатлоне.</div></div><div class='module'><div class='module-name'><code>race_pace_under_fatigue.py</code></div><div class='module-purpose'>темп 10К после велосипеда — ключевая метрика triathlon.</div></div></div><p class="rule"><strong>Правило:</strong> Метрика = чистая функция (FIT-dict) → dict. Никакого I/O.</p>
+</section>
+
+<section class="block" id="retention">
+  <h2>Точка расширения 5 · FIT retention</h2>
+  <div class="table-wrap">
+    <table class="fixes">
+      <thead><tr><th>Боль</th><th>Как архитектура закрывает</th></tr></thead>
+      <tbody><tr><td class='pain'>FIT копятся</td><td class='fix'>fit_retention.py раз в неделю удаляет FIT &gt; 14 дней.</td></tr><tr><td class='pain'>Нужен raw</td><td class='fix'>actual_metrics по CP уже в season_progress.</td></tr><tr><td class='pain'>Хочу сохранить FIT разово</td><td class='fix'>Исключение.</td></tr><tr><td class='pain'>Audit</td><td class='fix'>decisions/retention-YYYY-MM-DD.json.</td></tr><tr><td class='pain'>Конфиг</td><td class='fix'>retention.json: {fit_ttl_days: 14}.</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="block" id="analyze">
+  <h2>Точка расширения 4 · analyze (4 уровня)</h2>
+  <ol class="flow">
+        <li class="step">
+          <div class="step-n">1</div>
+          <div class="step-body">
+            <div class="step-name">Загрузка / выбор</div>
+            <div class="step-what">fit_ingest: FIT → fit_store/. fit_lookup: FIT или CP (с фильтром goal_id).</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">2</div>
+          <div class="step-body">
+            <div class="step-name">Выбор уровня</div>
+            <div class="step-what">mode ∈ {quick, contextual, coaching, lookback}. По умолчанию quick.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">3</div>
+          <div class="step-body">
+            <div class="step-name">quick</div>
+            <div class="step-what">parse_fit + одна метрика.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">4</div>
+          <div class="step-body">
+            <div class="step-name">contextual</div>
+            <div class="step-what">parse_fit + 3 предыдущих FIT + план дня + overrides. Корреляции Python.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">5</div>
+          <div class="step-body">
+            <div class="step-name">coaching</div>
+            <div class="step-what">contextual + corpus. ask_model с cited_principle.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">6</div>
+          <div class="step-body">
+            <div class="step-name">lookback</div>
+            <div class="step-what">season_progress.control_points.filter(goal_id|measures) → тренды. При двух целях — отдельный lookback по каждой.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">7</div>
+          <div class="step-body">
+            <div class="step-name">Валидация</div>
+            <div class="step-what">ask_model валидирует. coaching/lookback без cited_principle — REJECT.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">8</div>
+          <div class="step-body">
+            <div class="step-name">Audit + выход</div>
+            <div class="step-what">decisions/&lt;date&gt;-&lt;slot&gt;-analyze.json. Render.</div>
+          </div>
+        </li>
+        </ol>
+  <p class="key"><strong>Ключ к предсказуемости:</strong> 4 уровня = разные слои вычислений. FIT не нужен для lookback. С несколькими целями lookback можно фильтровать по goal_id.</p>
+</section>
+
+<section class="block" id="corpus">
+  <h2>Под-слой · coaching_corpus</h2>
+  <p class="summary">Ground truth. С triathlon добавляются transition / brick / race_pace_under_fatigue.</p><p class="path"><code>~/.hermes/coach/lib/coaching_corpus/</code></p><div class='modules'><div class='module'><div class='module-name'><code>index.json</code></div><div class='module-purpose'>список принципов.</div></div><div class='module'><div class='module-name'><code>hr_drift.json</code></div><div class='module-purpose'>HR drift.</div></div><div class='module'><div class='module-name'><code>cadence.json</code></div><div class='module-purpose'>каденс.</div></div><div class='module'><div class='module-name'><code>long_run.json</code></div><div class='module-purpose'>длинная.</div></div><div class='module'><div class='module-name'><code>intervals.json</code></div><div class='module-purpose'>интервалы.</div></div><div class='module'><div class='module-name'><code>recovery.json</code></div><div class='module-purpose'>recovery HR drop.</div></div><div class='module'><div class='module-name'><code>taper.json</code></div><div class='module-purpose'>taper.</div></div><div class='module'><div class='module-name'><code>lookback.json</code></div><div class='module-purpose'>интерпретация трендов по CP.</div></div><div class='module'><div class='module-name'><code>brick_workout.json</code></div><div class='module-purpose'>принципы brick-сессий для triathlon.</div></div><div class='module'><div class='module-name'><code>transition.json</code></div><div class='module-purpose'>T1/T2 эффективность, gear changes, обувь-клипсы.</div></div><div class='module'><div class='module-name'><code>race_pace_under_fatigue.json</code></div><div class='module-purpose'>бег 10К после 40К вело — специфика олимпийки.</div></div><div class='module'><div class='module-name'><code>adaptation_rates.json</code></div><div class='module-purpose'>per-discipline коэффициенты восприимчивости (HR-cost нормирован).</div></div></div><p class="rule"><strong>Правило:</strong> {id, title, topics, source, principle, application}. Без source и application не регистрируется.</p>
+</section>
+
+<section class="block" id="replan">
+  <h2>Точка расширения 2 · replan сезона</h2>
+  <div class="table-wrap">
+    <table class="fixes">
+      <thead><tr><th>Боль</th><th>Как архитектура закрывает</th></tr></thead>
+      <tbody><tr><td class='pain'>Вход: season_plan</td><td class='fix'>state/season_plan.json целиком (с goals[]).</td></tr><tr><td class='pain'>Вход: выполнено</td><td class='fix'>season_progress.json.</td></tr><tr><td class='pain'>Вход: форма и фаза</td><td class='fix'>athlete.json + fatigue_score + lookback (per goal).</td></tr><tr><td class='pain'>Вход: причина</td><td class='fix'>reason: 'illness_2w' / 'travel_block' / 'goal_shift' / 'overreached' / 'increase_volume' / 'decrease_volume' / 'add_goal' / 'drop_goal' / 'swap_goal' / 'change_allocation'.</td></tr><tr><td class='pain'>Вход: до цели</td><td class='fix'>goals[].race_date, weeks_to_race для primary.</td></tr><tr><td class='pain'>Выход</td><td class='fix'>новый season_plan.json + diff (включая chosen_allocation, если менялось).</td></tr><tr><td class='pain'>Constraints check</td><td class='fix'>replan сверяет hours_per_week_target с constraints.max.</td></tr><tr><td class='pain'>Allocation check</td><td class='fix'>replan при изменении goals или adaptation_rates вызывает goal_allocator для новых candidates.</td></tr><tr><td class='pain'>История</td><td class='fix'>season_plan.archive/.</td></tr><tr><td class='pain'>Sanity</td><td class='fix'>weeks_to_race, гонки на месте, volume рост ≤10%/нед, CP не уезжают за горизонт гонки, transition-фазы имеют длительность ≥ 3 нед.</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="block" id="weekgen">
+  <h2>Точка расширения 3 · W_N: season_plan + constraints + overrides + inline Zwift</h2>
+  <ol class="flow">
+        <li class="step">
+          <div class="step-n">1</div>
+          <div class="step-body">
+            <div class="step-name">Вход сезона</div>
+            <div class="step-what">season_plan.json → phase (goal_id), hours_target, CP_in_range, focus (например 'long Z2' / 'threshold intervals' / 'bike endurance').</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">2</div>
+          <div class="step-body">
+            <div class="step-name">Вход формы</div>
+            <div class="step-what">athlete.json + weekly_report (как прошла ПРЕДЫДУЩАЯ неделя) → fatigue_score, recovery_hr_drop.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">3</div>
+          <div class="step-body">
+            <div class="step-name">Вход constraints</div>
+            <div class="step-what">constraints.json → weekly_windows, preferred_slots, forbidden, auto_zwift (правила для inline Zwift).</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">4</div>
+          <div class="step-body">
+            <div class="step-name">Размещение slot-ов</div>
+            <div class="step-what">plan_generate раскладывает focus-недели по weekly_windows + preferred_slots. Каждый slot имеет: kind, duration_min, day, time, location, focus_tags.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">5</div>
+          <div class="step-body">
+            <div class="step-name">Inline Zwift check</div>
+            <div class="step-what">Для каждого bike/brick-слота plan_generate проверяет constraints.auto_zwift: {duration_min_max:90, location:'home_stationary_bike', kind:['bike','brick'], focus_must_have:['Z2','Z3','intervals']}. Если совпало → авто-дёргает coach-plan-zwift inline. Иначе → slot без workout_ref.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">6</div>
+          <div class="step-body">
+            <div class="step-name">Inline Zwift candidates</div>
+            <div class="step-what">coach-plan-zwift.search(criteria из slot.focus_tags + duration_min) → candidates[] (2-4). plan_generate пакетно собирает все bike-слоты требующие Zwift, рендерит ОДИН HTML с cards всех slot-ов.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">7</div>
+          <div class="step-body">
+            <div class="step-name">Решение Кирилла</div>
+            <div class="step-what">Кирилл голосует по каждому slot (или 'skip — оставить пустым'). Решения в decisions/&lt;date&gt;-&lt;slot&gt;-zwift.json. Если 'skip' — slot остаётся без workout_ref, Кирилл сам выберет workout позже (или сделает на улице).</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">8</div>
+          <div class="step-body">
+            <div class="step-name">workout_ref в slot</div>
+            <div class="step-what">Для каждого выбранного candidate: zwift_sync → Garmin Connect → workout_ref = {url, garmin_workout_id, scheduled_date} записывается в plan-wN.json в соответствующий slot.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">9</div>
+          <div class="step-body">
+            <div class="step-name">Overrides merge</div>
+            <div class="step-what">merge overrides + проверка конфликтов с focus, CP-датами и forbidden. Slot с workout_ref защищён от override (Кирилл должен явно 'отвязать workout').</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">10</div>
+          <div class="step-body">
+            <div class="step-name">Выход</div>
+            <div class="step-what">plan-wN.json со всеми slots (часть с workout_ref, часть без) + decisions/audit + render_html.py → wN-mobile.html. Один артефакт, всё сразу.</div>
+          </div>
+        </li>
+        </ol>
+  <p class="key"><strong>Ключ к предсказуемости:</strong> ОДИН этап планирования. plan_generate раскладывает focus по окнам + INLINE дёргает coach-plan-zwift для bike/brick-слот-ов удовлетворяющих constraints.auto_zwift. Кирилл получает готовый план с workout_ref-ами, без отдельного шага 'искать Zwift'. Если Кирилл хочет перевыбрать workout — команда 'переподбери slot X', plan_generate передаёт в coach-plan-zwift заново. Это НЕ разорванный двухшаговый процесс.</p>
+</section>
+
+<section class="block" id="zwift_search">
+  <h2>Точка расширения 5 · поиск Zwift-тренировок по критериям</h2>
+  <ol class="flow">
+        <li class="step">
+          <div class="step-n">1</div>
+          <div class="step-body">
+            <div class="step-name">Запрос</div>
+            <div class="step-what">Кирилл говорит «нужна 45-мин Z2-вело на завтра». Или из plan_generate: 'нужен 60мин Z2-bike слот' с критериями. Skill coach-plan-zwift.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">2</div>
+          <div class="step-body">
+            <div class="step-name">Парсинг критериев</div>
+            <div class="step-what">criteria = {discipline, duration_min, zones[], workout_type, tags[]}. Один или комбинация.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">3</div>
+          <div class="step-body">
+            <div class="step-name">Скрапинг</div>
+            <div class="step-what">lib/zwift_search.py парсит WhatsOnZwift. Возвращает candidates[] 2-4 варианта (НЕ 'так и штук').</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">4</div>
+          <div class="step-body">
+            <div class="step-name">Презентация</div>
+            <div class="step-what">Рендер HTML с cards (заголовок, длительность, описание, ссылка). Кирилл видит, голосует.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">5</div>
+          <div class="step-body">
+            <div class="step-name">Выбор</div>
+            <div class="step-what">«беру вариант 2» (голосовое). Решение в decisions/&lt;date&gt;-&lt;slot&gt;-zwift.json.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">6</div>
+          <div class="step-body">
+            <div class="step-name">Конверсия</div>
+            <div class="step-what">lib/zwift_sync.py (bridge к garmin_tools/zwift_sync.py) → workout JSON → Garmin Connect. workout_ref в plan-wN.json.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">7</div>
+          <div class="step-body">
+            <div class="step-name">Расписание</div>
+            <div class="step-what">plan_generate обновляет slot: kind='bike'|'brick', workout_ref={url, garmin_workout_id, scheduled_date}.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">8</div>
+          <div class="step-body">
+            <div class="step-name">Выполнение</div>
+            <div class="step-what">Tacx / Garmin workout на велостанке → FIT → fit_ingest → season_progress.</div>
+          </div>
+        </li>
+        </ol>
+  <p class="key"><strong>Ключ к предсказуемости:</strong> Zwift search — часть coach-plan-week. plan_generate не выдумывает структуру workout, а через coach-plan-zwift ищет готовую. Кирилл голосует. Никакого ручного копирования.</p>
+</section>
+
+<section class="block" id="skills">
+  <h2>Слой 2 · Skills</h2>
+  <p class="summary">Схема coach-&lt;area&gt;-&lt;verb&gt;. Старые имена — aliases.</p><div class='skills'><div class='skill-row'><div class='skill-name'>coach-plan-week</div><div class='skill-arrow'>→</div><div class='skill-uses'>plan_generate, render_html</div><div class='skill-aliases'>aliases: weekly-helper, weekly-card-builder</div></div><div class='skill-row'><div class='skill-name'>coach-plan-season</div><div class='skill-arrow'>→</div><div class='skill-uses'>season_replan, goal_allocator, render_html</div><div class='skill-aliases'>aliases: plan-present</div></div><div class='skill-row'><div class='skill-name'>coach-plan-adjust</div><div class='skill-arrow'>→</div><div class='skill-uses'>weekly_report, plan_adjust, constraints read/write</div><div class='skill-aliases'>aliases: coaching-running</div></div><div class='skill-row'><div class='skill-name'>coach-fit-ingest</div><div class='skill-arrow'>→</div><div class='skill-uses'>fit_ingest</div><div class='skill-aliases'>aliases: garmin-fit-inspect</div></div><div class='skill-row'><div class='skill-name'>coach-fit-review</div><div class='skill-arrow'>→</div><div class='skill-uses'>analyze(mode), ask_model</div><div class='skill-aliases'>aliases: garmin-fit-inspect</div></div><div class='skill-row'><div class='skill-name'>coach-fit-trend</div><div class='skill-arrow'>→</div><div class='skill-uses'>analyze(mode='lookback'), render</div><div class='skill-aliases'>aliases: garmin-running-analysis, coach-trend-lookback</div></div><div class='skill-row'><div class='skill-name'>coach-onboarding</div><div class='skill-arrow'>→</div><div class='skill-uses'>импорт архивов → athlete.json + constraints.json + adaptation_rates</div><div class='skill-aliases'>aliases: coach-onboarding</div></div><div class='skill-row'><div class='skill-name'>coach-plan-zwift</div><div class='skill-arrow'>→</div><div class='skill-uses'>lib.zwift_search, lib.zwift_sync, lib.render_html</div></div></div><p class="preamble"><strong>Pre-amble:</strong> Pre-amble наследуется всеми: «Ты строго в рамках athlete.json + season_plan.json + constraints.json + вывод указанной функции. Любой факт вне — откажись. В coach-fit-review/coach-fit-trend каждое утверждение требует cited_principle.»</p><p class="rule"><strong>Правило:</strong> area ∈ {plan, fit}, verb ∈ {week, season, adjust, ingest, review, trend, onboarding}. coach-plan-adjust — единственный, кто правит constraints (с подтверждением). coach-plan-season — единственный, кто вызывает goal_allocator. coach-plan-zwift — единственный, кто обращается к WhatsOnZwift.</p>
+</section>
+
+<section class="block" id="flow">
+  <h2>Scoreboard-флоу — каждый запрос проходит одну лестницу</h2>
+  <ol class="flow">
+        <li class="step">
+          <div class="step-n">1</div>
+          <div class="step-body">
+            <div class="step-name">Hook</div>
+            <div class="step-what">load_athlete_context: athlete + season_plan (goals, phases_for_goals, chosen_allocation) + constraints + last override + last decisions.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">2</div>
+          <div class="step-body">
+            <div class="step-name">Skill-route</div>
+            <div class="step-what">По смыслу → 1 из 7 coach-* skill'ов. Скилл НЕ пишет промпт.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">3</div>
+          <div class="step-body">
+            <div class="step-name">Загрузка?</div>
+            <div class="step-what">«загрузи FIT» → fit_ingest.py → fit_store/ + (если CP-дата) actual_metrics.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">4</div>
+          <div class="step-body">
+            <div class="step-name">Данные + метрики</div>
+            <div class="step-what">Python lib. W_N: goal_allocator (если ещё не выбран) + volume_check + constraints + CP-слоты. Analyze: tier по доступности + goal_id-фильтр.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">5</div>
+          <div class="step-body">
+            <div class="step-name">Allocation?</div>
+            <div class="step-what">«как распределить объём между целями» → goal_allocator.py → candidates[] с trade-off → Кирилл выбирает → chosen_allocation в season_plan.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">6</div>
+          <div class="step-body">
+            <div class="step-name">Inline Zwift для bike-слотов</div>
+            <div class="step-what">plan_generate проверяет constraints.auto_zwift. Для каждого bike/brick-слота удовлетворяющего правилу (≤90 min, home_stationary_bike, focus) — дёргает coach-plan-zwift inline, собирает candidates, Кирилл голосует голосом, zwift_sync пишет workout_ref в plan-wN.json. Один шаг, не два.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">7</div>
+          <div class="step-body">
+            <div class="step-name">Retention?</div>
+            <div class="step-what">cron (еженедельно) → fit_retention.py → удалить FIT &gt; 14 дней.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">8</div>
+          <div class="step-body">
+            <div class="step-name">Replan?</div>
+            <div class="step-what">«перепланируй сезон» → season_replan.py → новый season_plan.json + constraints check + allocation check + archive старого.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">9</div>
+          <div class="step-body">
+            <div class="step-name">Модель</div>
+            <div class="step-what">ask_model.py с JSON-schema. coach-fit-review/coach-fit-trend → обязателен cited_principle.</div>
+          </div>
+        </li>
+        
+        <li class="step">
+          <div class="step-n">10</div>
+          <div class="step-body">
+            <div class="step-name">Audit + выход</div>
+            <div class="step-what">decisions/&lt;date&gt;-&lt;slot&gt;-{analyze,w,replan,retention,allocation}.json. Render: JSON + self-contained HTML.</div>
+          </div>
+        </li>
+        </ol>
+  <p class="key"><strong>Ключ к предсказуемости:</strong> Всё, что считается — Python. Интерпретации — ask_model + JSON-schema + cited_principle. Несколько целей: распределение через goal_allocator (candidates, не default). control_points в season_plan. constraints = рамка. FIT retention = 14 дней.</p>
+</section>
+
+<section class="block" id="first_step">
+  <h2>Минимальный шаг (1–2 дня работы)</h2>
+  <ul class="checklist"><li>state/athlete.json (включая adaptation_rates)</li><li>state/season_plan.json: goals[] (g_run_spring, g_tri_autumn) + 11 phases с goal_id + 5 control_points (4 к goal, 1 общий) + races[] + chosen_allocation</li><li>state/constraints.json (weekly_windows + preferred_slots с swim/long_bike/brick)</li><li>state/season_progress.json (со структурой под control_points[] с goal_id и weeks[].goal_breakdown)</li><li>state/overrides.json</li><li>state/fit_store/ + index.json + retention.json (fit_ttl_days: 14)</li><li>lib/fit_ingest.py + lib/fit_retention.py</li><li>lib/garmin_weight.py (1-строчный no-op если новых измерений нет)</li><li>lib/goal_allocator.py (candidates[] с trade-off)</li><li>lib/volume_check.py</li><li>lib/plan_generate.py с поддержкой goals[]</li><li>lib/season_replan.py с reason='add_goal' / 'change_allocation' / etc.</li><li>lib/{parse_fit, plan_adjust, render_html, ask_model}.py</li><li>lib/metrics/{registry, _template, hr_drift, cadence_30s, fatigue_score, transition_efficiency, race_pace_under_fatigue}.py</li><li>lib/coaching_corpus/ с brick_workout.json, transition.json, race_pace_under_fatigue.json, adaptation_rates.json + lookback.json</li><li>lib/analyze.py с 4 mode (с goal_id-фильтром в lookback)</li><li>Переименовать skill'ы по схеме coach-&lt;area&gt;-&lt;verb&gt; + aliases</li><li>Hook load_athlete_context.py</li><li>Cron: weekly → fit_retention.py</li><li>Прогнать 7 типовых: (а) «загрузи FIT за CP-дату», (б) «разбор FIT (quick)», (в) «разбор (coaching)», (г) «тренд по g_run_spring за 12 нед», (д) «goal_allocator: кандидаты для 10К+tri», (е) «сгенерируй W_N», (ж) «replan: add_goal=triathlon»</li><li>lib/zwift_search.py (scraping whatsonzwift.com по критериям)</li><li>lib/zwift_sync.py (bridge к garmin_tools/zwift_sync.py)</li><li>skills/coach-plan-zwift.md</li></ul>
+</section>
+
+<section class="block" id="helper">
+  <h2>Помощник — что говорить агенту в каждой ситуации (кликни, чтобы развернуть)</h2>
+  <p class="summary">Эта машинерия выглядит страшно, но в работе тебе нужно знать только фразы ниже. Каждая фраза → конкретный skill → конкретный результат. Если не помнишь фразу — скажи «помощь», агент покажет.</p>
+  <div class="state-files">
+        <details class="state-file">
+          <summary>
+            <span class="sf-name">Разбор тренировки</span>
+            <span class="sf-path">→ coach-fit-review</span>
+          </summary>
+          <div class="sf-body">
+            <p class="sf-purpose">Ты отбегал и хочешь понять, что произошло.</p>
+            <div class="ex-label">format_example</div><pre><code>Скажи одну из фраз:</code></pre><div class="ex-label">current_snapshot</div><pre><code>• «разбери FIT за сегодня» — quick, только цифры.
+• «проанализируй вчерашнюю тренировку» — quick + план дня.
+• «что скажет тренер про каденс» — coaching: модель ссылается на принцип из corpus.
+• «как это стыкуется с прошлой неделей» — contextual: 3 предыдущих + override.
+
+Команда: «загрузи FIT за &lt;дата&gt;» — кладёт FIT в fit_store/, матчит с control_point если дата совпала.
+
+Алиасы: «разбери FIT», «проанализируй», «что скажет тренер», «посмотри последнюю».</code></pre>
+            <div class="sf-how">
+              <div class="ex-label">how_to_fill</div>
+              <ul><li>Если хочешь тренерский взгляд — всегда говори «как тренер» или «со ссылкой на принципы».</li><li>Если FIT не загружен — скажи «загрузи FIT за сегодня» ПЕРЕД разбором.</li><li>Если результат не сходится с ощущениями — «покажи decisions/&lt;slot&gt;.json» — откроется полный аудит.</li></ul>
+            </div>
+          </div>
+        </details>
+        
+        <details class="state-file">
+          <summary>
+            <span class="sf-name">Планирование недели</span>
+            <span class="sf-path">→ coach-plan-week</span>
+          </summary>
+          <div class="sf-body">
+            <p class="sf-purpose">Сгенерировать или поправить план на текущую/следующую неделю.</p>
+            <div class="ex-label">format_example</div><pre><code>Скажи:</code></pre><div class="ex-label">current_snapshot</div><pre><code>• «собери план на следующую неделю» — plan_generate с goals+constraints.
+• Inline Zwift: если в constraints.auto_zwift включено и недельный план содержит bike/brick-слот ≤ 90 мин на home_stationary_bike, plan_generate САМ дёргает coach-plan-zwift inline. Ты получаешь план со ссылками на workouts, голосуешь по каждому slot одним из списком (или 'skip'). Один этап.
+• «добавь в эту среду бассейн» — override.
+• «сдвинь длинный с воскресенья на субботу» — override.
+• «покажи план на эту неделю» — рендер plan-wN.json.
+• «переподбери workout на слот X» — coach-plan-zwift заново для конкретного слота.
+
+Если volume_check сработал: «покажи кандидатов» → goal_allocator → выбор.
+
+Алиасы: «собери неделю», «сгенерируй W_N», «что в плане», «поправь план», «найди Zwift на среду».
+
+ВЫХОД: всегда пара state/plan-wN.json + state/plan-wN.html (v19). Файл отправляется в Telegram или открывается двойным тапом.</code></pre>
+            <div class="sf-how">
+              <div class="ex-label">how_to_fill</div>
+              <ul><li>Overrides требуют reason. Без причины — нет override.</li><li>Если constraints не совпадают с реальностью — скажи «обнови constraints: ...» — coach-plan-adjust спросит подтверждение.</li><li>Контрольные точки (TT) проставляются автоматически из season_plan в нужную дату. Не двигай их override'ом — для этого season_replan.</li></ul>
+            </div>
+          </div>
+        </details>
+        
+        <details class="state-file">
+          <summary>
+            <span class="sf-name">Долгосрочный план и цели</span>
+            <span class="sf-path">→ coach-plan-season</span>
+          </summary>
+          <div class="sf-body">
+            <p class="sf-purpose">Добавить/убрать цель, перепланировать сезон, посмотреть горизонт.</p>
+            <div class="ex-label">format_example</div><pre><code>Скажи:</code></pre><div class="ex-label">current_snapshot</div><pre><code>• «покажи сезонный план» — рендер phases с goal_id.
+• «добавь цель: олимпийка 12.09.2027» — replan с reason='add_goal'.
+• «убери цель триатлона» — replan с reason='drop_goal'.
+• «как перераспределить объём между 10К и три?» — goal_allocator → candidates → Кирилл выбирает.
+• «сдвинь гонку 10К на неделю позже» — replan с reason='goal_shift'.
+
+Алиасы: «перепланируй сезон», «replan», «смени цель», «как поделить часы между целями».</code></pre>
+            <div class="sf-how">
+              <div class="ex-label">how_to_fill</div>
+              <ul><li>Любое изменение goals[] = season_replan. Не править 'concepts' руками.</li><li>replan сначала вызывает goal_allocator, потом спрашивает Кирилла о chosen_allocation, потом обновляет season_plan.json.</li><li>Старые версии сезона автоматически уходят в season_plan.archive/. Не удалять вручную.</li></ul>
+            </div>
+          </div>
+        </details>
+        
+        <details class="state-file">
+          <summary>
+            <span class="sf-name">Контрольные точки (TT)</span>
+            <span class="sf-path">→ coach-fit-review (lookback) + coach-plan-season</span>
+          </summary>
+          <div class="sf-body">
+            <p class="sf-purpose">Как устроены TT в плане и как их результат влияет на план.</p>
+            <div class="ex-label">format_example</div><pre><code>control_points (TT) живут в season_plan.json. В plan-wN они проявляются как обязательные слоты в нужную дату. fit_ingest матчит FIT-дату и пишет actual_metrics в season_progress.</code></pre><div class="ex-label">current_snapshot</div><pre><code>Примеры (из текущего снапшота):
+• cp_3k_w4 (06.11.2026) — 3К на время, цель 14:00
+• cp_5k_w8 (04.12.2026) — 5К max, цель 22:30
+• cp_olympic_sim_w32 (31.07.2027) — Olympic-distance brick для триатлона
+• cp_general_hr_drift (15.12.2026) — общий (без goal_id)
+
+Команды:
+• «когда следующий TT» — список ближайших control_points.
+• «как я бегал 3К в прошлый раз» — lookback по cp_3k_*, без FIT.
+• «как шла подготовка к TT» — lookback за N нед до даты CP.
+• «проанализируй вчерашнюю» (если вчера был TT) — coach-fit-review, режим auto=coaching.</code></pre>
+            <div class="sf-how">
+              <div class="ex-label">how_to_fill</div>
+              <ul><li>TT нельзя перенести override'ом. Для переноса — «сдвинь cp_3k_w4 на 13.11» → season_replan с reason='control_point_shift'.</li><li>Проваленный TT (время хуже цели) не останавливает план автоматически. Кирилл решает: оставить фазу, удлинить, или replan.</li></ul>
+            </div>
+          </div>
+        </details>
+        
+        <details class="state-file">
+          <summary>
+            <span class="sf-name">Состояние и форма</span>
+            <span class="sf-path">→ coach-fit-review (lookback) + coach-plan-adjust</span>
+          </summary>
+          <div class="sf-body">
+            <p class="sf-purpose">Как я сейчас в форме? Как менялась? Как менялся вес?</p>
+            <div class="ex-label">format_example</div><pre><code>Скажи:</code></pre><div class="ex-label">current_snapshot</div><pre><code>• «какая у меня форма сейчас» — weekly_report текущей недели.
+• «как форма менялась за 8 недель» — lookback по метрикам из season_progress.control_points + trends по weight_history.
+• «покажи тренд веса» — последние N точек weight_history.
+• «HR drift на длинных — норма?» — coach-fit-review, режим contextual, метрика hr_drift.
+• «VO2max по Garmin за 12 нед» — coach-fit-trend (включает Garmin-прокси).
+
+Все ответы стартуют с одного и того же pre-amble: цели, форма, тренд, HR-зоны, расписание. Не нужно каждый раз спрашивать.</code></pre>
+            <div class="sf-how">
+              <div class="ex-label">how_to_fill</div>
+              <ul><li>Если в weekly_report что-то не сходится — «покажи solutions/&lt;slot&gt;.json».</li><li>Вес: «я взвесился — X кг» → coach-plan-adjust пишет в weight_history.</li></ul>
+            </div>
+          </div>
+        </details>
+        
+        <details class="state-file">
+          <summary>
+            <span class="sf-name">Конфликт: план vs реальность</span>
+            <span class="sf-path">→ coach-plan-adjust / coach-plan-season</span>
+          </summary>
+          <div class="sf-body">
+            <p class="sf-purpose">Когда реальность расходится с планом (болезнь, поездка, перегруз, нехватка времени).</p>
+            <div class="ex-label">format_example</div><pre><code>Скажи:</code></pre><div class="ex-label">current_snapshot</div><pre><code>• «сегодня был перегруз — что делать с остатком недели» — plan_adjust: diff JSON по оставшимся слотам.
+• «я заболел на 5 дней» — replan с reason='illness_2w' → откат, новые control_points.
+• «уезжаю в отпуск 14–21 декабря, окна в hotel-станке 45 мин утром» — обновить constraints + replan.
+• «объём не влезает в окна — покажи кандидатов» — goal_allocator → candidates[] → выбираешь.
+• «в среду вечером не могу интенсивные» — обновить constraints.forbidden.
+
+Алиасы: «подкрути план», «replan», «сдвинь», «объём не влезает», «перераспредели».</code></pre>
+            <div class="sf-how">
+              <div class="ex-label">how_to_fill</div>
+              <ul><li>Всегда начинай с описания причины, а не с готового решения. Агент сам подберёт replan reason.</li><li>Если нужна помощь выбрать между trade-offs — скажи «покажи trade-off».</li></ul>
+            </div>
+          </div>
+        </details>
+        
+        <details class="state-file">
+          <summary>
+            <span class="sf-name">Под капотом: audit и решения</span>
+            <span class="sf-path">→ напрямую к decisions/</span>
+          </summary>
+          <div class="sf-body">
+            <p class="sf-purpose">Если хочешь проверить, почему агент решил так, а не иначе.</p>
+            <div class="ex-label">format_example</div><pre><code>Каждое решение моделью и каждый retention-проход логируется в ~/.hermes/coach/decisions/. Файлы immutable — записи никогда не перезаписываются, только добавляются новые.</code></pre><div class="ex-label">current_snapshot</div><pre><code>Структура: decisions/YYYY-MM-DD-&lt;slot&gt;-&lt;kind&gt;.json
+Примеры:
+• decisions/2026-10-13-19-30-analyze.json — разбор FIT с cited_principle
+• decisions/2026-10-13-02-00-retention.json — что удалено из fit_store/
+• decisions/2026-10-12-20-00-w.json — генерация plan-wN.json
+• decisions/2026-10-11-19-45-replan.json — сезонный replan
+
+Команда: «покажи последние 3 decisions» — список + краткое summary.
+
+Содержимое каждого файла:
+• input_hash (хэш входа: FIT + context)
+• prompt_hash (хэш промпта к модели)
+• output (полный ответ модели)
+• sources / cited_principle (на что сослалась модель)
+• timestamp
+
+Если что-то «агент уносит» — открой последний decision и увидишь, что именно модель вернула и на каких данных.</code></pre>
+            <div class="sf-how">
+              <div class="ex-label">how_to_fill</div>
+              <ul><li>decisions/ — append-only. Не редактировать руками.</li><li>Если решение хочется откатить — это через новый decision (replan / override / constraints change), не правкой старого.</li></ul>
+            </div>
+          </div>
+        </details>
+        
+        <details class="state-file">
+          <summary>
+            <span class="sf-name">Забыл фразу — что делать</span>
+            <span class="sf-path">→ coach-onboarding (помощь)</span>
+          </summary>
+          <div class="sf-body">
+            <p class="sf-purpose">Паника: «не помню как пользоваться».</p>
+            <div class="ex-label">format_example</div><pre><code>Скажи одну из:</code></pre><div class="ex-label">current_snapshot</div><pre><code>• «помощь» — список типовых сценариев с фразами.
+• «покажи команды» — все доступные skill'ы с триггерами.
+• «объясни как работает coach-fit-review» — справка по конкретному skill'у.
+• «что ты умеешь» — общий список возможностей.
+
+Никаких навыков не нужно — помощник помнит контекст и подскажет фразу под ситуацию.</code></pre>
+            <div class="sf-how">
+              <div class="ex-label">how_to_fill</div>
+              <ul><li>Эта HTML-страница — твоя главная шпаргалка. Открывается двойным тапом из Downloads/Files.</li></ul>
+            </div>
+          </div>
+        </details>
+        </div>
+</section>
+
+<footer>self-contained · sport-arch.html · генерировано из schemas.json</footer>
+</div></body></html>

@@ -1,0 +1,1446 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Coach App — дизайн</title>
+<style>
+  :root {
+    --bg:#fdf6ed; --card-bg:#fffefb; --ink:#1a1a1a; --muted:#6a6056;
+    --faint:#9a9085; --border:#e6dac4; --code-bg:#f4ede0;
+    --planner:#c2410c; --state:#0284c7; --fact:#0b7d71;
+    --delivery:#a17405; --narrator:#7c3aed; --entry:#d4a017;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html { -webkit-text-size-adjust:100%; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.5; font-size:16px; padding-bottom:48px; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.92em; }
+
+  header { padding:16px 14px 12px; border-bottom:1px solid var(--border); background:var(--card-bg); }
+  header h1 { font-size:19px; font-weight:700; }
+  header .sub { font-size:12.5px; color:var(--muted); margin-top:4px; }
+  header .meta { font-size:11px; color:var(--faint); margin-top:6px; }
+
+  nav { position:sticky; top:0; z-index:10; background:rgba(253,246,237,.96); backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--border); overflow-x:auto; white-space:nowrap; padding:7px 12px; scrollbar-width:none; }
+  nav::-webkit-scrollbar { display:none; }
+  nav a { display:inline-block; font-size:12px; color:var(--muted); text-decoration:none;
+    padding:4px 9px; margin-right:4px; border:1px solid var(--border); border-radius:999px; background:var(--card-bg); }
+
+  main { padding:0 12px; max-width:780px; margin:0 auto; }
+  section { margin-top:26px; }
+  .h2 { font-size:16px; font-weight:700; padding-bottom:6px; border-bottom:2px solid var(--ink);
+    margin-bottom:10px; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+  .h2 .fn { font-size:10.5px; font-weight:400; color:var(--faint); font-family:ui-monospace,monospace; }
+  h1 { font-size:19px; font-weight:700; margin:4px 0 12px; }
+  h2 { font-size:16px; font-weight:700; margin:18px 0 7px; padding-bottom:5px; border-bottom:1px solid var(--border); }
+  h3 { font-size:14px; font-weight:700; margin:14px 0 5px; }
+  h4 { font-size:13px; font-weight:700; margin:12px 0 4px; color:var(--muted); }
+  p { font-size:14.5px; margin-bottom:8px; }
+  ul,ol { margin:0 0 9px; padding-left:22px; font-size:14px; }
+  li { margin-bottom:4px; }
+  blockquote { border-left:3px solid var(--border); padding:2px 0 2px 10px; margin:0 0 9px;
+    color:var(--muted); font-size:13.5px; }
+  pre { background:var(--code-bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px;
+    overflow-x:auto; margin:0 0 10px; font-size:12px; line-height:1.45; }
+  pre code { font-size:12px; }
+  hr { border:none; border-top:1px solid var(--border); margin:18px 0; }
+  b { font-weight:700; }
+
+  .tw { overflow-x:auto; -webkit-overflow-scrolling:touch; margin:6px 0 12px; position:relative; }
+  table { border-collapse:collapse; width:100%; min-width:440px; font-size:12.5px; }
+  th,td { text-align:left; padding:6px 7px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+    font-weight:700; background:var(--code-bg); }
+  td code { font-size:11.5px; }
+
+  @media (max-width:560px) {
+    main { padding:0 10px; }
+    header h1 { font-size:17px; }
+    p { font-size:14px; }
+    table { min-width:400px; font-size:12px; }
+    .tw::after { content:'→ свайп'; position:absolute; right:2px; bottom:2px; font-size:9px;
+      color:var(--faint); background:var(--card-bg); padding:0 4px; pointer-events:none; }
+  }
+</style></head><body>
+<header>
+<h1>Coach App — дизайн</h1>
+<div class="sub">девять файлов: контракты, хранилище, BFF, хостинг, клиент, адаптеры, реализация, развилки</div>
+<div class="meta">9 разделов · уровень: контрактный и физический · 26.10.2026 · источник: design/*.md</div>
+</header>
+<nav>
+<a href="#s0">Карта</a>
+<a href="#s1">Контракты</a>
+<a href="#s2">Хранилище</a>
+<a href="#s3">BFF</a>
+<a href="#s4">Хостинг</a>
+<a href="#s5">Клиент</a>
+<a href="#s6">Адаптеры</a>
+<a href="#s7">Реализация</a>
+<a href="#s8">Развилки</a>
+</nav>
+<main>
+<section id="s0">
+<div class="h2">Карта<span class="fn">00-index.md</span></div>
+<p>Статус: дизайн готов, развилки закрыты. Код не начат — ждёт отдельной команды. · 26.10.2026</p>
+<h2>Что уже есть</h2>
+<div class="tw"><table><tr>
+<th>Артефакт</th>
+<th>Что закрывает</th>
+</tr>
+<tr>
+<td><code>DOMAIN-SPEC.html</code> (v3.6)</td>
+<td>Операционный контур: 18 сущностей, 43 инварианта, 6 вопросов</td>
+</tr>
+<tr>
+<td><code>LOGICAL.html</code> (v2.3)</td>
+<td>Логический уровень: 7 подсистем, 12 взаимодействий, 3 развилки решены</td>
+</tr>
+</table></div>
+<h2>Что предложено здесь</h2>
+<p>Три уровня ниже логического. Каждый — отдельный файл, они не смешиваются.</p>
+<div class="tw"><table><tr>
+<th>Файл</th>
+<th>Уровень</th>
+<th>Вопрос</th>
+</tr>
+<tr>
+<td><code>01-контракты.md</code></td>
+<td>контрактный</td>
+<td>как подсистемы общаются: команды, порты, ошибки</td>
+</tr>
+<tr>
+<td><code>02-хранилище.md</code></td>
+<td>физический</td>
+<td>где состояние лежит, как пишется, как версионируется</td>
+</tr>
+<tr>
+<td><code>03-BFF.md</code></td>
+<td>физический</td>
+<td>HTTP-слой: маршруты, ответы, авторизация, деградация</td>
+</tr>
+<tr>
+<td><code>04-хостинг.md</code></td>
+<td>физический</td>
+<td>как приложение доступно: в базе — по локальной сети</td>
+</tr>
+<tr>
+<td><code>05-клиент.md</code></td>
+<td>физический</td>
+<td>PWA: экраны, офлайн, очередь команд</td>
+</tr>
+<tr>
+<td><code>06-адаптеры.md</code></td>
+<td>физический</td>
+<td>Garmin, нарратор, Дэниэлс (правила)</td>
+</tr>
+<tr>
+<td><code>07-реализация.md</code></td>
+<td>план</td>
+<td>что строим базово и в каком порядке</td>
+</tr>
+<tr>
+<td><code>08-развилки.md</code></td>
+<td>решения</td>
+<td>все 10 развилок закрыты — решения зафиксированы</td>
+</tr>
+</table></div>
+<h2>Решения, зафиксированные 26.10.2026</h2>
+<div class="tw"><table><tr>
+<th>№</th>
+<th>Решение</th>
+</tr>
+<tr>
+<td>1</td>
+<td>Внешний доступ отложен. В базе — <b>только локальная сеть</b></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Формат хранения — не развилка: файлы → база по триггерам</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Стартуем с <b>импортом</b> состояния из пайплайна</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Методология: <b>движок внутри Планирования</b> (A)</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Достижимость — <b>функция методологии</b>, не отдельная подсистема</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Потолок формы — <b>из методологии</b>, на старте заглушка</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Факт и Оценка — <b>две</b> подсистемы (A)</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Нарратор — <b>нужен, с заглушкой</b> (A)</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Батч-рендеры пайплайна — <b>оставляем параллельно</b> (A)</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Правила из Дэниэлса — <b>отдельной задачей после этапа 3</b> (A)</td>
+</tr>
+</table></div>
+<h2>Принципы</h2>
+<ol>
+<li><b>Решения принимает код.</b> LLM только формулирует. Числа считает домен.</li>
+<li><b>Ничего не инициируется само.</b> Любое изменение состояния — команда от пользователя.</li>
+<li><b>Источник правды один.</b> Производное пересчитывается, а не хранится вторым экземпляром.</li>
+<li><b>Логика не знает о формате хранения.</b> Доступ к данным — только через порты;</li>
+</ol>
+<p>формат (файлы, база) знает только адаптер. Проверяется чекером, не договорённостью.</p>
+<ol>
+<li><b>Деградация вместо отказа.</b> Упавший внешний источник ограничивает, но не роняет.</li>
+<li><b>Один пользователь.</b> Ничего не строим на будущее, чего этот пользователь не делает.</li>
+<li><b>Заглушка честнее выдумки.</b> Нет правила — «не могу оценить», а не выдуманное число.</li>
+</ol>
+<h2>Границы с существующим пайплайном</h2>
+<p><code>~/coach</code> — рабочий пайплайн, он не переписывается. Новое приложение стартует как отдельный</p>
+<p>репозиторий, на первом этапе читает состояние импортом из <code>~/coach/state/*.json</code>.</p>
+<p>Пайплайн остаётся источником батч-рендеров (HTML-превью недель) — решение №9.</p>
+<h2>Что дальше — по отдельной команде</h2>
+<ol>
+<li>Создать репозиторий приложения + конституцию (<code>.hermes.md</code>) по <code>development-standards</code>.</li>
+<li>Реализовать базу по <code>07-реализация.md</code> — с тестом на каждый инвариант.</li>
+<li>В конституцию проекта — правило «доступ к данным только через порты» с командой проверки:</li>
+</ol>
+<p><code>python3 tools/check_storage_leaks.py</code>.</p>
+</section>
+<section id="s1">
+<div class="h2">Контракты<span class="fn">01-контракты.md</span></div>
+<p>Уровень: контрактный. Отвечает на вопрос «как подсистемы общаются».</p>
+<h2>Команда — единственный способ изменить состояние</h2>
+<p>Ничего не меняется само: ни закрытие недели, ни связывание факта, ни статус тренировки.</p>
+<pre><code>Command {
+  id              string      # идемпотентности, генерирует клиент
+  type            enum        # см. ниже
+  target          object      # {week_id?, actual_id?, workout_id?}
+  args            object      # payload по типу команды
+  reason          string      # обязателен, пустой не принимается
+  issued_at       datetime
+  issued_by       enum        # user | brain
+  expected_version int        # версия состояния, на которой клиент строил команду
+}</code></pre>
+<h3>Типы команд</h3>
+<p>Пустых мест быть не должно: каждая операция, меняющая состояние, — команда.</p>
+<h4>Загрузка факта</h4>
+<div class="tw"><table><tr>
+<th>Тип</th>
+<th>Что делает</th>
+<th>args</th>
+</tr>
+<tr>
+<td><code>pull_fact</code></td>
+<td>вытянуть активности из Garmin за период</td>
+<td><code>{from, to?, sport?}</code></td>
+</tr>
+</table></div>
+<p><b>Без <code>pull_fact</code> связывание не работает.</b> Факт живёт вне плана и появляется только через</p>
+<p>загрузку: сначала <code>pull_fact</code> — в хранилище появляются <code>ActualSession</code> без плановой пары,</p>
+<p>потом <code>link_actual</code> связывает конкретную сессию с тренировкой. Без загруженного факта</p>
+<p>связывать нечего — интерфейс выбора факта пуст.</p>
+<p>Ответ <code>pull_fact</code> содержит, что именно пришло: <code>pulled[]</code> — новые сессии, <code>skipped[]</code> —</p>
+<p>уже загруженные (тот же <code>external_id</code>), <code>degraded</code> — источник недоступен.</p>
+<h4>Неделя</h4>
+<div class="tw"><table><tr>
+<th>Тип</th>
+<th>Что делает</th>
+<th>args</th>
+</tr>
+<tr>
+<td><code>propose_week</code></td>
+<td>макро → неделя</td>
+<td><code>{season_week}</code></td>
+</tr>
+<tr>
+<td><code>activate_week</code></td>
+<td>proposed → active</td>
+<td><code>{season_week}</code></td>
+</tr>
+<tr>
+<td><code>close_week</code></td>
+<td>active → closed + саммари</td>
+<td><code>{season_week}</code></td>
+</tr>
+<tr>
+<td><code>replan_remainder</code></td>
+<td>пересборка сессий на сегодня и позже</td>
+<td><code>{season_week, trigger}</code></td>
+</tr>
+<tr>
+<td><code>place_unplaced</code></td>
+<td>висяк → слот</td>
+<td><code>{request_id, slot_id, start}</code></td>
+</tr>
+<tr>
+<td><code>unplace_request</code></td>
+<td>размещённая тренировка → обратно в висяки</td>
+<td><code>{request_id}</code></td>
+</tr>
+</table></div>
+<h4>Факт и связь</h4>
+<div class="tw"><table><tr>
+<th>Тип</th>
+<th>Что делает</th>
+<th>args</th>
+</tr>
+<tr>
+<td><code>link_actual</code></td>
+<td>факт ↔ тренировка</td>
+<td><code>{workout_id, actual_id}</code></td>
+</tr>
+<tr>
+<td><code>unlink_actual</code></td>
+<td>разрыв связи</td>
+<td><code>{workout_id}</code></td>
+</tr>
+<tr>
+<td><code>edit_actual</code></td>
+<td>поправить факт вручную</td>
+<td><code>{actual_id, patch}</code></td>
+</tr>
+</table></div>
+<p><code>edit_actual</code> — для ручного факта (<code>source: manual</code>): Garmin не знает про силовую с</p>
+<p>дистанцией «0 км» или про ОФП. Факт без Garmin-записи всё равно должен попадать в отчёт.</p>
+<h4>Профиль и цель</h4>
+<div class="tw"><table><tr>
+<th>Тип</th>
+<th>Что делает</th>
+<th>args</th>
+</tr>
+<tr>
+<td><code>update_athlete</code></td>
+<td>профиль атлета</td>
+<td><code>{patch}</code></td>
+</tr>
+<tr>
+<td><code>set_goal</code></td>
+<td>новая цель плана</td>
+<td><code>{goal}</code></td>
+</tr>
+<tr>
+<td><code>set_plan</code></td>
+<td>макроплан: фазы, недельные цели</td>
+<td><code>{plan}</code></td>
+</tr>
+</table></div>
+<h4>Среда</h4>
+<div class="tw"><table><tr>
+<th>Тип</th>
+<th>Что делает</th>
+<th>args</th>
+</tr>
+<tr>
+<td><code>set_slots</code></td>
+<td>базовые окна тренировок</td>
+<td><code>{slots}</code></td>
+</tr>
+<tr>
+<td><code>override_slots</code></td>
+<td>перекрытие слотов фазы или недели</td>
+<td><code>{scope, scope_id, ops[], reason}</code></td>
+</tr>
+<tr>
+<td><code>set_equipment</code></td>
+<td>реестр оборудования</td>
+<td><code>{equipment}</code></td>
+</tr>
+</table></div>
+<h4>Гейты (контрольные точки)</h4>
+<div class="tw"><table><tr>
+<th>Тип</th>
+<th>Что делает</th>
+<th>args</th>
+</tr>
+<tr>
+<td><code>set_gate_result</code></td>
+<td>значение проверки контрольной точки</td>
+<td><code>{gate_id, check_id, value, note?}</code></td>
+</tr>
+<tr>
+<td><code>decide_gate</code></td>
+<td>решение по контрольной точке</td>
+<td><code>{gate_id, decision, note?}</code></td>
+</tr>
+</table></div>
+<p><code>set_gate_result</code> — записать измеренное значение (время на 3К, темп). <code>decide_gate</code> —</p>
+<p>решение пользователя: «идём по плану» или «корректируем». Два разных шага: первое —</p>
+<p>факт, второе — намерение. Автоматика считает значения, но решение — за человеком.</p>
+<h4>Служебное</h4>
+<div class="tw"><table><tr>
+<th>Тип</th>
+<th>Что делает</th>
+<th>args</th>
+</tr>
+<tr>
+<td><code>narrate</code></td>
+<td>получить текстовое объяснение</td>
+<td><code>{about, diff?}</code></td>
+</tr>
+<tr>
+<td><code>import_state</code></td>
+<td>первичный импорт состояния</td>
+<td><code>{source}</code></td>
+</tr>
+<tr>
+<td><code>import_fit</code></td>
+<td>загрузить FIT-файл и разобрать метрики</td>
+<td><code>{path?, pull_days?}</code></td>
+</tr>
+</table></div>
+<p><code>narrate</code> — единственная команда, которая не меняет состояние. Она возвращает текст,</p>
+<p>не считает и не применяет.</p>
+<p><code>brain</code> не инициирует команды сам. Он готовит предложение — тот же конверт с <code>issued_by: brain</code> —</p>
+<p>и ждёт подтверждения пользователя.</p>
+<h3>Что было упущено и почему это важно</h3>
+<div class="tw"><table><tr>
+<th>Команда</th>
+<th>Без неё</th>
+<th>Что ломается</th>
+</tr>
+<tr>
+<td><code>pull_fact</code></td>
+<td>факта нет в системе</td>
+<td>связывание невозможно; отчёт всегда пустой</td>
+</tr>
+<tr>
+<td><code>edit_actual</code></td>
+<td>ручной факт невозможен</td>
+<td>силовые и ОФП не попадают в отчёт</td>
+</tr>
+<tr>
+<td><code>set_gate_result</code></td>
+<td>результат гейта некуда записать</td>
+<td>контрольные точки — только чтение</td>
+</tr>
+<tr>
+<td><code>decide_gate</code></td>
+<td>решение по гейту некуда записать</td>
+<td>решение пользователя теряется</td>
+</tr>
+<tr>
+<td><code>import_fit</code></td>
+<td>FIT не загрузить</td>
+<td>нет детальных метрик: каденс, дрейф, тренировочный эффект</td>
+</tr>
+<tr>
+<td><code>override_slots</code></td>
+<td>перекрытие слота только вручную в файле</td>
+<td>наследование Season ← Phase ← Week не работает</td>
+</tr>
+<tr>
+<td><code>set_slots</code></td>
+<td>базовые окна меняются правкой файла</td>
+<td>доступность тренировок не управляется из приложения</td>
+</tr>
+<tr>
+<td><code>set_plan</code></td>
+<td>макроплан меняется правкой файла</td>
+<td>фазы и недельные цели не управляются</td>
+</tr>
+<tr>
+<td><code>unplace_request</code></td>
+<td>висяк нельзя вернуть в висяки</td>
+<td>ошибку раскладки не исправить</td>
+</tr>
+<tr>
+<td><code>set_equipment</code></td>
+<td>реестр оборудования меняется правкой файла</td>
+<td>ограничения по оборудованию не управляются</td>
+</tr>
+</table></div>
+<h3>Ответ на команду</h3>
+<pre><code>CommandResult {
+  status       enum        # applied | rejected | needs_confirmation
+  new_version  int
+  diff[]       object      # что поменялось: {path, before, after}
+  consequences object      # {scope: local|ripple|season, affected[]}
+  warnings[]   string
+  error        object?     # {code, message, field?}
+}</code></pre>
+<p><code>needs_confirmation</code> — команда применена только частично или задевает следующие недели</p>
+<p>либо сезон. Пока пользователь не подтвердил, применённая часть — уже в состоянии,</p>
+<p>а остальное отложено.</p>
+<h3>Идемпотентность</h3>
+<p><code>id</code> команды пишется в журнал. Повтор с тем же <code>id</code> возвращает тот же <code>CommandResult</code></p>
+<p>и не применяет команду второй раз. Это позволяет клиенту ретраить outbox не глядя.</p>
+<p><code>pull_fact</code> — частный случай: повторный вызов с тем же периодом не создаёт дублей</p>
+<p>(<code>external_id</code> уникален), а возвращает <code>skipped[]</code> для уже загруженных.</p>
+<h3>Конкуренция</h3>
+<p><code>expected_version</code> не совпал с текущим → команда отклоняется, ответ <code>status: rejected</code>,</p>
+<p><code>error.code = version_conflict</code>, в ответе — текущий снапшот, чтобы клиент переспросил.</p>
+<h2>Порты — контракты внешнего мира</h2>
+<p>Логика знает только эти интерфейсы. Реализации — в адаптерах.</p>
+<div class="tw"><table><tr>
+<th>Порт</th>
+<th>Ответственность</th>
+<th>Поведение при сбое</th>
+</tr>
+<tr>
+<td><code>SeasonRepo</code></td>
+<td>состояние сезона: план, фазы, недели</td>
+<td>отказ при устаревшей версии</td>
+</tr>
+<tr>
+<td><code>FactRepo</code></td>
+<td>факт: чтение, добавление, связывание</td>
+<td>дубликат <code>external_id</code> → отказ с кодом</td>
+</tr>
+<tr>
+<td><code>AthleteRepo</code></td>
+<td>профиль атлета</td>
+<td>нет профиля → пустой профиль, не ошибка</td>
+</tr>
+<tr>
+<td><code>MethodologyRepo</code></td>
+<td>правила: модели, шаблоны, шкала зон</td>
+<td>нет правил → пустой набор, не ошибка</td>
+</tr>
+<tr>
+<td><code>CommandLog</code></td>
+<td>журнал команд: идемпотентность</td>
+<td>повтор команды → тот же результат</td>
+</tr>
+<tr>
+<td><code>ActivityPort</code></td>
+<td>вытянуть активности из внешнего источника</td>
+<td>таймаут + retry + деградация</td>
+</tr>
+<tr>
+<td><code>NarratorPort</code></td>
+<td>текст, варианты, объяснения</td>
+<td>нет ключа → детерминированная заглушка</td>
+</tr>
+<tr>
+<td><code>Clock</code></td>
+<td>текущее время</td>
+<td>в тестах — фиксированное</td>
+</tr>
+<tr>
+<td><code>IdGen</code></td>
+<td>идентификаторы</td>
+<td>детерминированный в тестах</td>
+</tr>
+</table></div>
+<p>Первые пять — порты хранения. Их сигнатуры описаны в <code>02-хранилище.md</code>.</p>
+<p>Ни один порт не упоминает формат хранения: нет параметров <code>path</code>, <code>table</code>, <code>query</code>.</p>
+<h2>Правила ошибок</h2>
+<ol>
+<li>Код ошибки + человеческое сообщение. Без стектрейсов в ответе.</li>
+<li>Внешний источник недоступен → команда, которая от него зависит, отклоняется с <code>degraded</code>,</li>
+</ol>
+<p>остальные работают.</p>
+<ol>
+<li>Битые входные данные (пустое значение, невалидный объект, отсутствующее поле) → понятное</li>
+</ol>
+<p>сообщение и безопасное поведение, не исключение.</p>
+<ol>
+<li>Доменная ошибка (нарушен инвариант) → команда отклоняется, состояние не меняется,</li>
+</ol>
+<p>в <code>warnings</code> — что именно нарушено.</p>
+<ol>
+<li><b><code>pull_fact</code> при недоступном Garmin</b> → <code>rejected</code> с <code>degraded</code>, <code>pulled[]</code> пуст.</li>
+</ol>
+<p>Планирование при этом не затронуто.</p>
+</section>
+<section id="s2">
+<div class="h2">Хранилище<span class="fn">02-хранилище.md</span></div>
+<p>Уровень: физический. Отвечает на вопрос «где состояние лежит и как пишется».</p>
+<h2>Принцип: физическое хранилище знает только адаптер</h2>
+<p>Никто, кроме адаптера хранилища, не знает, что состояние лежит в файлах, в базе данных или</p>
+<p>где-либо ещё. Домен, сервисы, BFF и клиент работают только через интерфейсы.</p>
+<p>Это значит:</p>
+<ul>
+<li>домен не импортирует <code>sqlite3</code>, <code>json</code>, <code>os.path</code> — ему не нужно;</li>
+<li>сервисы не знают, есть ли база;</li>
+<li>BFF не знает, как хранится состояние — он знает только порты;</li>
+<li>клиент не знает, откуда пришли данные.</li>
+</ul>
+<p>Смена хранилища — замена одного файла в <code>adapters/</code>. Ничего больше не меняется.</p>
+<h3>Правило проверяется, а не декларируется</h3>
+<pre><code>python3 tools/check_storage_leaks.py</code></pre>
+<p>Чекер проходит по коду и по дизайн-документам и падает, если вне <code>adapters/storage/</code></p>
+<p>появилось знание о формате хранения: <code>sqlite3</code>, <code>json.dump</code>, <code>read_text</code>, <code>os.replace</code>,</p>
+<p><code>flock</code>, пути к файлам, <code>.json</code>. Команда обязана быть в CI: зелёный чекер — условие коммита.</p>
+<p>Эталон: <code>v2.architecture/check_storage_leaks.py</code> в репозитории <code>~/coach</code>.</p>
+<h2>Путь развития</h2>
+<p><b>Сейчас — файлы.</b> JSON, один файл на корень агрегата. Данных мало, писатель один,</p>
+<p>нужен diff в git и читаемость руками.</p>
+<p><b>Потом — база данных.</b> SQLite. Переход спланирован заранее: контракты портов не меняются,</p>
+<p>меняется только реализация и добавляется шаг миграции данных.</p>
+<p><b>Критерий перехода</b>, зафиксированный заранее, чтобы не спорить позже:</p>
+<div class="tw"><table><tr>
+<th>Триггер</th>
+<th>Почему он важен</th>
+</tr>
+<tr>
+<td>Второй писатель (клиент пишет напрямую, или два процесса)</td>
+<td>Файловая блокировка перестаёт быть достаточной</td>
+</tr>
+<tr>
+<td>Нужны запросы по произвольным полям (все факты за период, все пропущенные за сезон)</td>
+<td>Файлы требуют читать и фильтровать в коде</td>
+</tr>
+<tr>
+<td>Состояние перестало помещаться в память целиком</td>
+<td>Читать всё для одного экрана — дорого</td>
+</tr>
+<tr>
+<td>Нужна транзакция между несколькими сущностями</td>
+<td>Файлы дают атомарность на файл, а не на набор</td>
+</tr>
+</table></div>
+<p>Пока ни один триггер не сработал — файлы. Когда сработает — переход по процедуре ниже.</p>
+<h2>Схема доступа: интерфейсы</h2>
+<p>Доступ к данным — <b>только</b> через эти интерфейсы. Они объявлены в <code>ports/</code>, реализуются</p>
+<p>в <code>adapters/</code>.</p>
+<pre><code>class SeasonRepo(Protocol):
+    """Состояние сезона: план, фазы, недели, журнал команд."""
+    def load(self) -&gt; SeasonState: ...
+    def save(self, state: SeasonState, expected_version: int) -&gt; int: ...
+    def week(self, season_week: int) -&gt; Week | None: ...
+    def put_week(self, week: Week, expected_version: int) -&gt; int: ...</code></pre>
+<pre><code>class FactRepo(Protocol):
+    """Факт: выполненные сессии."""
+    def list_for_week(self, season_week: int) -&gt; list[ActualSession]: ...
+    def list_in_range(self, start: date, end: date) -&gt; list[ActualSession]: ...
+    def get(self, actual_id: str) -&gt; ActualSession | None: ...
+    def upsert(self, session: ActualSession) -&gt; ActualSession: ...
+    def link(self, actual_id: str, workout_id: str | None) -&gt; None: ...</code></pre>
+<pre><code>class AthleteRepo(Protocol):
+    """Профиль атлета."""
+    def get(self) -&gt; Athlete: ...
+    def update(self, athlete: Athlete) -&gt; None: ...</code></pre>
+<pre><code>class MethodologyRepo(Protocol):
+    """Правила методологии: PlanModel, LoadModel, шаблоны, шкала зон."""
+    def plan_models(self) -&gt; list[PlanModel]: ...
+    def load_model(self) -&gt; LoadModel: ...
+    def workout_templates(self) -&gt; dict: ...</code></pre>
+<pre><code>class CommandLog(Protocol):
+    """Журнал команд: идемпотентность."""
+    def get(self, command_id: str) -&gt; CommandResult | None: ...
+    def append(self, command: Command, result: CommandResult) -&gt; None: ...</code></pre>
+<p><b>Правило:</b> ни один метод интерфейса не упоминает формат хранения. Нет параметров</p>
+<p><code>path</code>, <code>table</code>, <code>collection</code>, <code>query</code>. Всё — на языке домена: <code>season_week</code>, <code>actual_id</code>,</p>
+<p><code>expected_version</code>.</p>
+<h2>Что достаточно для текущих задач</h2>
+<div class="tw"><table><tr>
+<th>Операция</th>
+<th>Интерфейс</th>
+<th>Где используется</th>
+</tr>
+<tr>
+<td>Прочитать сезон целиком</td>
+<td><code>SeasonRepo.load</code></td>
+<td>проекции для клиента</td>
+</tr>
+<tr>
+<td>Прочитать одну неделю</td>
+<td><code>SeasonRepo.week</code></td>
+<td>экран недели</td>
+</tr>
+<tr>
+<td>Сохранить неделю</td>
+<td><code>SeasonRepo.put_week</code></td>
+<td>propose / activate / close / replan</td>
+</tr>
+<tr>
+<td>Сохранить сезон</td>
+<td><code>SeasonRepo.save</code></td>
+<td>новая цель, смена плана</td>
+</tr>
+<tr>
+<td>Факт за неделю</td>
+<td><code>FactRepo.list_for_week</code></td>
+<td>связывание, саммари</td>
+</tr>
+<tr>
+<td>Факт за период</td>
+<td><code>FactRepo.list_in_range</code></td>
+<td>отчёт за сезон, год</td>
+</tr>
+<tr>
+<td>Одна сессия</td>
+<td><code>FactRepo.get</code></td>
+<td>карточка тренировки</td>
+</tr>
+<tr>
+<td>Записать сессию</td>
+<td><code>FactRepo.upsert</code></td>
+<td>вытягивание из Garmin</td>
+</tr>
+<tr>
+<td>Связать с планом</td>
+<td><code>FactRepo.link</code></td>
+<td>link_actual / unlink_actual</td>
+</tr>
+<tr>
+<td>Профиль</td>
+<td><code>AthleteRepo</code></td>
+<td>всё планирование</td>
+</tr>
+<tr>
+<td>Правила</td>
+<td><code>MethodologyRepo</code></td>
+<td>планировщик, нагрузка</td>
+</tr>
+<tr>
+<td>Журнал</td>
+<td><code>CommandLog</code></td>
+<td>идемпотентность</td>
+</tr>
+</table></div>
+<p><b>Интерфейсов достаточно.</b> Не хватает двух вещей, и они добавлены:</p>
+<ol>
+<li><b><code>FactRepo.list_in_range</code></b> — запрос за период. Без него отчёт за сезон требует</li>
+</ol>
+<p>чтения всех недель и фильтрации в коде. В файловом хранилище это работает,</p>
+<p>в базе — это запрос. Добавлен именно поэтому: дешевле предусмотреть сейчас.</p>
+<ol>
+<li><b><code>SeasonRepo.week</code></b> — точечное чтение недели. Без него клиент тянет весь сезон,</li>
+</ol>
+<p>чтобы показать одну неделю.</p>
+<h2>Текущая реализация: файлы</h2>
+<pre><code>data/
+  season.json            Season · Plan · Phase · журнал Command
+  athlete.json           профиль атлета
+  weeks/W&lt;n&gt;.json        Week · requests[] · assignments[] · workouts[] · steps[] · summary
+  actual/W&lt;n&gt;.json       ActualSession[] за неделю
+  methodology/           PlanModel · LoadModel · шаблоны тренировок · шкала зон
+  versions.json          текущая версия схемы + применённые миграции</code></pre>
+<p>Имена — от домена: <code>athlete.json</code>, а не <code>athlete_json_file.json</code>. Неделя разбита по файлам,</p>
+<p>чтобы размер не рос с сезоном и неделю можно было отдавать в клиент поштучно.</p>
+<h3>Версия схемы и миграции</h3>
+<ul>
+<li><code>data/versions.json</code>: <code>{"schema_version": 3, "applied": ["0001_initial", "0002_week_files"]}</code>.</li>
+<li>Миграции — код в <code>migrations/</code>, по одной на версию, идемпотентные.</li>
+<li>При открытии текущая версия сравнивается с целевой, недостающие миграции применяются</li>
+</ul>
+<p>по порядку. Миграция падает — данные не трогаются, процесс не стартует.</p>
+<ul>
+<li>Миграции только вверх. Откат — восстановление из бэкапа.</li>
+</ul>
+<h3>Атомарная запись</h3>
+<pre><code>запись: 1. во временный файл в том же каталоге
+        2. fsync файла
+        3. os.replace(tmp, target)   # атомарно на одном ФС
+        4. fsync каталога</code></pre>
+<p>Читатель никогда не видит половину файла. При падении на шаге 3 старое состояние цело.</p>
+<h3>Блокировка записи</h3>
+<p>Один писатель — BFF. <code>data/.lock</code> с <code>flock</code> на время записи. Если лок занят — команда</p>
+<p>отклоняется с <code>busy</code>, а не ждёт и не пишет поверх.</p>
+<h2>Процедура перехода на базу данных</h2>
+<p>Переход — не «поменять файлы на таблицы». Это отдельная работа с отдельным тестом.</p>
+<h3>Шаг 1 · Зафиксировать схему в базе</h3>
+<p>Таблицы отражают домен, а не JSON-документы. Ключевой момент — **не хранить целые</p>
+<p>JSON-объекты в одной колонке**: тогда база превратится в файл внутри строки, и запросы</p>
+<p>по полям останутся невозможными.</p>
+<pre><code>season            id, horizon_start, horizon_end, season_week_count, version
+plan              id, season_id, status, goal_id, period_start, period_end, ...
+phase             id, plan_id, objective, focus, load_range, ...
+week              id, plan_id, season_week, start, end, status, focus, load_target, ...
+request           id, week_id, sport, kind, focus, duration_min, ...
+assignment        id, week_id, request_id, slot_id, start, duration_min, ...
+workout           id, week_id, request_id, sport, kind, focus, status, actual_id, ...
+step              id, workout_id, role, sport, target_type, target_value, ...
+actual_session    id, season_id, date, sport, duration_min, distance_m, source, external_id, ...
+week_summary      week_id, closed_at, totals, verdict, deviations, intensity, ...
+command_log       id, type, issued_at, issued_by, result, ...
+athlete           singleton row
+methodology       model_id, kind, payload, version</code></pre>
+<p><code>actual_session.external_id</code> — уникальный индекс (инвариант I42).</p>
+<p><code>week_summary</code> — содержит сводку; если понадобятся запросы по её полям — выносится</p>
+<p>в отдельные колонки или таблицы.</p>
+<h3>Шаг 2 · Реализовать порты поверх базы</h3>
+<p>Новый адаптер — реализация тех же пяти интерфейсов. Тела методов — SQL, сигнатуры те же.</p>
+<p>Ничего в <code>domain/</code>, <code>services/</code> и <code>api/</code> не меняется.</p>
+<h3>Шаг 3 · Написать контрактные тесты</h3>
+<p>Один и тот же набор тестов прогоняется против обоих хранилищ:</p>
+<pre><code>test_contract_season_repo.py   — один набор тестов, два адаптера
+test_contract_fact_repo.py
+test_contract_athlete_repo.py</code></pre>
+<p>Тест проверяет поведение, а не формат: сохранил → прочитал то же; сохранил с устаревшей</p>
+<p>версией → отказ; несуществующий id → <code>None</code>, не исключение; <code>external_id</code> дублируется → отказ.</p>
+<p>Пока эти тесты не зелёные для обоих адаптеров — хранилище не переключается.</p>
+<h3>Шаг 4 · Перенести данные</h3>
+<pre><code>python3 -m tools.migrate_to_db --from files --to sqlite</code></pre>
+<p>Скрипт читает через порты (не напрямую по файлам), пишет через порты, сверяет количество</p>
+<p>и контрольные суммы по полям, печатает отчёт. Работает и в обратную сторону.</p>
+<h3>Шаг 5 · Переключить и оставить оба</h3>
+<p>Флаг в конфиге: <code>storage.backend = files | sqlite</code>. Оба адаптера живут в коде, пока</p>
+<p>SQLite-вариант не проверен на реальном сезоне. Флаг убирается, когда SQLite-адаптер</p>
+<p>занимает место основного, а файловый — удаляется.</p>
+<h2>Один источник правды</h2>
+<ul>
+<li>Состояние — в хранилище, выбранном конфигом.</li>
+<li>Производное (HTML-превью, снапшоты для клиента, отчёты) — пересчитывается, не хранится</li>
+</ul>
+<p>вторым экземпляром. Кэш клиента — производная, помечена версией.</p>
+<ul>
+<li>Снапшот клиента несёт <code>version</code>; сервер отвечает <code>304</code>, если состояние не менялось.</li>
+</ul>
+<h2>Импорт из существующего пайплайна</h2>
+<p><code>~/coach/state/season_plan.json</code>, <code>athlete.json</code>, <code>constraints.json</code>, <code>plan-w*.json</code> — источник</p>
+<p>первичного состояния. Импорт — отдельная команда, одноразовая:</p>
+<pre><code>python3 -m tools.import_coach_state --src ~/coach/state --dst data</code></pre>
+<p>Импорт читает, маппит на новую схему, пишет через обычный порт, печатает отчёт:</p>
+<p>что перенесено, что не распознано, где потребовалось решение. Дальше хранилище — правда,</p>
+<p><code>~/coach/state</code> — историческая копия, в расчётах нового приложения не участвует.</p>
+<p><b>Что не переносится автоматически:</b> связь план↔факт (в пайплайне её нет — <code>actual_id</code></p>
+<p>в <code>plan-w*.json</code> отсутствует), <code>summary</code> (считается заново при закрытии недели),</p>
+<p>недельные макро-цели, не выраженные в домене.</p>
+<h2>Бэкап</h2>
+<ul>
+<li>Бэкап — снимок хранилища, а не «папка <code>data/</code>»: реализация бэкапа принадлежит адаптеру.</li>
+</ul>
+<p>Для файлов — один tar; для базы — <code>sqlite3 .backup</code> или dump.</p>
+<ul>
+<li>Ежедневно, 14 копий.</li>
+<li>Секреты в хранилище не лежат.</li>
+<li>Восстановление — из последнего целого снимка.</li>
+</ul>
+</section>
+<section id="s3">
+<div class="h2">BFF<span class="fn">03-BFF.md</span></div>
+<p>Уровень: физический. Отвечает на вопрос «как приложение разговаривает с сервером».</p>
+<p>BFF — тонкий слой. Доменной логики нет: маршруты, форматы, авторизация. Решения принимает</p>
+<p>приложение (domain + services), BFF только переводит.</p>
+<h2>Технология</h2>
+<p>Python + FastAPI. Причина: вся логика планировщика уже на Python, домен переносится без</p>
+<p>переписывания. BFF — тонкий слой поверх того же приложения, отдельный процесс только если</p>
+<p>понадобится.</p>
+<h2>Маршруты</h2>
+<pre><code>GET  /health                          liveness + версия
+GET  /api/v1/snapshot                 весь сезон: план + состояние + version
+GET  /api/v1/week/{n}                одна неделя
+GET  /api/v1/actual/{n}              факт недели
+GET  /api/v1/athlete                 профиль атлета
+GET  /api/v1/season                  скелет сезона: фазы, недели, без деталей
+
+POST /api/v1/commands                одна команда
+POST /api/v1/commands/batch          несколько команд подряд (idempotency по id)
+POST /api/v1/narrate                 спросить нарратора (текст, не числа)
+
+GET  /api/v1/events                  SSE: изменения версии</code></pre>
+<p>Отдельного маршрута под загрузку факта нет: <code>pull_fact</code> — это команда, она идёт</p>
+<p>POST <code>/api/v1/commands</code> как любая другая. Отдельный маршрут означал бы, что загрузка</p>
+<p>факта — не действие пользователя, а фоновый процесс. Но по правилам модели загрузка</p>
+<p>идёт по команде, и результат виден в <code>diff</code>.</p>
+<h2>Формат ответа</h2>
+<p>Успех:</p>
+<pre><code>{ "version": 42, "data": { ... } }</code></pre>
+<p>Ошибка:</p>
+<pre><code>{
+  "version": 42,
+  "error": { "code": "version_conflict", "message": "Состояние изменилось", "field": null },
+  "data": { ...текущий снапшот... }
+}</code></pre>
+<p>Коды: <code>version_conflict</code> · <code>busy</code> · <code>not_found</code> · <code>invalid_command</code> · <code>invariant_violated</code> ·</p>
+<p><code>degraded</code> · <code>unauthorized</code>.</p>
+<p>Состояние ошибки — всегда с текущей версией, чтобы клиент мог показать «покажи заново»</p>
+<p>без второго запроса.</p>
+<h2>Авторизация</h2>
+<p><b>Пока — заглушка.</b> Реальная аутентификация отложена: на старте достаточно, чтобы снаружи</p>
+<p>нельзя было зайти без токена, а как именно он проверяется — решим позже, когда появится</p>
+<p>второй пользователь или другие клиенты.</p>
+<p><b>Заглушка:</b> один токен в конфигурации, сравнение constant-time, без ролей и без refresh.</p>
+<p>Реализация настоящей аутентификации — отдельная задача, в базу не входит.</p>
+<p>Один пользователь, но приложение доступно по локальной сети — значит, доступ закрыть</p>
+<p>надо. Токен обязателен даже внутри дома: по домашнему Wi-Fi может ходить кто угодно.</p>
+<p><b>HTTPS в базе не обязателен</b> — трафик не выходит из домашней сети. Когда появится</p>
+<p>внешний доступ, HTTPS станет обязательным.</p>
+<ul>
+<li><b>Токен доступа в заголовке</b> <code>Authorization: Bearer &lt;token&gt;</code>.</li>
+<li>Токен — 32 байта случайных, хранится в <code>~/.config/coach-app/token</code> на сервере,</li>
+</ul>
+<p>в клиенте — в хранилище PWA. Один и тот же для всех устройств.</p>
+<ul>
+<li>Сравнение — constant-time, чтобы не утекало время.</li>
+<li><b>HTTPS обязателен</b>, когда появится внешний доступ. Без TLS токен летает открытым</li>
+</ul>
+<p>текстом. В базе (локальная сеть) HTTPS не нужен.</p>
+<p>Один пользователь — один токен, без ролей, без refresh-механизма: ротация токена = команда</p>
+<p>на сервере, устройства переавторизуются.</p>
+<h2>Кэш и версии</h2>
+<ul>
+<li><code>GET /snapshot</code> — <code>ETag</code> = <code>version</code>. Клиент шлёт <code>If-None-Match</code> → <code>304</code> без тела.</li>
+<li>На телефоне приложение должно открываться мгновенно и читать недель без сети —</li>
+</ul>
+<p>поэтому клиент кэширует снапшот (см. <code>05-клиент.md</code>).</p>
+<ul>
+<li>Серверные кэши проекций: проекция считается из состояния и помечается версией;</li>
+</ul>
+<p>при изменении состояния версия растёт, старые проекции вытесняются.</p>
+<h2>SSE вместо polling</h2>
+<p><code>GET /events</code> — Server-Sent Events, отдаёт <code>{version, changed[]}</code> при изменении состояния.</p>
+<p>Клиент перезапрашивает нужную проекцию. Проще и дешевле WebSocket для одностороннего</p>
+<p>потока «сервер → клиент». Команды идут обычными POST.</p>
+<p>SSE через прокси: отключить буферизацию (<code>X-Accel-Buffering: no</code>) и держать таймаут</p>
+<p>прокси длиннее, чем heartbeat (heartbeat каждые 25 секунд).</p>
+<h2>Деградация</h2>
+<div class="tw"><table><tr>
+<th>Что упало</th>
+<th>Что происходит</th>
+</tr>
+<tr>
+<td>Garmin недоступен</td>
+<td><code>POST /actual/pull</code> → <code>degraded</code>, план и чтение работают</td>
+</tr>
+<tr>
+<td>Нарратор недоступен</td>
+<td><code>/narrate</code> возвращает заглушку, остальное работает</td>
+</tr>
+<tr>
+<td>Состояние нечитаемо</td>
+<td>сервер не стартует, <code>/health</code> → <code>unhealthy</code>, алерт</td>
+</tr>
+</table></div>
+<p>Внешний источник не роняет приложение — это правило деградации, а не пожелание.</p>
+<h2>Сетевой адрес</h2>
+<p>BFF слушает <code>0.0.0.0:8080</code> — доступен всем в локальной сети. Клиент ходит на</p>
+<p><code>http://&lt;ip-машины&gt;:8080</code>, адрес настраивается вручную и запоминается.</p>
+<p>Внешний доступ отложен (см. <code>04-хостинг.md</code>) — ни туннелей, ни проброса портов.</p>
+<h2>Нагрузка</h2>
+<p>Один пользователь, десятки запросов в день. Ресурсов хватает с запасом; оптимизации</p>
+<p>(кэш, батчи, виртуализация) не нужны, пока не появятся реальные проблемы.</p>
+<h2>Структура процесса</h2>
+<pre><code>coach-app/
+  app/
+    domain/       сущности, инварианты, производные — ноль I/O
+    services/     сценарии: planner, goal_feasibility, week_builder, assessment
+    ports/        контракты внешнего мира
+    adapters/     реализации портов: storage, garmin, narrator, methodology
+    api/          BFF: роуты, схемы ответов, auth
+    main.py       сборка зависимостей, запуск
+  migrations/
+  tests/
+  tools/</code></pre>
+<p>Зависимости строго вниз: <code>api → services → ports → domain</code>. <code>adapters</code> реализуют <code>ports</code></p>
+<p>и не импортируют <code>api</code> или <code>services</code>. <code>domain</code> не знает про формат хранения, HTTP и время.</p>
+<p>Хранилище — за портами: BFF не знает, что это файлы или база (см. <code>02-хранилище.md</code>).</p>
+</section>
+<section id="s4">
+<div class="h2">Хостинг<span class="fn">04-хостинг.md</span></div>
+<p>Уровень: физический. Отвечает на вопрос «как приложение доступно с телефона».</p>
+<p><b>В базе — только локальная сеть.</b> Внешний доступ отложен (решение №1 в</p>
+<p><code>08-развилки.md</code>): ни домена, ни туннеля, ни проброса портов. Телефон подключается</p>
+<p>к BFF по адресу машины в домашней сети.</p>
+<h2>Что это значит на практике</h2>
+<pre><code>телефон (Wi-Fi дома) → http://192.168.178.43:8080 → BFF на hermeshome</code></pre>
+<ul>
+<li>BFF слушает <code>0.0.0.0:8080</code> — доступен всем в локальной сети, не только с самой машины.</li>
+<li>Адрес машины в сети меняется при перезагрузке роутера (DHCP). Решение: имя хоста</li>
+</ul>
+<p><code>hermeshome.local</code> + fallback на текущий IP; в клиенте — поле адреса, запоминает</p>
+<p>последний рабочий.</p>
+<ul>
+<li>Вне домашней сети приложение недоступно. Это осознанно: база делается локальной,</li>
+</ul>
+<p>внешний доступ — отдельная задача.</p>
+<h2>HTTPS</h2>
+<p><b>В базе HTTPS не обязателен</b> — трафик не выходит из домашней сети.</p>
+<p>Но токен проверяется в любом случае: иначе любой, кто подключился к домашнему Wi-Fi,</p>
+<p>получит полный доступ к плану и факту. Токен — в заголовке <code>Authorization</code>,</p>
+<p>сравнение constant-time.</p>
+<p>Когда появится внешний доступ, HTTPS станет обязательным: по локальной сети токен</p>
+<p>летает открытым текстом, и это приемлемо только внутри дома.</p>
+<h2>Условия на этой машине</h2>
+<p>Проверено на хосте <code>hermeshome</code>:</p>
+<ul>
+<li>IPv4 <code>91.64.222.245</code> — публичный адрес провайдера, входящие соединения за NAT.</li>
+<li>IPv6 <code>2a02:8109:b501:6200:...</code> — публичный, без NAT.</li>
+<li><code>tun0</code> <code>10.18.4.169</code> — WireGuard-туннель провайдера для обхода блокировок; наш,</li>
+</ul>
+<p>не наш интерфейс: <code>wg show</code> пуст.</p>
+<ul>
+<li><code>wg</code> установлен, <code>tailscale</code> и <code>cloudflared</code> — нет.</li>
+<li><code>sudo</code> без пароля нет; есть <code>systemctl --user</code>.</li>
+<li>Пользователь в группе <code>docker</code>.</li>
+<li>Пользовательские сервисы systemd работают: <code>hermes-gateway.service</code> и его варианты активны.</li>
+</ul>
+<p>Для локальной сети достаточно двух вещей: BFF слушает локальный адрес и пользовательский</p>
+<p>сервис с автозапуском. Ни sudo, ни туннели, ни права на роутере не нужны.</p>
+<h2>Процессы</h2>
+<pre><code>systemd --user:
+  coach-app.service    BFF (uvicorn), restart=on-failure</code></pre>
+<p>Пользовательские сервисы systemd работают на этой машине — автозапуск и перезапуск при</p>
+<p>падении получаются без sudo и без системного root.</p>
+<p>Файл сервиса:</p>
+<pre><code>~/.config/systemd/user/coach-app.service
+
+[Unit]
+Description=Coach App BFF
+After=network-online.target
+
+[Service]
+ExecStart=&lt;путь&gt;/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target</code></pre>
+<h2>Конфигурация</h2>
+<p><code>~/.config/coach-app/</code>:</p>
+<pre><code>config.toml     порт, хост, путь к данным, режим деградации
+token           токен доступа (chmod 600)</code></pre>
+<p>Секреты не в репозитории и не в хранилище.</p>
+<h2>Что доступно наружу</h2>
+<p>За пределы домашней сети — ничего. Наружу не выходит ни домен, ни Garmin, ни нарратор,</p>
+<p>ни хранилище. Приложение отдаёт только то, что пользователь запрашивает у себя:</p>
+<p>план и факт.</p>
+<h2>Что отложено и вернётся позже</h2>
+<div class="tw"><table><tr>
+<th>Отложено</th>
+<th>Когда вернётся</th>
+</tr>
+<tr>
+<td>Внешний доступ (домен, HTTPS, туннель)</td>
+<td>Когда понадобится доступ извне дома</td>
+</tr>
+<tr>
+<td>Настоящая аутентификация</td>
+<td>Когда появится второй пользователь или другие клиенты</td>
+</tr>
+<tr>
+<td>Проброс портов на роутере</td>
+<td>Вместе с внешним доступом</td>
+</tr>
+</table></div>
+<p>Варианты внешнего доступа разобраны заранее — см. предыдущую редакцию этого файла</p>
+<p>в истории git (<code>git log -- v2.architecture/design/04-хостинг.md</code>): A · Cloudflare Tunnel</p>
+<p>рекомендован как основной, B · Tailscale как запасной, C · WireGuard вручную и</p>
+<p>D · IPv6 напрямую — не включать.</p>
+<h2>Риски</h2>
+<div class="tw"><table><tr>
+<th>Риск</th>
+<th>Что делаем</th>
+</tr>
+<tr>
+<td>Любой в домашнем Wi-Fi угадает адрес</td>
+<td>Токен обязателен, даже в локальной сети</td>
+</tr>
+<tr>
+<td>Адрес машины сменился</td>
+<td><code>hermeshome.local</code> + ручной ввод адреса в клиенте, запоминает рабочий</td>
+</tr>
+<tr>
+<td>Приложение упало</td>
+<td><code>Restart=on-failure</code> + <code>RestartSec=5</code></td>
+</tr>
+<tr>
+<td>Данные на диске дома</td>
+<td>Бэкап хранилища ежедневно, 14 копий (см. <code>02-хранилище.md</code>)</td>
+</tr>
+</table></div>
+</section>
+<section id="s5">
+<div class="h2">Клиент<span class="fn">05-клиент.md</span></div>
+<p>Уровень: физический. Отвечает на вопрос «что видит пользователь и как работает без сети».</p>
+<h2>Форма</h2>
+<p>PWA: одна страница, статические файлы, service worker, манифест. Без сборщика в MVP —</p>
+<p>чтобы приложение собиралось и дебажилось без node-тулчейна.</p>
+<pre><code>client/
+  index.html
+  app.js            состояние экрана, роутинг, работа с outbox
+  api.js            fetch-обёртка: токен, ETag, ретраи
+  store.js          IndexedDB: снапшот, outbox, метаданные
+  sw.js             service worker: кэш оболочки, сетевая стратегия
+  manifest.json
+  icons/</code></pre>
+<h2>Экраны</h2>
+<ol>
+<li><b>Неделя</b> — план недели: дни, тренировки, шаги, факт рядом с планом.</li>
+<li><b>Детали тренировки</b> — шаги, фокус, зоны, что ожидалось и что сделано.</li>
+<li><b>Сезон</b> — 49 недель скелетом: фазы, контрольные точки, гонки.</li>
+<li><b>План против факта</b> — неделя: плановые и фактические цифры рядом, вердикты по сессиям.</li>
+<li><b>Связывание</b> — выбор факта для тренировки, руками. Список фактов недели, касание →</li>
+</ol>
+<p>связано.</p>
+<p>Перед списком — кнопка «Загрузить из Garmin»: без загруженного факта связывать нечего.</p>
+<p>Кнопка вызывает команду <code>pull_fact</code>; в офлайне она уходит в очередь и выполняется</p>
+<p>при появлении сети.</p>
+<ol>
+<li><b>Закрытие недели</b> — три шага ритуала: вытянуть факт → сопоставить → посчитать.</li>
+<li><b>Атлет</b> — профиль: VDOT, зоны, вес, травмы.</li>
+<li><b>Цель и достижимость</b> — вердикт по новой цели и варианты.</li>
+<li><b>Контрольная точка</b> — значения проверок, решение: идём по плану или корректируем.</li>
+<li><b>Среда</b> — базовые окна, оборудование, перекрытия фазы и недели.</li>
+</ol>
+<h2>Офлайн</h2>
+<p><b>Что доступно без сети:</b></p>
+<ul>
+<li>текущая неделя полностью;</li>
+<li>соседние недели — сокращённо (дни и тренировки без шагов);</li>
+<li>сезон — скелетом (фазы, недели, гонки);</li>
+<li>профиль атлета.</li>
+</ul>
+<p><b>Что требует сети:</b> новые недели, вытягивание факта, связывание, закрытие недели.</p>
+<p>Загрузка факта из Garmin в офлайне невозможна — команда ждёт в очереди.</p>
+<p><b>Как показывается устаревшее:</b> в шапке — «данные на &lt;время&gt;», кнопка «обновить».</p>
+<p>Кэш хранит <code>version</code> состояния; сервер отвечает <code>304</code>, если не менялось.</p>
+<p><b>Размер офлайн-пакета:</b> ориентир — до 1 МБ на текущую + соседние недели + сезон-скелет.</p>
+<h2>Команды в офлайне</h2>
+<p>Клиент не меняет состояние напрямую — только через команды. Команда, сделанная без сети,</p>
+<p>уходит в <b>outbox</b> в IndexedDB и уходит на сервер при появлении сети.</p>
+<pre><code>outbox entry: {id, type, target, args, reason, created_at, attempts, last_error}</code></pre>
+<ul>
+<li><code>id</code> генерируется на клиенте — по нему команда идемпотентна при ретраях.</li>
+<li>Порядок сохраняется: команды одного типа зависимы, поэтому outbox — очередь, а не набор.</li>
+<li>Пока команда в outbox, интерфейс показывает «в очереди», а не «сделано».</li>
+<li>Конфликт версии → клиент показывает «состояние изменилось, посмотреть заново?» и</li>
+</ul>
+<p><b>не</b> применяет команду молча.</p>
+<h2>Адрес сервера</h2>
+<p>Приложение ходит на BFF по локальной сети: <code>http://&lt;ip-машины&gt;:8080</code>. Адрес</p>
+<p>настраивается при первом запуске и запоминается. Внешний доступ отложен — пока</p>
+<p>телефон должен быть в домашнем Wi-Fi.</p>
+<h2>Авторизация</h2>
+<p>Токен хранится в браузере, отправляется в заголовке <code>Authorization</code>. При <code>401</code> —</p>
+<p>экран ввода токена. Один пользователь, один токен на все устройства.</p>
+<p>Токен обязателен даже в локальной сети: по домашнему Wi-Fi может ходить кто угодно.</p>
+<h2>События</h2>
+<p>Клиент подписан на SSE <code>/api/v1/events</code>. При сбое — backoff: 1с, 2с, 5с, 15с, 30с.</p>
+<p>При обрыве — следующая синхронизация по обычному <code>GET /snapshot</code>.</p>
+<h2>Кэш в service worker</h2>
+<ul>
+<li>Оболочка (HTML, JS, CSS, иконки) — cache-first, обновление в фоне.</li>
+<li>API — network-first; при отсутствии сети — из кэша с отметкой «устарело».</li>
+<li>Никогда не кэшируются: ответы команд и ошибки.</li>
+</ul>
+<h2>Работа без сервера вообще</h2>
+<p>PWA ставится на экран телефона и открывается без сети — показывая кэш. Полноценная работа</p>
+<p>невозможна (нет новых данных и нет применения команд), но приложение не выглядит сломанным.</p>
+</section>
+<section id="s6">
+<div class="h2">Адаптеры<span class="fn">06-адаптеры.md</span></div>
+<p>Уровень: физический. Отвечает на вопрос «как подсистемы достают данные из внешнего мира».</p>
+<p>Адаптер реализует порт. Логика знает только контракт порта и ничего не знает о том,</p>
+<p>откуда пришли данные.</p>
+<h2>Garmin</h2>
+<p><b>Источник факта — только Garmin</b> (подтверждённый инвариант I14). Второй источник активностей</p>
+<p>в модели не подключён.</p>
+<p>Что берём: <code>activity_id</code> · <code>startTimeLocal</code> · <code>distance</code> · <code>duration</code> · <code>averageHR</code> · <code>maxHR</code> ·</p>
+<p><code>aerobicTrainingEffect</code> · <code>anaerobicTrainingEffect</code> · <code>vO2MaxValue</code>.</p>
+<p><b>Intensity minutes — по тренировке, не по дню.</b> Garmin отдаёт:</p>
+<ul>
+<li><code>get_intensity_minutes_data(cdate)</code> — за день;</li>
+<li><code>get_weekly_intensity_minutes(start, end)</code> — агрегаты за период.</li>
+</ul>
+<p>Недельные агрегаты Garmin считают пн→вс, неделя проекта — вс→сб. **Недельные агрегаты</p>
+<p>не используем вообще**, считаем сами по тренировкам (I28).</p>
+<p><b>Зоны Garmin ≠ зоны атлета.</b> Garmin считает intensity minutes по своим зонам (~64 % и ~76 %</p>
+<p>от HRmax). Зоны атлета важнее — считаем интенсивность сами по зонам атлета, шкалу источника</p>
+<p>не храним. Если источник не делит интенсивность — всё идёт в <code>moderate</code> (I29).</p>
+<p><b>Отсутствие данных — не ошибка.</b> Нет тренировок — нет intensity minutes. Не заводим флаг</p>
+<p>«неполная» (I27).</p>
+<p><b>Дубликаты:</b> <code>external_id</code> = <code>activity_id</code> Garmin, уникален (I42). Повторная загрузка</p>
+<p>того же id — обновление, не новая запись.</p>
+<p><b>Деградация:</b> Garmin недоступен → команда <code>pull_fact</code> отклоняется с <code>degraded</code>,</p>
+<p>остальное приложение работает.</p>
+<p><b>FIT-файлы.</b> Garmin Connect отдаёт сводку по активности, но детальные метрики</p>
+<p>(покадровые HR, каденс, дрейф, тренировочный эффект) живут в FIT-файле. <code>pull_fact</code> тянет</p>
+<p>сводку; <code>import_fit</code> загружает сам файл и разбирает метрики из него.</p>
+<p><b>Два пути получения активности:</b></p>
+<ul>
+<li><code>pull_fact</code> — команда: тянет из Garmin, создаёт <code>ActualSession</code> без плановой пары.</li>
+</ul>
+<p>Дальше <code>link_actual</code> связывает её с тренировкой.</p>
+<ul>
+<li>ручная запись — команда <code>edit_actual</code>: для силовых и ОФП, которых в Garmin нет.</li>
+</ul>
+<p>Оба пути ведут в один и тот же факт. Разница только в <code>source</code>.</p>
+<h2>Stryd</h2>
+<p><b>Данные из Stryd не грузим.</b> Сейчас берём то, что Stryd складывает в Garmin.</p>
+<p>Отдельного адаптера Stryd нет и в базе не планируется — пока.</p>
+<p>Нагрудный ремень при этом используется <b>точно на важных тренировках</b> — силовые интервалы,</p>
+<p>пороговые сессии, тесты. Данные с ремня идут в Garmin, а оттуда в приложение: отдельный</p>
+<p>канал не нужен. Отсюда следствие: в профиле атлета <b>нет</b> отдельного источника «Stryd» —</p>
+<p>источник один, Garmin, а VDOT и зоны считаются по тому, что Garmin вернул.</p>
+<p>Если позже понадобится тянуть данные Stryd напрямую (например, история GT по неделям,</p>
+<p>которую Garmin не хранит), это будет отдельный адаптер — но решение не принято, и в базу</p>
+<p>это не закладывается.</p>
+<p><b>Что делать с VDOT:</b> VDOT считается из гонки (результат на дистанции) и из тренировочных</p>
+<p>темпов. Оба пути дают одно число — <code>Athlete.vdot</code>. Источник помечается, чтобы UI мог</p>
+<p>показать диапазон, а не ложную точность.</p>
+<h2>Календарь</h2>
+<p><b>Взаимодействия с Google Calendar нет.</b> Ни ICS, ни API календаря не подключаем.</p>
+<p>Команда <code>sync_calendar</code> из контрактов удалена.</p>
+<p>Доступность тренировок — это <b>дефолтные слоты и инвентарь</b>, которые лежат в логической</p>
+<p>подсистеме «Среда» и версионируются как обычное состояние. Пример: бассейн доступен в пн/пт,</p>
+<p>стадион — в пн, дорожка — вечером. Это данные, а не внешний источник: их можно менять</p>
+<p>командами <code>set_slots</code> и <code>override_slots</code>, они попадают в версию состояния и в офлайн-кэш.</p>
+<p>Что это значит на практике: если окно тренировки изменилось (бассейн закрыт на ремонт) —</p>
+<p>это перекрытие слота командой, а не синхронизация с календарём.</p>
+<h2>Дэниэлс</h2>
+<p>Справочник соответствий VDOT ↔ темпы зон ↔ время на дистанции. Не внешний источник в смысле</p>
+<p>сети — это версионируемые правила, которые приходят через <code>MethodologyRepo</code>.</p>
+<p>Используется для: перевода цели в целевой VDOT (<code>10К 40:00 → VDOT 52</code>), темпов по зонам,</p>
+<p>расчёта нагрузки.</p>
+<p><b>Что забираем отдельно, позже:</b> из Дэниэлса нужно будет достать **базовый план и типы</p>
+<p>тренировок** — то есть рецепты занятий, из которых планировщик собирает неделю. В текущем</p>
+<p>пайплайне это <code>reference/daniels/daniels_tables.json</code> (56 строк темпов, 44 строки времён)</p>
+<p>и <code>state/workout_templates.json</code> (10 типов тренировок: vo2max, threshold_speed,</p>
+<p>threshold_power, tempo, mixed, pyramid, …).</p>
+<p>Это отдельная работа: разобрать таблицы и привести к доменным правилам. В базу входит</p>
+<p>как отдельный этап — пока типы тренировок живут в пайплайне и берутся оттуда.</p>
+<h2>Нарратор (LLM)</h2>
+<p><b>Не считает и не применяет.</b> Формулирует: объяснение плана, варианты решения, текст</p>
+<p>для пользователя.</p>
+<p>Контракт: один вызов через порт, ответ валидируется по схеме, промпты — в коде или данных.</p>
+<p>Нет ключа → детерминированная заглушка, приложение работает.</p>
+<h2>Правило роста формы</h2>
+<p>Отдельный адаптер, но по сути — часть правил методологии (<code>MethodologyRepo</code>).</p>
+<p>Правило отвечает на вопрос: сколько VDOT атлет может набрать к дате цели при текущем</p>
+<p>объёме и возрасте.</p>
+<p><b>На старте — заглушка.</b> Пока правило не задано, вердикт по достижимости честно отвечает</p>
+<p>«не могу оценить» и предлагает следующий шаг. Заглушка ставится явно, с пометкой, что</p>
+<p>правило не написано: выдуманное число опаснее отсутствующего.</p>
+<h2>Спорт и общие правила для всех адаптеров</h2>
+<ol>
+<li>Каждый внешний вызов — с таймаутом и политикой retry.</li>
+<li>Ошибка внешнего источника никогда не роняет приложение: деградация вместо отказа.</li>
+<li>Любое число из источника хранится с <code>source</code> и <code>external_id</code>.</li>
+<li>Секреты — в конфигурации приложения, не в репозитории и не в хранилище.</li>
+<li>Адаптер не импортирует <code>api</code> и <code>services</code> — только <code>domain</code> и <code>ports</code>.</li>
+</ol>
+</section>
+<section id="s7">
+<div class="h2">Реализация<span class="fn">07-реализация.md</span></div>
+<p>План работ. Сначала база, чтобы приложение открылось и показало неделю; потом остальное.</p>
+<h2>Правила</h2>
+<p>Стандарт <code>development-standards</code>: слои <code>domain → ports → app → adapters</code>, зависимости строго</p>
+<p>вниз, тест на каждый доменный инвариант, доступ к данным только через порты,</p>
+<p>деградация вместо отказа.</p>
+<p>Конституция проекта — <code>.hermes.md</code> в корне нового репозитория. Каждое правило с проверяющей</p>
+<p>командой.</p>
+<h2>Этап 0 · Репозиторий и каркас</h2>
+<ul>
+<li>Новый репозиторий <code>coach-app</code> (не в <code>~/coach</code> — пайплайн не трогаем).</li>
+<li><code>.hermes.md</code> — конституция.</li>
+<li><code>pyproject.toml</code>, <code>pytest</code>, <code>ruff</code>, <code>mypy</code>.</li>
+<li>Пустая структура <code>app/{domain,ports,services,adapters,api}</code> + <code>tests/</code>.</li>
+<li><code>tools/check_storage_leaks.py</code> — перенос чекера из <code>~/coach/v2.architecture/</code>.</li>
+<li>CI: тесты зелёные <b>и</b> чекер утечек зелёный — обязательное условие коммита.</li>
+</ul>
+<p><b>Готово, когда:</b> <code>pytest</code> проходит на пустом домене, структура соответствует <code>.hermes.md</code>.</p>
+<h2>Этап 1 · Домен</h2>
+<p>Перенос 18 сущностей и 43 инварианта из <code>DOMAIN-SPEC.html</code> в код.</p>
+<ul>
+<li><code>app/domain/</code> — по модулю на агрегат: <code>season.py</code>, <code>week.py</code>, <code>workout.py</code>, <code>actual.py</code>,</li>
+</ul>
+<p><code>summary.py</code>, <code>slots.py</code>, <code>command.py</code>.</p>
+<ul>
+<li>Каждый инвариант — тест. Имена тестов = номера инвариантов (<code>test_i09_link_is_bidirectional</code>),</li>
+</ul>
+<p>чтобы связь со спецификацией не терялась.</p>
+<ul>
+<li>Производные значения — функции, не поля.</li>
+<li><code>tests/unit/</code> — домен без I/O.</li>
+</ul>
+<p><b>Готово, когда:</b> 43 теста инвариантов зелёные, <code>mypy</code> чистый.</p>
+<h2>Этап 2 · Хранилище</h2>
+<ul>
+<li><code>app/ports/storage.py</code> — пять интерфейсов: <code>SeasonRepo</code>, <code>FactRepo</code>, <code>AthleteRepo</code>,</li>
+</ul>
+<p><code>MethodologyRepo</code>, <code>CommandLog</code>.</p>
+<ul>
+<li><code>app/adapters/storage/files.py</code> — реализация поверх файлов.</li>
+<li>Версия схемы + <code>migrations/</code>.</li>
+<li><code>tools/import_coach_state.py</code> — импорт из <code>~/coach/state</code>, отчёт о расхождениях.</li>
+<li><code>test_contract_*_repo.py</code> — один набор тестов на все порты хранения.</li>
+</ul>
+<p><b>Готово, когда:</b> импорт <code>~/coach/state</code> даёт рабочее состояние, контрактные тесты</p>
+<p>зелёные, <code>tools/check_storage_leaks.py</code> не находит утечек.</p>
+<h2>Этап 2б · Переход на базу данных</h2>
+<p>Спланирован заранее, выполняется по триггерам из <code>02-хранилище.md</code>.</p>
+<ul>
+<li><code>app/adapters/storage/sqlite.py</code> — вторая реализация тех же портов.</li>
+<li>Схема в SQL — по домену, без JSON-в-колонке.</li>
+<li><code>tools/migrate_to_db.py</code> — перенос данных через порты, со сверкой.</li>
+<li>Переключение — конфигом, оба адаптера живут одновременно.</li>
+</ul>
+<p><b>Готово, когда:</b> одни и те же контрактные тесты зелёные для обоих адаптеров,</p>
+<p>перенос сверен, а SQLite-адаптер проверен на реальном сезоне.</p>
+<h2>Этап 3 · Сервисы</h2>
+<ul>
+<li><code>app/services/planner.py</code> — вход 2: макро + неделя → тренировки.</li>
+<li><code>app/services/goal_feasibility.py</code> — шаг 1: вердикт по достижимости + варианты.</li>
+</ul>
+<p>Правило роста формы берётся из методологии; пока правило — заглушка, вердикт честно</p>
+<p>отвечает «не могу оценить» и не выдумывает число.</p>
+<ul>
+<li><code>app/services/assessment.py</code> — связывание, вердикты, саммари.</li>
+<li><code>app/services/replanner.py</code> — вход 3: переплан остатка.</li>
+<li><code>app/services/methodology.py</code> — слой «правила + исполнитель»: данные правил и код их</li>
+</ul>
+<p>применения разделены, но оба — часть методологии.</p>
+<p><b>Готово, когда:</b> на реальном сезоне 2026–27 планировщик воспроизводит неделю,</p>
+<p>не хуже текущего <code>plan_generate.py</code>.</p>
+<h2>Этап 4 · BFF</h2>
+<ul>
+<li><code>app/api/</code> — роуты по <code>03-BFF.md</code>, схемы ответов, токен.</li>
+<li>ETag по версии, SSE <code>/events</code>.</li>
+<li>Деградация: Garmin, нарратор. Календаря нет — слоты приходят из состояния.</li>
+</ul>
+<p><b>Готово, когда:</b> <code>curl</code> с токеном отдаёт неделю, команда возвращает diff,</p>
+<p>испорченный Garmin не роняет <code>/health</code>.</p>
+<h2>Этап 5 · Клиент</h2>
+<ul>
+<li>PWA по <code>05-клиент.md</code>: неделя, детали, сезон, план против факта, связывание, закрытие.</li>
+<li>Offline: снапшот в IndexedDB, outbox, service worker.</li>
+<li>SSE-подписка с backoff.</li>
+</ul>
+<p><b>Готово, когда:</b> приложение ставится на телефон, открывается без сети и показывает</p>
+<p>последнюю неделю; команда в офлайне уходит после появления сети.</p>
+<h2>Этап 6 · Хостинг (локальная сеть)</h2>
+<ul>
+<li>BFF в <code>systemd --user</code>, слушает <code>0.0.0.0:8080</code>.</li>
+<li>Токен в конфигурации, <code>chmod 600</code>.</li>
+<li>Бэкап хранилища по расписанию (реализация — в адаптере).</li>
+</ul>
+<p><b>Готово, когда:</b> с телефона в домашнем Wi-Fi открывается неделя, а без токена — нет.</p>
+<p><b>Внешний доступ отложен</b> — отдельная задача, варианты разобраны в <code>04-хостинг.md</code>.</p>
+<h2>Этап 3б · Правила из Дэниэлса</h2>
+<p>Отдельная работа: достать из Дэниэлса <b>базовый план и типы тренировок</b> — рецепты занятий,</p>
+<p>из которых планировщик собирает неделю.</p>
+<ul>
+<li>Источники в пайплайне: <code>reference/daniels/daniels_tables.json</code> (56 строк темпов,</li>
+</ul>
+<p>44 строки времён) и <code>state/workout_templates.json</code> (10 типов тренировок).</p>
+<ul>
+<li>Привести к доменным правилам: <code>PlanModel</code>, <code>LoadModel</code>, шаблоны тренировок.</li>
+<li>Результат — в <code>MethodologyRepo</code>, версионируется как правила.</li>
+</ul>
+<p><b>Готово, когда:</b> планировщик собирает неделю из правил методологии, а не из файлов пайплайна.</p>
+<h2>Что сознательно не входит в базу</h2>
+<div class="tw"><table><tr>
+<th>Не делаем</th>
+<th>Почему</th>
+</tr>
+<tr>
+<td>Регистрация, роли, восстановление пароля</td>
+<td>Один пользователь; авторизация — заглушка</td>
+</tr>
+<tr>
+<td>Настоящая аутентификация</td>
+<td>Отложено: токен-проверка закрывает базу, полноценная — потом</td>
+</tr>
+<tr>
+<td>Push-уведомления</td>
+<td>Не запрошены; SSE достаточно</td>
+</tr>
+<tr>
+<td>Несколько сезонов одновременно</td>
+<td>Домен: один активный план</td>
+</tr>
+<tr>
+<td>Синхронизация между устройствами</td>
+<td>Один сервер — один источник правды</td>
+</tr>
+<tr>
+<td>Импорт/экспорт произвольных форматов</td>
+<td>Только свой формат + импорт из пайплайна</td>
+</tr>
+<tr>
+<td>Логирование в облако</td>
+<td>Данные дома</td>
+</tr>
+<tr>
+<td>Внешний доступ (домен, HTTPS, туннель)</td>
+<td>Отложен: в базе только локальная сеть</td>
+</tr>
+<tr>
+<td>Интеграция с Google Calendar</td>
+<td>Доступность — дефолтные слоты в подсистеме «Среда»</td>
+</tr>
+<tr>
+<td>Загрузка данных Stryd</td>
+<td>Берём то, что Stryd складывает в Garmin</td>
+</tr>
+</table></div>
+<h2>Порядок и зависимости</h2>
+<pre><code>0 → 1 → 2 → 3 → 4 → 5 → 6
+        ↑         ↑
+    импорт   план+факт</code></pre>
+<p>Этапы 1 и 2 независимы от 3–6. Этап 5 (клиент) можно вести параллельно с 3–4: клиент</p>
+<p>работает против заглушки API, которая отдаёт снапшот из хранилища.</p>
+</section>
+<section id="s8">
+<div class="h2">Развилки<span class="fn">08-развилки.md</span></div>
+<p>Все развилки закрыты. Решения Кирилла от 26.10.2026 — действуют как правила проекта.</p>
+<h2>1 · Хостинг — отложен, в базе только локальная сеть</h2>
+<p><b>Решено:</b> внешний доступ не делаем. Приложение доступно <b>по локальной сети</b> —</p>
+<p>домашний Wi-Fi, телефон в той же сети подключается к BFF по адресу машины.</p>
+<ul>
+<li>Домен, HTTPS, Cloudflare Tunnel, Tailscale — всё отложено.</li>
+<li>В базе: BFF слушает локальный адрес, клиент ходит на <code>http://&lt;ip&gt;:8080</code>.</li>
+<li>Снаружи наружу ничего не смотрит: туннелей, проброса портов, публичных адресов.</li>
+</ul>
+<p><b>Что это меняет:</b> HTTPS не обязателен в базе — но токен всё равно проверяется, иначе</p>
+<p>любой в сети заходит. Когда появится внешний доступ, HTTPS станет обязательным.</p>
+<p><b>Когда вернуться к вопросу:</b> когда понадобится доступ извне дома — тогда выбираем</p>
+<p>вариант из <code>04-хостинг.md</code> (A · Cloudflare Tunnel рекомендован как основной).</p>
+<h2>2 · Формат хранения — не развилка</h2>
+<p>Формат меняется по триггерам, не по решению. Путь зафиксирован в <code>02-хранилище.md</code>:</p>
+<p>сначала файлы, при срабатывании триггера — SQLite, переход через порты, контрактные</p>
+<p>тесты на оба адаптера.</p>
+<p>Триггеры: второй писатель · запросы по произвольным полям · состояние не влезает</p>
+<p>в память · нужна транзакция между сущностями. Пока ни один не сработал — файлы.</p>
+<h2>3 · План и факт — стартуем с импортом</h2>
+<p><b>Решено:</b> A · импорт. Сезон 2026–27 уже наполнен — импорт даёт рабочее состояние сразу</p>
+<p>и обкатывает домен на реальных данных.</p>
+<p>Что не переносится автоматически — перечислено в <code>02-хранилище.md</code>: связь план↔факт,</p>
+<p><code>summary</code>, недельные макро-цели.</p>
+<h2>4 · Методология — движок внутри Планирования</h2>
+<p><b>Решено:</b> A. Методология — данные, а код чтения правил живёт в планировщике.</p>
+<p>Новая методика всегда требует кода. Отдельного слоя «правила + исполнитель» нет.</p>
+<p>Простота важнее гибкости: пока это работает, менять нечего.</p>
+<h2>5 · Достижимость — функция методологии</h2>
+<p><b>Решено:</b> функция методологии. Отдельной подсистемы «Цель и достижимость» больше нет —</p>
+<p>в логической модели 7 подсистем, а не 8.</p>
+<p>Как устроено: правило роста формы живёт в методологии, вердикт считает планировщик</p>
+<p>(шаг 1). Пока правило не написано, вердикт честно отвечает «не могу оценить».</p>
+<h2>6 · Потолок формы — из методологии, сначала заглушка</h2>
+<p><b>Решено:</b> A · из правил методологии. Правило роста — часть знаний планировщика.</p>
+<p><b>Но по факту в начале — заглушка.</b> Пока правило пустое, шаг 1 отвечает «не могу оценить»</p>
+<p>и предлагает следующий шаг, а не выдумывает число. Заглушка ставится явно, с пометкой,</p>
+<p>что правило не задано.</p>
+<p>Внешнего источника прогноза не будет. Когда правило появится — оно станет частью</p>
+<p>методологии, а вердикт будет ссылаться на конкретное правило.</p>
+<h2>7 · Факт и Оценка — две подсистемы</h2>
+<p><b>Решено:</b> A. Факт принимает и нормализует, Оценка связывает с планом и считает итог.</p>
+<p>Граница с внешними источниками остаётся чёткой: приём Garmin — адаптер, а не часть</p>
+<p>логики.</p>
+<h2>8 · Нарратор — нужен, с заглушкой</h2>
+<p><b>Решено:</b> A. Порт <code>NarratorPort</code> есть с первого дня, ключа может не быть.</p>
+<p>Нет ключа → детерминированная заглушка, приложение работает.</p>
+<h2>9 · Батч-рендеры пайплайна — оставляем параллельно</h2>
+<p><b>Решено:</b> A. <code>~/coach</code> продолжает рендерить HTML-превью недель и макро-обзор как есть.</p>
+<p>Приложение делает свои проекции.</p>
+<p>Перенос 82 КБ <code>render_html.py</code> — не в базу. Отдельная задача, когда понадобится.</p>
+<h2>10 · Правила из Дэниэлса — отдельной задачей после этапа 3</h2>
+<p><b>Решено:</b> A. Этап 3б в <code>07-реализация.md</code>.</p>
+<p>Планировщик строится на текущих шаблонах пайплайна, разбор Дэниэлса идёт параллельно</p>
+<p>и подключается, когда готов.</p>
+<h2>Что осталось открытым</h2>
+<ul>
+<li><b>Правило роста формы</b> — какое считаем рабочим. Заглушка на старте, но без решения</li>
+</ul>
+<p>задача «скажи, если цель недостижима» не выполняется по-настоящему.</p>
+<ul>
+<li><b>Внешний доступ</b> — когда понадобится. Тогда вернёмся к <code>04-хостинг.md</code>.</li>
+<li><b>Настоящая аутентификация</b> — отложена, токен-проверка закрывает базу.</li>
+</ul>
+<p>Блокером для начала реализации считаю только правило роста формы: без него шаг 1 —</p>
+<p>заглушка, но это не мешает строить остальное.</p>
+</section>
+</main></body></html>

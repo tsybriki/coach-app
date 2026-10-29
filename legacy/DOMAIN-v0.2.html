@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Coach App — domain v0.2: сезон, планы, неделя, тренировка, шаг</title>
+<style>
+  :root {
+    --bg: #fdf6ed; --card-bg: #fffefb; --ink: #1a1a1a; --muted: #6a6056; --faint: #9a9085;
+    --border: #e6dac4; --coral: #ff6b5a; --teal: #14b8a6; --mustard: #d4a017;
+    --terra: #c2410c; --sky: #0284c7; --grass: #65a30d; --code-bg: #f4ede0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.55; font-size: 16px; padding-bottom: 60px;
+  }
+  code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  header { padding: 20px 16px 14px; border-bottom: 1px solid var(--border); background: var(--card-bg); }
+  header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  header .sub { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+  header .meta { font-size: 11px; color: var(--faint); margin-top: 8px; }
+  .chg { background: #fff4e8; border: 1px solid #ffd9a8; border-radius: 10px; padding: 10px 12px; font-size: 13.5px; margin-top: 10px; }
+  .chg b { display: block; margin-bottom: 3px; color: var(--terra); }
+
+  nav {
+    position: sticky; top: 0; z-index: 10; background: rgba(253,246,237,0.96);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--border);
+    overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; padding: 8px 12px; scrollbar-width: none;
+  }
+  nav::-webkit-scrollbar { display: none; }
+  nav a { display: inline-block; font-size: 12px; color: var(--muted); text-decoration: none; padding: 5px 10px; margin-right: 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--card-bg); }
+
+  main { padding: 0 14px; max-width: 780px; margin: 0 auto; }
+  section { margin-top: 34px; scroll-margin-top: 60px; }
+  .h2 { display: flex; align-items: baseline; gap: 9px; font-size: 17px; font-weight: 700; padding-bottom: 7px; border-bottom: 2px solid var(--ink); margin-bottom: 14px; }
+  .h2 .n { font-size: 12px; color: var(--coral); font-weight: 700; }
+  h3 { font-size: 15px; font-weight: 700; margin: 20px 0 8px; }
+  h4 { font-size: 12px; font-weight: 700; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  p { font-size: 15px; margin-bottom: 10px; }
+  ul, ol { margin: 0 0 12px; padding-left: 20px; }
+  li { font-size: 14.5px; margin-bottom: 5px; }
+
+  .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+  .card > .ct { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; margin-bottom: 3px; flex-wrap: wrap; }
+  .card > .ct .tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 999px; background: var(--code-bg); color: var(--muted); }
+  .role { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+
+  .fld { border-top: 1px dashed var(--border); padding: 7px 0; }
+  .fld:first-of-type { border-top: none; }
+  .fld .row1 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; }
+  .fname { font-size: 13.5px; font-weight: 700; }
+  .ftype { font-size: 11.5px; color: var(--sky); background: #e8f3fb; padding: 1px 6px; border-radius: 4px; }
+  .fdesc { font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+  .fdesc em { color: var(--terra); font-style: normal; font-weight: 600; }
+
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; overflow-x: auto; font-size: 12px; line-height: 1.5; margin: 8px 0 12px; -webkit-overflow-scrolling: touch; }
+  pre code { white-space: pre; }
+  .inline { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+
+  .note { border-left: 3px solid var(--sky); background: #f0f8fd; padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 14px; margin: 10px 0 14px; }
+  .warn { border-left: 3px solid var(--coral); background: #fff2ef; padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 14px; margin: 10px 0 14px; }
+  .dec { border-left: 3px solid var(--grass); background: #f3f9ec; padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 14px; margin: 10px 0 14px; }
+  .note b, .warn b, .dec b { display: block; margin-bottom: 3px; }
+
+  .tw { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 8px 0 14px; position: relative; }
+  table { border-collapse: collapse; width: 100%; min-width: 440px; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; background: var(--code-bg); }
+  td code { font-size: 11.5px; }
+  td.n { white-space: nowrap; color: var(--faint); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 12px; }
+  .chip { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; background: var(--code-bg); border: 1px solid var(--border); color: var(--muted); }
+  .chip.c { background: #ffeceb; border-color: #ffc9c3; color: var(--terra); }
+  .chip.t { background: #e6f7f5; border-color: #b6e8e3; color: #0b7d71; }
+  .chip.m { background: #fdf3dd; border-color: #eddca8; color: #8a6a06; }
+  .chip.s { background: #e8f3fb; border-color: #c2e2f5; color: #026092; }
+  .chip.g { background: #eff7e6; border-color: #cfe5b8; color: #4a7a12; }
+
+  .chain { display: flex; flex-direction: column; margin: 12px 0 18px; }
+  .chain .node { background: var(--card-bg); border: 1.5px solid var(--ink); border-radius: 10px; padding: 10px 13px; position: relative; }
+  .chain .node .nm { font-size: 14.5px; font-weight: 700; }
+  .chain .node .ds { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+  .chain .gap { height: 22px; position: relative; }
+  .chain .gap::before { content: '↓'; position: absolute; left: 15px; top: 0; font-size: 14px; color: var(--terra); font-weight: 700; }
+  .chain .node.lvl1 { border-color: var(--terra); }
+  .chain .node.lvl2 { border-color: var(--mustard); }
+  .chain .node.lvl3 { border-color: var(--sky); }
+  .chain .node.lvl4 { border-color: var(--teal); }
+  .chain .node.lvl5 { border-color: var(--grass); }
+
+  .we { border: 1.5px solid var(--ink); border-radius: 12px; background: var(--card-bg); overflow: hidden; margin-bottom: 14px; }
+  .we > .wh { background: var(--ink); color: #fff; padding: 9px 13px; font-size: 13px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .we > .wh .lvl { font-size: 10px; background: rgba(255,255,255,0.18); padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+  .we > .wb { padding: 12px 13px; }
+  .we .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); font-weight: 700; margin-bottom: 3px; }
+  .we .v { font-size: 14px; margin-bottom: 11px; }
+  .we .v:last-child { margin-bottom: 0; }
+
+  .steps { margin: 0; padding: 0; list-style: none; counter-reset: st; }
+  .steps li { border-left: 2px solid var(--border); padding: 4px 0 4px 10px; margin-bottom: 3px; font-size: 13px; position: relative; }
+  .steps li.w { border-left-color: var(--terra); }
+  .steps li.r { border-left-color: var(--sky); }
+  .steps li.n { border-left-color: var(--mustard); }
+  .steps .tx b { font-weight: 700; }
+  .steps .fld2 { font-size: 11px; color: var(--faint); }
+
+  .flat { display: grid; grid-template-columns: 26px 1fr; gap: 0 8px; font-size: 13px; }
+  .flat .i { color: var(--faint); font-size: 11px; padding-top: 2px; text-align: right; }
+  .flat .r { border-left: 2px solid var(--border); padding: 3px 0 3px 9px; margin-bottom: 2px; }
+  .flat .r.w { border-left-color: var(--terra); }
+  .flat .r.r { border-left-color: var(--sky); }
+  .flat .r.n { border-left-color: var(--mustard); }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 26px 0 0; }
+  .end { text-align: center; font-size: 12px; color: var(--faint); padding: 26px 0 10px; }
+
+  @media (max-width: 560px) {
+    body { font-size: 15px; }
+    main { padding: 0 11px; }
+    header { padding: 16px 14px 12px; }
+    header h1 { font-size: 18px; }
+    p { font-size: 14.5px; }
+    li { font-size: 14px; }
+    pre { font-size: 11px; padding: 10px; }
+    table { min-width: 380px; font-size: 12.5px; }
+    th, td { padding: 6px 8px; }
+    .tw::after { content: '→ свайп'; position: absolute; right: 2px; bottom: 2px; font-size: 9.5px; color: var(--faint); background: var(--card-bg); padding: 0 4px; border-radius: 4px; pointer-events: none; }
+    .h2 { font-size: 16px; }
+    .fdesc { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Domain v0.2 — сезон, планы, тренировка</h1>
+  <div class="sub">Корень — сезон. Внутри — цели и планы. План строится по модели плана. Неделя — высокий уровень. Тренировка — плоский список шагов.</div>
+  <div class="meta">v0.2 · перестройка по правкам от 25.10.2026</div>
+  <div class="chg">
+    <b>Что изменилось против v0.1</b>
+    Корень — <b>сезон</b>, не цель. Цели живут внутри сезона. Появились <b>Plan</b> (несколько, параллельных) и <b>PlanModel</b> (Дэниэлс и прочие) отдельным описанием. Недели <b>не детализируются заранее</b> — только высокоуровневые намерения. Прогрессия <b>развёрнута в плоский список шагов</b> (работа + отдых, отдых — полноценный шаг). У шага обязательные: <b>спорт · тип цели · величина цели · фокус</b>.
+  </div>
+</header>
+
+<nav>
+  <a href="#tree">Дерево</a>
+  <a href="#season">Сезон</a>
+  <a href="#goals">Цели</a>
+  <a href="#plans">Планы</a>
+  <a href="#crit">Критика</a>
+  <a href="#pm">PlanModel</a>
+  <a href="#daniels">Дэниэлс</a>
+  <a href="#week">Неделя</a>
+  <a href="#workout">Тренировка</a>
+  <a href="#step">Шаг</a>
+  <a href="#example">Пример</a>
+  <a href="#rules">Правила</a>
+  <a href="#holes">Дыры</a>
+</nav>
+
+<main>
+
+<section id="tree">
+  <div class="h2"><span class="n">00</span> Дерево модели</div>
+
+  <p>Пять уровней. Корневой — <b>сезон</b>: у него есть длина и цели. План — окно внутри сезона со своей логикой построения. Неделя внутри плана — намерение, не расписание. Тренировка — список шагов.</p>
+
+  <div class="chain">
+    <div class="node lvl1">
+      <div class="nm">Season — сезон</div>
+      <div class="ds">Длина (49 недель, 11.10.2026 → 12.09.2027) · цели (2) · гонки · набор планов</div>
+    </div>
+    <div class="gap"></div>
+    <div class="node lvl2">
+      <div class="nm">Goal — цель</div>
+      <div class="ds">10К за 40:00 (18.04.2027) · триатлон (12.09.2027). Живёт в сезоне, обслуживает планы</div>
+    </div>
+    <div class="gap"></div>
+    <div class="node lvl3">
+      <div class="nm">Plan — план</div>
+      <div class="ds">Свой срок, свой спорт, свой набор целей, своя <b>модель плана</b> (Дэниэлс и др.)</div>
+    </div>
+    <div class="gap"></div>
+    <div class="node lvl4">
+      <div class="nm">Week — неделя</div>
+      <div class="ds">Высокий уровень: фаза, объёмная рамка, список намерений по тренировкам. Без шагов.</div>
+    </div>
+    <div class="gap"></div>
+    <div class="node lvl5">
+      <div class="nm">Workout — тренировка</div>
+      <div class="ds">Спорт · вид · фокус · <b>плоский список шагов</b> (работа, отдых, разминка, заминка)</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Ключевое разделение</b>
+    <b>План</b> — что и зачем (долгий срок, широкий контекст). <b>Модель плана</b> — правила, по которым план превращается в недели и тренировки (Дэниэлс, а в будущем — другие). Это разные вещи: «план Дэниэлса на 10К» и «описание того, что такое Дэниэлс» — не одно и то же, и их нельзя сливать.
+  </div>
+</section>
+
+<section id="season">
+  <div class="h2"><span class="n">01</span> Season — корень</div>
+
+  <div class="card">
+    <div class="ct">Season <span class="tag">aggregate root</span></div>
+    <div class="role">Держит длину, цели, гонки и набор планов. Ничего не знает о том, как устроена конкретная неделя.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">id · horizon</span><span class="ftype">string · object</span></div><div class="fdesc"><code>{start:'2026-10-11', end:'2027-09-12', season_week_count:49}</code> — <em>длина сезона</em>. Неделя = вс→сб, season_week — порядковый номер, не ISO.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">goals</span><span class="ftype">Goal[]</span></div><div class="fdesc">цели сезона. Сейчас 2: <code>g_run_spring</code> (приоритетная), <code>g_tri_autumn</code>.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">races</span><span class="ftype">Race[]</span></div><div class="fdesc"><code>{goal_id, date, name, start_time}</code> — 18.04.2027 и 12.09.2027.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">plans</span><span class="ftype">Plan[]</span></div><div class="fdesc">набор планов. Может быть один (сейчас) или несколько параллельных — см. §03–04.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">rules</span><span class="ftype">string[]</span></div><div class="fdesc">жёсткие правила сезона: «race-pace блок обязан выходить на 4:00/км». Проверяет планировщик.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">allocation</span><span class="ftype">object</span></div><div class="fdesc">распределение усилий между целями: <code>{g_run_spring:60%, g_tri_autumn:40%}</code> + <code>adaptation_rates</code> (run 1.0 · bike 0.7 · swim 0.55 · strength 1.5).</div></div>
+  </div>
+
+  <div class="note">
+    <b>Сезон владеет всем, чего не владит план</b>
+    Цели, гонки, правила, лимиты нагрузки, распределение усилий между целями. План владеет только своим окном и своей логикой. Иначе при двух параллельных планах правила начнут конфликтовать, а объём недели станет негде проверить.
+  </div>
+</section>
+
+<section id="goals">
+  <div class="h2"><span class="n">02</span> Goal — цель внутри сезона</div>
+
+  <div class="card">
+    <div class="ct">Goal <span class="tag">value object</span></div>
+    <div class="role">Цель обязана быть измеримой и привязанной к дате гонки. Она обслуживает один или несколько планов.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">id · discipline</span><span class="ftype">string · enum</span></div><div class="fdesc"><code>g_run_spring</code> / run_10k · <code>g_tri_autumn</code> / tri_olympic</div></div>
+    <div class="fld"><div class="row1"><span class="fname">race_date · goal_metric</span><span class="ftype">date · object</span></div><div class="fdesc"><code>{type:'time_sec', target:2400, target_friendly:'40:00'}</code> · <code>{type:'finish_under', target_sec:9900, target_friendly:'sub 2:45'}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">race_pace_min_per_km</span><span class="ftype">string</span></div><div class="fdesc">«4:00» — <em>производное от цели, но хранится явно</em>: это темп, вокруг которого строится весь план.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">realistic_fork</span><span class="ftype">object</span></div><div class="fdesc"><code>{best:'40:00', likely:'40:30', conservative:'41:00', pb:'40:04'}</code> — вилка, чтобы одна плохая гонка не ломала план.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">priority · primary</span><span class="ftype">int · bool</span></div><div class="fdesc">какая цель главная → распределение объёма.</div></div>
+  </div>
+
+  <h3>Цель → производные</h3>
+  <div class="tw">
+  <table>
+    <tr><th>Производная</th><th>Как считается</th><th>Сейчас</th></tr>
+    <tr><td>Race pace</td><td>целевое время / дистанция</td><td>4:00/км</td></tr>
+    <tr><td>Целевой VDOT</td><td>обратная таблица Дэниэлса</td><td>52</td></tr>
+    <tr><td>Текущий VDOT</td><td>факт 10К 44:06</td><td>46.4</td></tr>
+    <tr><td>Разрыв</td><td>цель − факт</td><td>24 с/км (+10.3 %)</td></tr>
+    <tr><td>Темп порога</td><td>от VDOT через Дэниэлса</td><td>4:10–4:20</td></tr>
+    <tr><td>HR-зоны</td><td>Karvonen от HRmax 182 / RHR 54 / LTH 164</td><td>7 зон</td></tr>
+  </table>
+  </div>
+</section>
+
+<section id="plans">
+  <div class="h2"><span class="n">03</span> Plan — план</div>
+
+  <p>План — это <b>окно внутри сезона</b>, у которого есть свой срок, свой спорт, свой набор целей и своя модель построения. Не «фаза» (фаза — часть плана), а самостоятельная единица, которая может жить параллельно с другими.</p>
+
+  <div class="card">
+    <div class="ct">Plan <span class="tag">aggregate</span></div>
+    <div class="role">Один план = один вид спорта + один набор целей + одна модель построения + свой срок.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">id</span><span class="ftype">string</span></div><div class="fdesc"><code>plan_run_10k_2027</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">sport</span><span class="ftype">enum</span></div><div class="fdesc">run · bike · swim · strength · brick. <em>Один план — один спорт.</em> Это держит модель плана применимой.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">goal_ids</span><span class="ftype">string[]</span></div><div class="fdesc">список целей, которые план обслуживает. <em>Многие-ко-многим: триатлон обслуживают три плана (бег, вело, плавание).</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">model_ref</span><span class="ftype">string</span></div><div class="fdesc">ссылка на <code>PlanModel</code> — логику построения. Для бега: <code>daniels_run_v1</code>.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">start · end</span><span class="ftype">date</span></div><div class="fdesc">срок плана. <em>План короче сезона.</em> Сейчас: run-план 11.10.2026 → 18.04.2027 (28 недель), потом триатлонная часть.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">phases</span><span class="ftype">Phase[]</span></div><div class="fdesc">фазы плана: <code>{id, goal, focus, load_range, volume_range, intensity_pct_mean, deload_weeks}</code>. run_base → run_build → run_specific → run_taper.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">weeks</span><span class="ftype">Week[]</span></div><div class="fdesc">недели плана — <b>высокий уровень</b>, без шагов (см. §07).</div></div>
+    <div class="fld"><div class="row1"><span class="fname">budget</span><span class="ftype">object</span></div><div class="fdesc">сколько ресурса сезон выделил плану: <code>{effort_pct, hours_per_week_range}</code> — чтобы два плана не спорили за одно и то же.</div></div>
+  </div>
+
+  <h3>Три стратегии раскладки</h3>
+  <div class="tw">
+  <table>
+    <tr><th>Стратегия</th><th>Как выглядит</th><th>Когда годится</th></tr>
+    <tr><td><b>Один план</b></td><td>один план на весь сезон, спорт внутри меняется по фазам</td><td>одна цель, один спорт</td></tr>
+    <tr><td><b>Последовательные</b></td><td>план А → план Б, граница по дате цели</td><td>разные цели с разными датами: 10К в апреле → триатлон в сентябре</td></tr>
+    <tr><td><b>Параллельные</b></td><td>3 плана одновременно, у каждого свой срок</td><td>триатлон: бег + вело + плавание одновременно</td></tr>
+  </table>
+  </div>
+
+  <div class="dec">
+    <b>Сейчас в данных — последовательные планы, замаскированные под один</b>
+    Фазы жёстко привязаны к <code>goal_id</code>: <code>run_base…run_taper</code> → <code>g_run_spring</code>, потом <code>transition…tri_taper</code> → <code>g_tri_autumn</code>. Но вторая половина сезона (триатлон, 21 неделя) <b>не имеет модели построения ни для вела, ни для плавания</b> — в <code>weekly_macro</code> это просто строки <code>bike: '1×60м'</code>, <code>swim: '1×30м'</code>. Формально это один план, фактически — два, причём второй без логики.
+  </div>
+</section>
+
+<section id="crit">
+  <div class="h2"><span class="n">04</span> Критика: параллельные или последовательные планы</div>
+
+  <p>Это развилка, которая меняет модель целиком. Разберу оба варианта честно.</p>
+
+  <h3>Вариант A: три параллельных плана (бег, вело, бассейн)</h3>
+
+  <div class="warn">
+    <b>Что ломается</b>
+    <b>1. Пересечение нагрузок.</b> План по бегу, план по велу и план по плаванию каждый по отдельности проходят свои лимиты — но <b>суммарно</b> они могут превысить 11 ч/неделю, и никто этого не заметит. Лимит живёт в сезоне, а проверяется в плане.<br>
+    <b>2. Конфликт календаря.</b> Вторник 18:00 — бег или вело? Решение принимает не план, а что-то выше. Планы не умеют делить слоты.<br>
+    <b>3. Плавание и вело без модели.</b> У Дэниэлса есть только бег. Для плавания нужен другой подход (темп на 100 м, интервалы 400/800 по ощущениям). Второй и третий планы окажутся с пустой логикой — как сейчас в триатлонной половине сезона.<br>
+    <b>4. Дублирование недель.</b> 3 плана × 49 недель = 147 недель с недельными рамками. Синхронизировать их — отдельная задача.<br>
+    <b>5. Потеря целостности триатлона.</b> Триатлон — это <b>один</b> тренировочный процесс, а не три независимых. Переходы (кирпики) живут на стыке планов, и ни один план их не владеет.
+  </div>
+
+  <h3>Вариант B: два последовательных плана, ограниченных целями</h3>
+
+  <div class="warn">
+    <b>Что ломается</b>
+    <b>1. Триатлон всё равно параллелен внутри себя.</b> План «триатлон» должен одновременно вести бег, вело и плавание. Последовательность тут не помогает — внутри плана нужны <b>подпланы по спорту</b>, то есть возвращаемся к варианту A, но вложенный.<br>
+    <b>2. Некуда деть параллельные виды спорта.</b> Если завтра будет третья цель (например, веломарафон в мае) — последовательная схема её не влезет без разбора season.<br>
+    <b>3. Граница «по цели» — искусственная.</b> Цель заканчивается 18.04, но триатлонная подготовка начинается не в этот день, а раньше, и параллельно идёт с бегом. Реальность — перекрытие, а не очередь.
+  </div>
+
+  <h3>Что предлагаю: планы пересекаются, но не наезжают</h3>
+
+  <div class="dec">
+    <b>Модель, которая закрывает оба случая</b>
+    Сезон — контейнер (длина, цели, гонки, правила, лимиты). Внутри — <b>планы</b>, каждый со своим сроком, спортом, набором целей и моделью. Планы могут пересекаться по времени; запрещено ровно одно: <b>две недели одного и того же спорта в один season_week</b> не могут принадлежать разным планам. Всё остальное — легально.
+  </div>
+
+  <div class="tw">
+  <table>
+    <tr><th>Свойство</th><th>Как обеспечивается</th></tr>
+    <tr><td>Нет двойного бронирования</td><td>инвариант: (спорт, season_week) → не более одного плана</td></tr>
+    <tr><td>Нет перегрузки по сумме</td><td>лимиты живут в сезоне; план отдаёт «запрос», сезон раздаёт бюджет</td></tr>
+    <tr><td>Слот дня не конфликтует</td><td>календарь — общий слой, планы заявляют намерения, арбитраж выше</td></tr>
+    <tr><td>Цель обслуживают несколько планов</td><td><code>goal_ids</code> — список, а не ссылка</td></tr>
+    <tr><td>Модель плана подставляется</td><td><code>model_ref</code> на план: у бега — Дэниэлс, у плавания — свой</td></tr>
+  </table>
+  </div>
+
+  <h4>Что это даёт для текущего сезона</h4>
+  <ul>
+    <li><b>Один беговой план</b> 11.10.2026 → 18.04.2027 под цель <code>g_run_spring</code>, модель <code>daniels_run_v1</code>.</li>
+    <li><b>Планы триатлона</b> — либо три отдельных (бег/вело/плавание) со своей логикой, либо один план-триатлон с тремя подпланами. Второй вариант честнее: переходы и кирпики — общие.</li>
+    <li><b>Сезон держит правило</b>: суммарно ≤ 11 ч/нед, ≤ 30 % интенсивности, приоритет целей 60/40.</li>
+  </ul>
+
+  <div class="note">
+    <b>Где я не уверен</b>
+    «План = один спорт» — ограничение, которое сильно упрощает, но может не подойти для кирпиков и для силовой работы внутри триатлонного плана. Компромисс: разрешить плану объявлять <code>secondary_sports</code>, но тогда модель плана должна уметь работать с чужим спортом — а Дэниэлс не умеет. Решать при появлении кирпиков.
+  </div>
+</section>
+
+<section id="pm">
+  <div class="h2"><span class="n">05</span> PlanModel — логика построения</div>
+
+  <p>Модель плана — это <b>правила</b>, по которым из цели, профиля и фазы получается неделя и тренировка. План ссылается на модель, но не содержит её. Описание модели хранится отдельно — и это то, что ты просил детализировать.</p>
+
+  <div class="card">
+    <div class="ct">PlanModel <span class="tag">strategy</span></div>
+    <div class="role">Контракт поведения. Реализация может быть любой; описание — одно на модель.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">id · name · version</span><span class="ftype">string</span></div><div class="fdesc"><code>daniels_run_v1</code> · «Дэниэлс (бег)» · v1</div></div>
+    <div class="fld"><div class="row1"><span class="fname">sports</span><span class="ftype">enum[]</span></div><div class="fdesc">для каких видов спорта применима. <code>['run']</code> — и сразу видно, что вел и плавание покрытия не имеют.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">inputs</span><span class="ftype">object</span></div><div class="fdesc">что модель читает: <code>{vdot, hr_zones, goal_metric, phase, load_history, available_days}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">intensity_map</span><span class="ftype">map</span></div><div class="fdesc">зона Дэниэлса → доля VO2max → HR-зона атлета. <b>Это стык модели и профиля.</b></div></div>
+    <div class="fld"><div class="row1"><span class="fname">intensity_units</span><span class="ftype">enum[]</span></div><div class="fdesc">на чём задаётся интенсивность: <code>pace</code> · <code>hr</code> · <code>power</code> · <code>rpe</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">block_rules</span><span class="ftype">object</span></div><div class="fdesc">правила блоков: <code>{repeat_unit, rest_min, rest_distance_m, distance_m, min, max, label}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">progression_rules</span><span class="ftype">object</span></div><div class="fdesc">как объём растёт от недели к неделе: <code>{increment_pct, cycle, deload, phase_transition}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">guard</span><span class="ftype">object</span></div><div class="fdesc">защита от скачка: <code>{min_work_vs_last_interval_pct:0.9, window_days:21}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">load_budget</span><span class="ftype">object</span></div><div class="fdesc">сколько часов/км план забирает у сезона: <code>{max_hours_per_week, min_hours_per_week, max_sessions}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">description</span><span class="ftype">text</span></div><div class="fdesc"><b>отдельное, человекочитаемое описание модели.</b> Что она делает, чего не умеет, на каких данных основана.</div></div>
+  </div>
+
+  <div class="note">
+    <b>Почему описание отдельно от реализации</b>
+    Модель — это код (таблицы, правила). Описание — это документ: «Дэниэлс = темпы от VDOT, интенсивность по зонам, объём растёт на 5 % в неделю, разгрузка каждую 4-ю». Описание читает человек, когда решает, подходит ли модель его задаче. Оно же — основание для выбора модели в UI: список моделей с описаниями, а не с названиями.
+  </div>
+</section>
+
+<section id="daniels">
+  <div class="h2"><span class="n">06</span> Дэниэлс — детально</div>
+
+  <p>Это единственная реализованная модель, поэтому разбираю её полностью — как образец того, что должно быть в описании каждой модели.</p>
+
+  <div class="card">
+    <div class="ct">daniels_run_v1 <span class="tag">описание</span></div>
+    <div class="role">Источник: <code>Daniels' Running Formula</code>, скан таблиц, принесён 24.10.2026. Лежит в <code>~/coach/reference/daniels/</code>: сырые txt + разобранный json + обвязка <code>lib/daniels.py</code>.</div>
+
+    <h4>Вход</h4>
+    <ul>
+      <li><b>VDOT</b> — единственное число, из которого выводится всё остальное. Сейчас 47 (заявлено) / 46.4 (по факту 10К 44:06).</li>
+      <li><b>HRmax 182 · RHR 54 · LTH 164</b> — для привязки к HR-зонам атлета.</li>
+      <li><b>Цель</b> — время на дистанции; обратным ходом даёт целевой VDOT (10К 40:00 → VDOT 52).</li>
+    </ul>
+
+    <h4>Таблица темпов (по VDOT)</h4>
+    <div class="tw">
+    <table>
+    <tr><th>Зона Дэниэлса</th><th>Смысл</th><th>Доля VO2max</th><th>VDOT 47</th></tr>
+    <tr><td><b>JL</b></td><td>Easy, лёгкая</td><td>60–74 %</td><td>5:34/км</td></tr>
+    <tr><td><b>M</b></td><td>Marathon, марафонский</td><td>79–85 %</td><td>4:46/км</td></tr>
+    <tr><td><b>П</b></td><td>Threshold, порог</td><td>88–92 %</td><td>4:29/км · 400м 1:47</td></tr>
+    <tr><td><b>И</b></td><td>Interval, интервал</td><td>95–100 %</td><td>4:07/км · 400м 1:38</td></tr>
+    <tr><td><b>Пв</b></td><td>Repetition, повторы</td><td>100–106 %</td><td>3:50/км · 200м 0:45</td></tr>
+    </table>
+    </div>
+    <p class="fdesc">Полная таблица — 56 строк по VDOT 30–85; таблица времени на дистанции — 44 строки (1500 м … марафон).</p>
+
+    <h4>Привязка к HR-зонам атлета</h4>
+    <div class="tw">
+    <table>
+    <tr><th>Зона Дэниэлса</th><th>HR при HRmax 182</th><th>Зона атлета</th><th>Смысл</th></tr>
+    <tr><td>JL</td><td>109–135</td><td>Z1–Z2</td><td>восстановление, лёгкая</td></tr>
+    <tr><td>M</td><td>144–155</td><td>Z3–Z4</td><td>база, темп</td></tr>
+    <tr><td>П</td><td>160–167</td><td><b>Z5</b></td><td>порог (LTH 164)</td></tr>
+    <tr><td>И</td><td>173–182</td><td><b>Z7</b></td><td>VO2max</td></tr>
+    <tr><td>Пв</td><td>182–193</td><td>—</td><td>выше HRmax</td></tr>
+    </table>
+    </div>
+
+    <div class="warn">
+    <b>Дыра в мосте зон</b>
+    У атлета 7 зон, у Дэниэлса 5. Зона <b>Z6 (169–172, super-threshold)</b> не имеет источника в Дэниэлсе: Пв начинается от 182 (100 % HRmax), а И кончается там же. Между Z5 (до 168) и Z7 (с 173) — пусто. При этом именно <b>Z6</b> стоит в шаблоне vo2max (<code>work_zone: Z6, hr_target: 172</code>). То есть целевая зона VO2max-сессии лежит в дыре, которую никто не заполнил. Это надо решить: либо Z6 получает долю VO2max явно (например 93–95 %), либо шаблон vo2max переводится на И (Z7).
+    </div>
+
+    <h4>Правила объёма</h4>
+    <ul>
+      <li>Рост объёма: ≤ +10 % в неделю, шаг 3 недели, deload каждую 4-ю.</li>
+      <li><b>Guard качественных сессий:</b> объём работы новой интервальной сессии ≥ 0.9 × объёма последней интервальной за 21 день. Сейчас: последняя 3070 м → порог 2763 м.</li>
+      <li>Выбор варианта — по паре (адаптационная цель, масштаб): light / medium / heavy / peak.</li>
+    </ul>
+
+    <h4>Чего модель не умеет</h4>
+    <ul>
+      <li>Только бег. Вел и плавание — вне модели.</li>
+      <li>Нет силовой работы и мобильности.</li>
+      <li>Нет работы с расписанием, окнами и ресурсами — это календарный слой, не модель.</li>
+      <li>Нет учёта веса, сна, травм, настроения.</li>
+      <li>Темпы привязаны к VDOT: без свежего VDOT вся таблица устаревает целиком.</li>
+    </ul>
+
+    <h4>Каталог качественных сессий</h4>
+    <p>11 адаптационных целей: <code>vo2max · threshold_speed · threshold_power · tempo · mixed · pyramid · fartlek · progression · time_trial · taper_race_pace</code> (+ сезонные варианты). У каждой — свои варианты по масштабу. <b>Это отдельный справочник, а не часть модели плана</b>, но модель на него ссылается при выборе структуры.</p>
+  </div>
+</section>
+
+<section id="week">
+  <div class="h2"><span class="n">07</span> Week — неделя без деталей</div>
+
+  <p>Ключевое решение: неделя планируется <b>на высоком уровне</b>. Никаких шагов, никаких точных темпов — только распределение объёма и список намерений. Числа появляются позже и пересчитываются автоматически.</p>
+
+  <div class="card">
+    <div class="ct">Week <span class="tag">aggregate</span></div>
+    <div class="role">Намерение недели. Детализация — отдельный шаг, делается по мере надобности.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">season_week</span><span class="ftype">int</span></div><div class="fdesc">порядковый номер в сезоне. Внутри плана — <code>plan_week</code> (номер внутри плана).</div></div>
+    <div class="fld"><div class="row1"><span class="fname">start · end</span><span class="ftype">date</span></div><div class="fdesc">неделя = вс→сб.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">phase_id</span><span class="ftype">ref</span></div><div class="fdesc">→ фаза плана.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">focus</span><span class="tag">enum</span></div><div class="fdesc">адаптационная цель недели: <code>vo2max</code> · <code>threshold</code> · <code>base</code> · <code>recovery</code> · <code>taper</code>. <b>Главный фокус недели — одна строка.</b></div></div>
+    <div class="fld"><div class="row1"><span class="fname">load_target</span><span class="ftype">object</span></div><div class="fdesc"><code>{hours, distance_m, sessions, intensity_pct}</code> — рамка, внутри которой неделя обязана уместиться.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">intents</span><span class="ftype">WorkoutIntent[]</span></div><div class="fdesc">что в неделе должно быть — <b>без шагов</b>: <code>{id, sport, kind, focus, duration_min, priority}</code>.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">detail</span><span class="ftype">WeekDetail?</span></div><div class="fdesc">развёрнутая неделя — <code>{week, generated_at, inputs_version, workouts[]}</code>. <em>Создаётся по требованию и помечается версией входов.</em></div></div>
+  </div>
+
+  <h3>Два уровня недели</h3>
+  <div class="tw">
+  <table>
+    <tr><th></th><th>Week (всегда есть)</th><th>WeekDetail (по требованию)</th></tr>
+    <tr><td>Что внутри</td><td>фокус, рамка объёма, список намерений</td><td>готовые тренировки с шагами, темпами, зонами</td></tr>
+    <tr><td>Когда считается</td><td>всегда, при планировании сезона</td><td>за 1–2 недели до недели; или по кнопке</td></tr>
+    <tr><td>Что меняется при новой форме</td><td>ничего</td><td>пересчитывается</td></tr>
+    <tr><td>Длина</td><td>~0.5 КБ</td><td>5–15 КБ</td></tr>
+    <tr><td>Хранится</td><td>да, всегда</td><td>кеш, с <code>inputs_version</code></td></tr>
+  </table>
+  </div>
+
+  <div class="dec">
+    <b>Что это даёт</b>
+    Смена VDOT или HR-зон не трогает сезон и не инвалидирует 49 недель — пересчитывается только тот <code>WeekDetail</code>, который нужен прямо сейчас, и он помечается <code>inputs_version</code>. Это ровно та задача, которую ты описал: «избегает необходимости пересчитывать все цифры после каждого обновления формы».
+  </div>
+
+  <h3>Сборка недели</h3>
+<pre><code>Week (намерение)                      ← живёт в плане, всегда
+  focus: vo2max
+  load_target: { hours: 6.24, distance_m: 35km, sessions: 7 }
+  intents:
+    - { sport:run,   kind:quality, focus:vo2max, duration_min:51, priority:90 }
+    - { sport:run,   kind:long,   focus:Z2,     duration_min:90, priority:70 }
+    - { sport:run,   kind:easy,   focus:Z1,     duration_min:30, priority:40 }
+    - { sport:bike,  kind:z2,     focus:Z2,     duration_min:45, priority:30 }
+    - { sport:swim,  kind:easy,   focus:Z2,     duration_min:45, priority:30 }
+
+         ↓  WeekBuilder: календарь + ресурсы + модель плана
+         ↓  (интенсивность в шагах — из текущего профиля)
+
+WeekDetail (деталь)                    ← кэш, помечен версией
+  inputs_version: { vdot: 47, hr_zones_rev: 3 }
+  workouts:
+    - workout: 3×800 прогрессия + 4×200  → 16 шагов
+    - workout: длинный Z2 90 мин        → 3 шага
+    ...</code></pre>
+
+  <div class="note">
+    <b>Приоритет — важное поле</b>
+    В намерении у каждой тренировки есть <code>priority</code>. Если ресурса не хватает (болезнь, travel), отбрасываются самые низкоприоритетные, а не случайные. Сейчас у всех тренировок <code>priority: 50</code> — это надо наполнить.
+  </div>
+</section>
+
+<section id="workout">
+  <div class="h2"><span class="n">08</span> Workout — тренировка</div>
+
+  <div class="card">
+    <div class="ct">Workout <span class="tag">value object</span></div>
+    <div class="role">Развёрнутая тренировка: спорт, вид, фокус, цель, плоский список шагов.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">id</span><span class="ftype">string</span></div><div class="fdesc"><code>w3-mon-quality</code> — латиница, стабильный.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">sport</span><span class="ftype">enum</span></div><div class="fdesc">run · bike · swim · strength · mobility · brick</div></div>
+    <div class="fld"><div class="row1"><span class="fname">kind</span><span class="ftype">enum</span></div><div class="fdesc">easy · long · quality · tempo · intervals · recovery · z2 · brick · tt</div></div>
+    <div class="fld"><div class="row1"><span class="fname">focus</span><span class="ftype">enum</span></div><div class="fdesc">что развивает: <code>vo2max</code> · <code>threshold</code> · <code>Z2</code> · <code>core</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">objective</span><span class="ftype">object</span></div><div class="fdesc">измеримая цель тренировки: <code>{metric:'work_m', target:3200}</code> или <code>{metric:'duration_min', target:90}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">steps</span><span class="ftype">Step[]</span></div><div class="fdesc"><b>плоский список</b>, в порядке выполнения. Без вложенности.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">location · time</span><span class="ftype">enum · string</span></div><div class="fdesc">где и когда: <code>stadium</code>, <code>18:45</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">priority · status</span><span class="ftype">int · enum</span></div><div class="fdesc">0–100 · planned · done · skipped · moved</div></div>
+    <div class="fld"><div class="row1"><span class="fname">rationale</span><span class="ftype">string</span></div><div class="fdesc">почему так. Короткое «почему» + детали.</div></div>
+  </div>
+
+  <h3>Тренировка = список шагов, повторы развёрнуты</h3>
+  <p>Никаких вложенных <code>set_repeats</code> и никакой «прогрессии» как отдельного объекта. Повтор — это несколько шагов подряд: работа, отдых, работа, отдых. Отдых — такой же шаг, у него свой объём и свой фокус.</p>
+
+  <div class="chips">
+    <span class="chip c">warmup</span>
+    <span class="chip t">work</span>
+    <span class="chip s">rest</span>
+    <span class="chip m">cooldown</span>
+    <span class="chip g">transition</span>
+  </div>
+
+  <div class="note">
+    <b>Что меняется и почему это лучше</b>
+    Прогрессия 4:15 → 4:00 → 3:50 — это <b>три отдельных шага</b>, у каждого свой темп. А не «один шаг с полем прогрессии». Итог: список шагов — единственный источник правды о структуре, любой шаг редактируется независимо, сравнение двух тренировок = сравнение плоских списков, а «3×800» восстанавливается из шагов обратно для показа.<br>
+    <b>Цена:</b> шаблон, который генерирует повторы, тоже должен быть плоским (или уметь разворачиваться в плоский). Это честнее: шаблон отвечает за «как строим», развёрнутый список — за «что делаем».
+  </div>
+</section>
+
+<section id="step">
+  <div class="h2"><span class="n">09</span> Step — шаг</div>
+
+  <p>Минимальный набор, который ты назвал: <b>спорт · тип цели · величина цели · фокус</b>. Плюс роль шага и, для отдыха, — свой объём.</p>
+
+  <div class="card">
+    <div class="ct">Step <span class="tag">value object</span></div>
+    <div class="role">Одно выполнимое действие. В шаге нет ничего предметного, кроме объёма и фокуса.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">role</span><span class="ftype">enum</span></div><div class="fdesc">warmup · work · rest · cooldown · transition</div></div>
+    <div class="fld"><div class="row1"><span class="fname">sport</span><span class="ftype">enum</span></div><div class="fdesc">run · bike · swim · strength. <em>Спорт обязателен: в неделе бывают разные, внутри тренировки — один, но лучше явно.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">target_type</span><span class="ftype">enum</span></div><div class="fdesc"><b>Время или расстояние — а что ещё?</b> См. список ниже.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">target_value</span><span class="ftype">number</span></div><div class="fdesc">величина: <code>5</code> минут · <code>3</code> км · <code>800</code> м · <code>400</code> м. <em>Единица задаётся типом, отдельного поля <code>unit</code> не нужно.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">focus</span><span class="ftype">enum</span></div><div class="fdesc"><b>Темп или ЧСС</b> — и дальше: <code>pace</code> · <code>hr</code> · <code>power</code> · <code>rpe</code> · <code>none</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">focus_value</span><span class="ftype">object?</span></div><div class="fdesc">что именно: <code>{pace:'4:15'}</code> · <code>{hr_zone:'Z5', hr_cap:172}</code> · <code>{power_w:260}</code>. <em>Может отсутствовать: фокус есть, а значения ещё нет — оно вычислится из профиля.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">label</span><span class="ftype">string?</span></div><div class="fdesc">«800 м @ 4:15» — человекочитаемо, генерируется, но может быть задано вручную.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">notes</span><span class="ftype">string?</span></div><div class="fdesc">пояснение для человека.</div></div>
+  </div>
+
+  <h3>Типы цели: время, расстояние — и что ещё</h3>
+  <div class="tw">
+  <table>
+    <tr><th>target_type</th><th>Единица</th><th>Когда нужен</th><th>Пример</th></tr>
+    <tr><td><code>time</code></td><td>мин</td><td>всё, что меряется часами</td><td>разминка 15 мин · отдых 2 мин</td></tr>
+    <tr><td><code>distance</code></td><td>м / км</td><td>отрезки, длинная, плавание</td><td>800 м · 14 км</td></tr>
+    <tr><td><code>laps</code></td><td>штуки</td><td>бассейн: круги по дорожке</td><td>8 кругов по 400 м</td></tr>
+    <tr><td><code>reps</code></td><td>штуки</td><td>силовая: повторы упражнения</td><td>3×45 с планка</td></tr>
+    <tr><td><code>open</code></td><td>—</td><td>свободная тренировка без заданного объёма</td><td>«плавание на свободной скорости»</td></tr>
+  </table>
+  </div>
+
+  <div class="warn">
+    <b>Единица темпа зависит от спорта</b>
+    Для бега темп — на километр, для плавания — на 100 м, для вела — на километр. Если хранить <code>focus_value.pace</code> строкой «4:15», то в бассейне «1:35» — это 100 м или километр? <b>Нужно либо хранить темп в секундах на метр, либо добавлять <code>pace_basis</code> в шаг: <code>{pace:'1:35', per:'100m'}</code>. Иначе шаг из разных видов спорта нельзя сравнивать и нельзя валидировать.
+  </div>
+
+  <h3>Отдых — полноценный шаг</h3>
+  <p>У отдыха своя величина и свой фокус. Сейчас в данных отдых задаётся двумя полями внутри блока (<code>rest_min</code> и <code>rest_distance_m</code>) — это две разные величины в одном месте, и непонятно, что считается основным. В модели отдых — обычный шаг: <code>role:'rest', target_type:'distance', target_value:250, focus:'hr', focus_value:{hr_zone:'Z1'}</code>.</p>
+
+  <h3>Инварианты шага</h3>
+  <ul>
+    <li>В шаге есть спорт, тип цели, величина и фокус.</li>
+    <li>Величина > 0; для <code>open</code> величина не задаётся.</li>
+    <li><code>focus_value</code> соответствует <code>focus</code>: <code>hr</code> → зона атлета, <code>pace</code> → темп с базой, <code>none</code> → значения нет.</li>
+    <li>Шаги внутри тренировки не пересекаются по времени: сумма длительностей = длительность тренировки.</li>
+    <li>Отдых после последней работы — опционален (между блоками может быть длинный переход).</li>
+  </ul>
+</section>
+
+<section id="example">
+  <div class="h2"><span class="n">10</span> Сквозной пример</div>
+
+  <p>Одна тренировка из W3 — показана от цели сезона до плоского списка шагов.</p>
+
+  <div class="we">
+    <div class="wh"><span>Season</span><span class="lvl">корень</span></div>
+    <div class="wb">
+      <div class="k">Длина</div>
+      <div class="v">11.10.2026 → 12.09.2027 · 49 недель</div>
+      <div class="k">Цели</div>
+      <div class="v"><b>10К за 40:00</b> (18.04.2027, приоритетная) · <b>триатлон</b> (12.09.2027)</div>
+      <div class="k">План</div>
+      <div class="v"><code>plan_run_10k_2027</code> · спорт run · срок 11.10.2026 → 18.04.2027 · модель <code>daniels_run_v1</code> · цель <code>g_run_spring</code></div>
+    </div>
+  </div>
+
+  <div class="we">
+    <div class="wh"><span>Plan · фаза run_base</span><span class="lvl">уровень 2</span></div>
+    <div class="wb">
+      <div class="k">Фаза</div>
+      <div class="v">W1–W12 · «Поднимаем базовый объём» · 7.3 ч/нед · коридор 4.96–9.74 ч · 27–50 км · интенсивность 10.9 %</div>
+      <div class="k">Бюджет</div>
+      <div class="v">60 % усилий сезона (g_run_spring)</div>
+      <div class="k">Правило сезона</div>
+      <div class="v">«Race-pace блок обязан выходить на 4:00/км — иначе цель недостижима»</div>
+    </div>
+  </div>
+
+  <div class="we">
+    <div class="wh"><span>Week W3 — намерение</span><span class="lvl">уровень 3</span></div>
+    <div class="wb">
+      <div class="k">Фокус недели</div>
+      <div class="v"><b>vo2max</b></div>
+      <div class="k">Рамка объёма</div>
+      <div class="v">6.24 ч · 35 км бега · 7 сессий · интенсивность 9.1 %</div>
+      <div class="k">Намерения</div>
+      <div class="v">run/quality vo2max 51 мин (приоритет 90) · run/long Z2 90 мин (70) · run/easy 30 мин ×2 (40) · run/easy Z2 40 мин (40) · strength/core 25 мин ×2 (50) · bike/z2 45 мин (30) · swim/easy 45 мин (30)</div>
+      <div class="k">Детализация</div>
+      <div class="v">ещё не посчитана · <code>inputs_version: {vdot:47}</code></div>
+    </div>
+  </div>
+
+  <div class="we">
+    <div class="wh"><span>Workout — качественная</span><span class="lvl">уровень 4</span></div>
+    <div class="wb">
+      <div class="k">Тренировка</div>
+      <div class="v"><b>Качественная: VO2max</b> · пн 18:45 · 51 мин · стадион</div>
+      <div class="k">Цель</div>
+      <div class="v">работа <b>3200 м</b> при пульсе до Z6</div>
+      <div class="k">Почему так</div>
+      <div class="v">Возврат в бег после travel-недели W2 (100 % вел, 90 км, бега 0). Объём — по рамке недели: 35 км бега, длинная 14 км. Структуру задаёт override: 3×800 с прогрессией 4:15→3:50 + 4×200 @ 3:45 = 3200 м. Опора (реальная сессия): 3070 м, порог 2763 м. Прежние 6×400 @ 4:00 дали бы 2400 м на 18 % меньше работы при пульсе Z4 — без нагрузки.</div>
+    </div>
+  </div>
+
+  <div class="we">
+    <div class="wh"><span>Step — плоский список</span><span class="lvl">уровень 5</span></div>
+    <div class="wb">
+      <div class="k">Шаги</div>
+      <div class="flat">
+        <div class="i">1</div><div class="r n"><b>warmup</b> · run · <b>15 мин</b> · фокус hr Z1</div>
+        <div class="i">2</div><div class="r w"><b>work</b> · run · <b>800 м</b> · фокус pace 4:15 (Z5, кап 164)</div>
+        <div class="i">3</div><div class="r r"><b>rest</b> · run · <b>250 м</b> · фокус hr Z1 (кап 115)</div>
+        <div class="i">4</div><div class="r w"><b>work</b> · run · <b>800 м</b> · фокус pace 4:00 (Z5)</div>
+        <div class="i">5</div><div class="r r"><b>rest</b> · run · <b>250 м</b> · фокус hr Z1</div>
+        <div class="i">6</div><div class="r w"><b>work</b> · run · <b>800 м</b> · фокус pace 3:50 (Z5)</div>
+        <div class="i">7</div><div class="r r"><b>rest</b> · run · <b>250 м</b> · фокус hr Z1</div>
+        <div class="i">8</div><div class="r w"><b>work</b> · run · <b>200 м</b> · фокус pace 3:45 (Z6, кап 172)</div>
+        <div class="i">9</div><div class="r r"><b>rest</b> · run · <b>200 м</b> · фокус hr Z1</div>
+        <div class="i">10</div><div class="r w"><b>work</b> · run · <b>200 м</b> · фокус pace 3:45 (Z6)</div>
+        <div class="i">11</div><div class="r r"><b>rest</b> · run · <b>200 м</b> · фокус hr Z1</div>
+        <div class="i">12</div><div class="r w"><b>work</b> · run · <b>200 м</b> · фокус pace 3:45 (Z6)</div>
+        <div class="i">13</div><div class="r r"><b>rest</b> · run · <b>200 м</b> · фокус hr Z1</div>
+        <div class="i">14</div><div class="r w"><b>work</b> · run · <b>200 м</b> · фокус pace 3:45 (Z6)</div>
+        <div class="i">15</div><div class="r n"><b>cooldown</b> · run · <b>12 мин</b> · фокус hr Z1</div>
+      </div>
+      <div class="k">Итог</div>
+      <div class="v">51 мин · работа <b>3200 м</b> · пульс доходит до Z6</div>
+    </div>
+  </div>
+
+  <div class="dec">
+    <b>Что видно</b>
+    Прогрессия стала тремя отдельными шагами с разными темпами. Отдых — четыре таких же шага, у каждого своя дистанция и своя зона. «3×800» и «4×200» восстанавливаются из списка для показа, но в структуре их нет — есть просто 15 шагов.
+  </div>
+</section>
+
+<section id="rules">
+  <div class="h2"><span class="n">11</span> Правила домена</div>
+
+  <h3>Инварианты (нарушить нельзя)</h3>
+  <ol>
+    <li>Сезон: цели внутри, планы внутри, у каждого плана свой срок ⊂ сезон.</li>
+    <li>План: один спорт, одна модель плана, ноль или больше целей.</li>
+    <li>Инвариант параллельности: (спорт, season_week) принадлежит не более чем одному плану.</li>
+    <li>Модель плана заявлена для спорта плана: <code>model.sports ⊇ {plan.sport}</code>.</li>
+    <li>Неделя принадлежит ровно одному плану; её <code>focus</code> — одна адаптационная цель.</li>
+    <li>Тренировка: спорт, kind, focus, objective, шаги.</li>
+    <li>Шаг: роль, спорт, тип цели, величина, фокус. Величина > 0 (кроме <code>open</code>).</li>
+    <li>Сумма длительностей шагов = длительность тренировки.</li>
+    <li>Шаги тренировки не пересекаются, отдых идёт после работы.</li>
+    <li>Зона шага ∈ HR-зонам атлета.</li>
+    <li>Детализация недели помечена версией входов; устаревшая — помечается, а не показывается молча.</li>
+    <li>Изменение плана — только через <code>Command</code> с причиной.</li>
+  </ol>
+
+  <h3>Производные — считаются, не хранятся</h3>
+  <ul>
+    <li>Темпы шагов — от VDOT через модель плана. Строка темпа без ссылки на <code>inputs_version</code> — недопустима.</li>
+    <li>Границы HR-зон — от HRmax/RHR/LTH.</li>
+    <li>Длительность тренировки, дистанция, объём работы — из шагов.</li>
+    <li>Объём недели и интенсивность в % — из намерений и шагов.</li>
+    <li>Фаза недели — из season_week и диапазонов фаз плана.</li>
+  </ul>
+
+  <h3>Что меняет модель, а что — только деталь</h3>
+  <div class="tw">
+  <table>
+    <tr><th>Событие</th><th>Что меняется</th><th>Что не трогается</th></tr>
+    <tr><td>Новый VDOT</td><td>только <code>WeekDetail</code> (темпы, фокусы)</td><td>сезон, планы, недели</td></tr>
+    <tr><td>Новые HR-зоны</td><td>только <code>WeekDetail</code></td><td>то же</td></tr>
+    <tr><td>Команда «неделя = выходной»</td><td>неделя + хвост плана</td><td>остальные планы, если не конфликтуют</td></tr>
+    <tr><td>Провал контрольной точки</td><td>фаза плана, возможно сезон</td><td>факт</td></tr>
+    <tr><td>Изменение цели</td><td>всё от цели вниз</td><td>факт, другие цели</td></tr>
+  </table>
+  </div>
+</section>
+
+<section id="holes">
+  <div class="h2"><span class="n">12</span> Дыры — обновлённый список</div>
+
+  <p>Сверка новой модели с <code>~/coach/state/</code>. Это не абстрактные пожелания, а конкретные расхождения.</p>
+
+  <h3>Сезон и планы</h3>
+  <div class="tw">
+  <table>
+    <tr><th>#</th><th>Дыра</th><th>Следствие</th></tr>
+    <tr><td class="n">1</td><td>Нет сущности Season: корнем сейчас <code>season_plan.json</code>, цели внутри</td><td>некуда положить длину, набор планов и распределение усилий</td></tr>
+    <tr><td class="n">2</td><td>Нет сущности Plan: фазы привязаны напрямую к <code>goal_id</code></td><td>нельзя выразить «три параллельных плана» и нельзя ограничить план набором целей</td></tr>
+    <tr><td class="n">3</td><td>Связь цель↔план только 1:1</td><td>триатлон требует трёх планов под одну цель</td></tr>
+    <tr><td class="n">4</td><td>Триатлонная половина сезона (21 неделя) без модели для вела и плавания</td><td>в <code>weekly_macro</code> это строки <code>bike: '1×60м'</code>, <code>swim: '1×30м'</code> — нет логики</td></tr>
+    <tr><td class="n">5</td><td>Лимиты нагрузки живут в <code>constraints.json</code>, а не в сезоне</td><td>при двух планах суммарный объём не проверяется</td></tr>
+    <tr><td class="n">6</td><td>Нет <code>budget</code> у плана</td><td>планы будут спорить за ресурс сезона</td></tr>
+  </table>
+  </div>
+
+  <h3>Модель плана</h3>
+  <div class="tw">
+  <table>
+    <tr><th>#</th><th>Дыра</th><th>Следствие</th></tr>
+    <tr><td class="n">7</td><td>Дэниэлс зашит в код (<code>lib/daniels.py</code>) и json, без описания модели</td><td>нельзя показать пользователю «что это за модель» и нельзя выбрать альтернативу</td></tr>
+    <tr><td class="n">8</td><td>Связь зон Дэниэлса ↔ HR-зон атлета не описана как правило</td><td>мост живёт в шаблонах вручную</td></tr>
+    <tr><td class="n">9</td><td><b>Z6 (169–172) не имеет источника в Дэниэлсе</b></td><td>целевая зона VO2max-шаблона лежит в дыре: Пв начинается от 182, И кончается там же</td></tr>
+    <tr><td class="n">10</td><td>Guard объёма (0.9 × за 21 день) живёт в коде <code>quality_session.py</code></td><td>правило модели не описано и не переносится на другие модели</td></tr>
+    <tr><td class="n">11</td><td>Каталог шаблонов привязан к <code>reference_vdot: 48</code>, а фактический VDOT 46.4–47</td><td>темпы в шаблонах на 1–2 % оптимистичнее реальных</td></tr>
+    <tr><td class="n">12</td><td>Пересчёт под VDOT — отдельным скриптом <code>rebase_templates_to_vdot.py</code></td><td>после каждого изменения формы нужен ручной запуск</td></tr>
+  </table>
+  </div>
+
+  <h3>Неделя</h3>
+  <div class="tw">
+  <table>
+    <tr><th>#</th><th>Дыра</th><th>Следствие</th></tr>
+    <tr><td class="n">13</td><td>Недели детализированы заранее: <code>state/plan-w*.json</code> — 31 КБ × N</td><td>смена формы требует пересчёта всех сохранённых недель</td></tr>
+    <tr><td class="n">14</td><td>Нет разделения «намерение недели» / «детализация недели»</td><td>нет <code>inputs_version</code>, устаревшая деталь не помечается</td></tr>
+    <tr><td class="n">15</td><td>Нет <code>focus</code> недели как адаптационной цели — есть только <code>week_goal</code> строкой</td><td>«развиваем VO2max» нельзя проверить машинно</td></tr>
+    <tr><td class="n">16</td><td><code>weekly_macro</code> описывает 28 недель при 49 в сезоне</td><td>вторая половина сезона без рамки объёма</td></tr>
+    <tr><td class="n">17</td><td>Нет <code>priority</code> у намерений (у тренировок всегда 50)</td><td>при нехватке ресурса нечем жертвовать</td></tr>
+  </table>
+  </div>
+
+  <h3>Тренировка и шаг</h3>
+  <div class="tw">
+  <table>
+    <tr><th>#</th><th>Дыра</th><th>Следствие</th></tr>
+    <tr><td class="n">18</td><td>Вложенность <code>set_repeats</code> и прогрессия внутри блока</td><td>структура не плоская — шаг не редактируется независимо</td></tr>
+    <tr><td class="n">19</td><td><code>basis</code> смешивает объём, интенсивность и структуру</td><td>нет разделения <code>target_type</code> / <code>focus</code></td></tr>
+    <tr><td class="n">20</td><td>Отдых хранится двумя полями <code>rest_min</code> + <code>rest_distance_m</code></td><td>неясно, что основное; отдых не первоклассен</td></tr>
+    <tr><td class="n">21</td><td>Спорт смешан с видом: <code>kind: 'ofp'</code> рядом с <code>'run'</code></td><td>фильтр по виду спорта не работает</td></tr>
+    <tr><td class="n">22</td><td>Темп — строка без базы (<code>/км</code> или <code>/100м</code>)</td><td>шаги разных видов спорта несопоставимы</td></tr>
+    <tr><td class="n">23</td><td>Темпы захардкожены, рядом лежит <code>pace_vdot</code></td><td>рассинхрон незаметен</td></tr>
+    <tr><td class="n">24</td><td>Силовая сессия лежит в <code>structure[]</code> с <code>exercise</code>/<code>set</code>, кардио — со <code>zone</code></td><td>один тип шага на два разных мира</td></tr>
+    <tr><td class="n">25</td><td>Нет <code>status</code> у тренировки</td><td>нет «план vs факт»</td></tr>
+    <tr><td class="n">26</td><td>Нет связи план↔факт (matcher)</td><td>«выполнено» — угадывание</td></tr>
+    <tr><td class="n">27</td><td>Русские id тренировок (<code>пн-quality</code>)</td><td>ломаются URL и синхронизация</td></tr>
+    <tr><td class="n">28</td><td>Справочные поля (<code>_note</code>, <code>_source</code>, <code>quality_*</code>) внутри боевых объектов</td><td>формат не сменить без переписывания потребителей</td></tr>
+    <tr><td class="n">29</td><td>Нет <code>deviations</code> при заполненном факте</td><td>план не объясняет расхождения</td></tr>
+  </table>
+  </div>
+
+  <div class="dec">
+    <b>Порядок закрытия</b>
+    <b>1.</b> Дыры 18–24, 27–28 — переработка домена тренировки и шага + миграция данных.<br>
+    <b>2.</b> Дыры 1–2, 6 — Season и Plan как новые агрегаты.<br>
+    <b>3.</b> Дыры 7–12 — описание моделей и правил, вынос guard'а в данные.<br>
+    <b>4.</b> Дыры 13–16 — разделение намерения и детализации недели.<br>
+    <b>5.</b> Дыры 17, 25–26, 29 — приоритеты, статусы, matcher, отклонения.
+  </div>
+</section>
+
+<hr>
+<p class="end">Coach App · domain v0.2 · Season → Plan → Week → Workout → Step · 25.10.2026</p>
+
+</main>
+</body>
+</html>

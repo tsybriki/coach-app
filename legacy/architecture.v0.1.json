@@ -1,0 +1,1103 @@
+{
+  "$schema": "./schemas.schema.md",
+  "version": 37,
+  "title": "Спортивный слой Hermes — полная архитектура",
+  "subtitle": "v37: починка v36 — ReferenceError в renderHrStructure (s vs st). Добавлен smoke test с реальным node.js — рендерит каждый слот через eval JS.",
+  "blocks": [
+    {
+      "id": "tldr",
+      "kind": "list",
+      "title": "TL;DR — что это и зачем",
+      "items": [
+        "Один JSON-файл правды на каждый срез (athlete / season_plan с goals[] и phases_for_goals / constraints / progress / overrides / fit_store).",
+        "Вся арифметика идёт в Python (lib/). Модель вызывается через одну обёртку ask_model.py с JSON-schema. Skill'ы не пишут промпты руками.",
+        "4 точки расширения: metrics/, season_replan, plan_generate (с constraints + volume_progression + goal_allocator), analyze (4 режима).",
+        "Несколько целей в одном сезоне: goals[] (например spring 10K + autumn Olympic triathlon). plan_generate распределяет объём через goal_allocator.py — оптимум с учётом adaptation_rates, trade-off'ы показывает явно, решение за Кириллом.",
+        "control_points живут в season_plan с привязкой goal_id; общие (discipline-agnostic) — без goal_id.",
+        "constraints — рамка. plan_generate читает, coach-plan-adjust правит (с подтверждением).",
+        "FIT retention = 14 дней → удалить.",
+        "Все спортивные skill'ы названы по схеме 'coach-<area>-<verb>'.",
+        "Каждое решение моделью логируется в decisions/. Retention-проход логирует, что удалено.",
+        "Вес: weight_history[] в athlete.json + авто-синк из Garmin через cron + одна строка в weekly_report + ручная правка через coach-plan-adjust. Без целевого веса, без BMI/калорий, без алертов. Минимум.",
+        "Zwift search: coach-plan-zwift — по критериям (дисциплина, длительность, зоны, тип) ищет workouts на WhatsOnZwift, предлагает 2-4 варианта, Кирилл выбирает, zwift_sync.py конвертит → отправляется в Garmin Connect. Становится частью plan-wN.",
+        "Inline Zwift: plan_generate ВНУТРИ одной операции дёргает coach-plan-zwift, если размещённый bike/brick-слот удовлетворяет правилу из constraints.auto_zwift (например duration_min ≤ 90 + location='home_stationary_bike'). Кирилл НЕ ходит отдельно — он видит уже снабжённый workout_ref план. Если правило не сработало (например, outdoor вело) — слот остаётся с duration_min, без workout_ref. Два этапа слиты в один.",
+        "HTML = обязательная часть выхода (v19): coach-plan-week / coach-plan-season / coach-plan-adjust ВСЕГДА порождают пару state/plan-wN.json + state/plan-wN.html через lib.plan_runtime. generate_plan_with_html(). Один entry point. Нет JSON без HTML, нет HTML без JSON.",
+        "Structure в каждом slot (v20): каждый run/bike/swim слот имеет list[step] с warmup/work/cooldown + зонами (по пульсу для лёгких/длинных, по темпу для интервалов). OFP (intervals) — отдельный kind со своей структурой (exercises, reps). HTML: <details> в каждой карточке слота, тап = раскрыть детальную работу (steps, zones, reps).",
+        "v21: render_html использует двухэкранную mobile-first навигацию. Picker (список compact-карточек) → тап → cardWrap (детальная карточка с back-button + структура + inventory). Inline JS (vanilla, < 5 КБ) без fetch, без framework, без backend. Hash routing (#list / #slot-N). Адаптивно: тот же HTML хорошо работает на Android Telegram preview.",
+        "v22: убраны tracker-плашка и tag (run/bike/swim) из compact-карточки. На карточке осталась только иконка вида спорта (🏃🚴🏊💪🔄🎯) и идея тренировки. Навигация: anchor <a href='#slot-N'> + preventDefault + showCard inline JS. Hash routing: #list / #slot-N. DOMContentLoaded fallback для прямых ссылок.",
+        "v23 (фикс навигации): picker/cardWrap переключаются через inline style.display — не classList. Inline style имеет выше CSS-специфичности. Inline onclick=\"showCard(N)\" на каждом button — срабатывает даже если Telegram preview перехватывает addEventListener.",
+        "v24 (фикс навигации #3): querySelectorAll('.slot-card').forEach удалён. Только inline onclick=\"showCard(N);\". pushState оставлен (нужен для back-button). 27/27 tests passing.",
+        "v25 (фикс навигации #4): inline JS навигация полностью убрана. Все 8 детальных карточек сразу в DOM в <section id='card-N'>. Picker → anchor href='#card-N' → CSS :target делает видимой нужную. Back → anchor href='#list'. body:has(.card-detail:target) скрывает picker. Без onclick, без addEventListener, без pushState, без classList, без style.display. Только нативный HTML. Работает в браузере, в Telegram preview, в file://.",
+        "v26 (фикс навигации #5): полностью переписал на архитектуру из w1-mobile.html. picker (visible по умолчанию) + cardWrap (hidden) + backBtn + cardHost. Inline <script type='application/json' id='plan-data'> + loadPlan() + buildPicker() + showSlot() + showPicker() + popstate listener. history.pushState для back-button. classList.add/remove hidden/visible для переключения экранов. renderCard() рендерит details в cardHost.innerHTML. Точная копия логики w1-mobile.html. 27/27 tests passing.",
+        "v27 (цельная конфета): навигация из w1-mobile.html + форматирование из v18. buildPicker: plan-title + totals (planned/target/delta) + HR-зоны бейджики + phase-card + control-points + 8 slot-кнопок с иконкой вида спорта + day/time/duration + focus-пилюля. renderCard: иконка вида спорта + название + day/time/duration + meta-row (location/focus/subkind/Zwift-pending) + inventory + structure. Всё работает на JS (как в w1-mobile.html), без CSS-only ухищрений. 27/27 tests passing.",
+        "v28: training week = Sun-Sat (было Mon-Sun). W1 = 2026-10-11..17 окт. season_start_date = 2026-10-11 (Sun). season_week_count = 49 (было 48). race_run 18 апр = W28 (было W27, потому что race_date всегда воскресенье, и сдвиг = +1 W). race_tri 12 сен = W49 (было W48). iso_week берётся по понедельнику (Mon=W42 для W1), чтобы season_week не зависел от Sun-старта. Все фазы сдвинуты на -1 день.",
+        "v29 (факт-лог W1): Кирилл записал реальные тренировки 11-17 окт. plan-w1.json перезаписан: 6 сессий / 5.2ч / 45.7К. ВС 10:00 10К test = 44:06 (baseline spring-10k-2027). ПН 18:30 pool 3К. ВТ 09:00 easy 1.5К + 18:30 5К Z2 + 3К прогрессия. СР 17:00 long Z2 1ч. ЧТ 10:30 cross Z2 11.2К. ПТ+СБ — отдых. renderCard: actual-блок зелёным (✅ Факт: distance / time / pace / HR / RPE). buildPicker: actual-badge в заголовке, totals показывает сессий/факт/объём, summary-карточка с буллетами, slot-completed бордер зелёным, ✓ в длительности. 27/27 tests passing.",
+        "v30 (ПТ recovery swim): добавлен плановый слот ПТ 18:00 — пул 45мин Z1. FIT-файлов за W1 нет (state/fit_store/ пустой, cron не подтянул). Анализ по факт-логу: 5 дней бега, 45.7К, 2 пиковые (10К test 44:06 + 5К Z2 + 3К Z3). Мышцы ног устали, HR-cost повышен. Пул = active recovery без ударной нагрузки. В карточке ПТ нет actual-блока (это план, не факт) — только structure + rationale. 27/27 tests passing.",
+        "v31 (ПТ tempo + ОФП): 5мин Z1 warmup → 6×(150м @ 3:40/км Z4 + 250м трусцы Z1) → 5мин Z1 cooldown. Затем ОФП circuit: 12 упражнений подряд (резинка + коврик). Бег: ягодицы+кор circuit — banded clamshell L/R, glute bridge, bird-dog, banded side walk, dead bug, single-leg glute bridge, banded hip abduction, plank, banded kickback, side plank L/R. Итого: 6.1ч / 7 слотов (6 факт + 1 план). 27/27 tests passing.",
+        "v32 (разделение типов): brick слот (run+OFП вместе) запрещён. Каждый день может иметь N слотов разных kind, но в picker они отдельные карточки. ПТ: 2 слота — 18:30 run (5К + 6×150/250) + 19:00 ofp (12 упр circuit). renderOfpStructure: каждое упражнение — карточка с .ex-num (номер в кружке), .ex-name (имя, accent), .ex-side (L/R бейдж), .ex-band (🎗 иконка), .ex-focus-pill (фокус), .ex-reps (× reps моноширинно), .ex-why (notes italic). 27/27 tests passing.",
+        "v33 (починка Totals): Кирилл попросил унифицировать totals — всегда показывать план/target/дельта. Раньше actual-режим показывал 'сессий/факт/объём' (по факт-логу), non-actual — 'planned/target/delta'. v32 разломал это (план-неделя не показывал target). v33: ВСЕГДА считаем planned = sum(duration_min всех слотов) / target = phase.hours_per_week_target / delta = planned - target. Лейблы: 'план-неделя' (это сумма запланированных тренировок на этой неделе) / 'долгосрочн' (это target из долгосрочного плана) / 'дельта'. Зелёный если план ≥ долгосрочн, красный если < 0. 27/27 tests passing.",
+        "v34 (лейблы totals): Кирилл попросил убрать русские лейблы, которые обрезались ('план-неделя', 'долгосрочн', 'дельта'). Заменены на 'planned' / 'expected' / 'delta' (короткие английские слова — не обрезаются). 27/27 tests passing.",
+        "v35 (basis-aware rendering): Кирилл попросил убрать time/distance путаницу в set-блоках. step.basis='time' (default) → показываем duration_min + hr_target. step.basis='distance' → показываем distance_m + pace_min_per_km, duration_min НЕ выводится. Sub-шаги (set_repeats[]) никогда не показывают notes (Кирилл: 'буквы дальше - бесполезны'). Top-level set: reps + total time (time) или total distance (distance). ПТ tempo: basis=distance, sub-шаги 150м Z4 + 250м Z1 (no notes), top-level 900м × 6. ВТ key_progression: basis=time (default), sub-шаги 4мин Z3 + 2мин Z1, top-level 30мин × 5. HR-сессии: step.hr_target (например 165), показывается как 'HR 165'. Модель может наполнять любым basis, рендер работает одинаково. 28/28 tests passing.",
+        "v36 (починка v35): Кирилл: 'зачем умножил 6 на 150? Не пиши объём, просто интервалы. Подпись внизу убери, она уродская.' Убрал totalM логику. Теперь top-level set header = просто label (step.label или 'set') + × N. Убрал notes полностью (sub-шаги + top-level). step.label='интервалы' для ПТ tempo, 'ОФП circuit' для ПТ OFP. В header'е теперь: 'интервалы × 6', без объёма. Sub-шаги без notes. Top-level без notes. 28/28 tests passing.",
+        "v37 (починка v36): Кирилл: 'сломал рендеринг карточек, пустая страница с кнопкой назад'. Нашёл ReferenceError в renderHrStructure: в top-level одиночном шаге использовалось s.pace_min_per_km (где s был не определён, потому что в этом блоке переменная называется st). v35 прошёл smoke-тесты, потому что тесты не запускали JS-рендеринг — только проверяли наличие строк в source. v37 добавляет test_render_html_every_slot_renders: рендерит HTML, вытаскивает JS-исходник, eval'ит в node, вызывает renderCard для каждого из 8 слотов W1. Ловит любые ReferenceError / TypeError в renderHrStructure. 29/29 tests passing."
+      ]
+    },
+    {
+      "id": "goals",
+      "kind": "layer",
+      "title": "Множественные цели — как устроено",
+      "summary": "Один season_plan с goals[]. phase принадлежит goal. goal_allocator распределяет часы/нед между целями с учётом adaptation_rates.",
+      "path": "~/.hermes/coach/state/season_plan.json",
+      "modules": [
+        {
+          "name": "goals[]",
+          "purpose": "цели сезона: [{id, discipline:'run_10k'|'tri_olympic'|..., race_date, goal_metric:{type,target}, priority:1..n, primary:true|false, notes}]."
+        },
+        {
+          "name": "phases[]",
+          "purpose": "теперь с goal_id. Каждая фаза принадлежит одной цели. Пример: [run_base, run_build, run_specific, run_taper, race_1, transition, tri_base, tri_build, tri_specific, tri_taper, race_2]."
+        },
+        {
+          "name": "adaptation_rates[]",
+          "purpose": "per-discipline коэффициенты восприимчивости к нагрузке: {run:1.0, swim:0.55, bike:0.7, strength:1.5}. ЧСС-час бега ≠ ЧСС-час велосипеда. Используется goal_allocator для распределения часов между целями."
+        },
+        {
+          "name": "control_points[]",
+          "purpose": "теперь с goal_id для целевых TT и без goal_id для общих метрик (HR drift, cadence)."
+        },
+        {
+          "name": "races[]",
+          "purpose": "сохраняется как список гонок (по одной на goal с race_date)."
+        },
+        {
+          "name": "transition_phases",
+          "purpose": "фаза перехода между целями (run taper → tri base). Снижение объёма одной дисциплины + вход в другую."
+        }
+      ],
+      "rule": "goals задаёт coach-plan-season при создании сезона на основе интервью. Изменение goals = season_replan с reason='add_goal' / 'swap_goal' / 'drop_goal'."
+    },
+    {
+      "id": "weight",
+      "kind": "layer",
+      "title": "Вес — минимум без переусложнения",
+      "summary": "Просто следим. Без целей, без BMI, без алертов.",
+      "path": "~/.hermes/coach/state/athlete.json (поле) + lib/garmin_weight.py",
+      "modules": [
+        {
+          "name": "athlete.weight_kg_current",
+          "purpose": "последний известный вес, обновляется при любом новом измерении."
+        },
+        {
+          "name": "athlete.weight_history[]",
+          "purpose": "[{date, kg, source:'garmin'|'manual'}] — append-only. Без лимита на размер (одна запись в день максимум = ~100 записей/год)."
+        },
+        {
+          "name": "lib/garmin_weight.py",
+          "purpose": "читает последний вес из Garmin (garth или garminconnect). Вызывается из cron eae7b0d88b4a (ежедневно 02:00). Если новых данных нет — no-op."
+        },
+        {
+          "name": "weekly_report.weight_line",
+          "purpose": "одна строка в сводке недели: «Вес: 101.7 кг (Δ −0.3 за 7д, тренд ↓)»."
+        },
+        {
+          "name": "coach-fit-review (опц.)",
+          "purpose": "при coaching/lookback и ≥ 4 нед истории weight_history — показывает рядом с метриками тренд веса за период. Без валидации, без cited_principle для самого веса."
+        },
+        {
+          "name": "coach-plan-adjust (ручная)",
+          "purpose": "по команде «я взвесился — 95.8» пишет в weight_history с source='manual', обновляет weight_kg_current."
+        }
+      ],
+      "rule": "НЕТ: target_weight, BMI, калорий, алертов на дельту. ЕСТЬ: текущий вес + история + строка в weekly_report. Всё остальное — потом, если понадобится."
+    },
+    {
+      "id": "allocator",
+      "kind": "flow",
+      "title": "goal_allocator.py — как распределяется объём",
+      "steps": [
+        {
+          "n": 1,
+          "name": "Вход",
+          "what": "goals[], phases_for_each_goal с hours_per_week_target, constraints.weekly_windows, adaptation_rates."
+        },
+        {
+          "n": 2,
+          "name": "Нормализация",
+          "what": "Перевод raw hours → effective_cost hours через adaptation_rates (ЧСС-час бега = 1.0, вел = 0.7, плав = 0.55). Это «истинная» стоимость тренировки для организма."
+        },
+        {
+          "n": 3,
+          "name": "Балансировка",
+          "what": "Подбираем долю effective_cost часов каждой цели так, чтобы не превышать constraints.max_total_effective_cost_per_week. Первая цель (primary) получает baseline, остальные делят остаток."
+        },
+        {
+          "n": 4,
+          "name": "Candidates",
+          "what": "goal_allocator возвращает 2-3 варианта распределения: 'primary-приоритет', 'баланс 60/40', 'баланс 50/50'. Для каждого: что выигрывает, что проигрывает, на сколько часов."
+        },
+        {
+          "n": 5,
+          "name": "Trade-off показ",
+          "what": "Кирилл видит: «вариант A: 10К получает 5.5ч, triathlon получает 4.5ч (риск: triathlon run-leg просядет на 5-8 сек/км). Вариант B: 10К 4.5ч, triathlon 5.5ч (риск: 10К медленнее на 10-15 сек/км)»."
+        },
+        {
+          "n": 6,
+          "name": "Решение",
+          "what": "Кирилл выбирает. coach-plan-season фиксирует: chosen_allocation + reason (чтобы потом, при replan, было видно, чем он руководствовался)."
+        },
+        {
+          "n": 7,
+          "name": "plan_generate применяет",
+          "what": "phases[] в season_plan.json обновляются hours_per_week_target в соответствии с chosen_allocation. Дальше — обычная сборка W_N."
+        }
+      ],
+      "key": "goal_allocator НЕ выбирает за Кирилла. Он даёт 2-3 варианта с явным trade-off'ом. Решение — человек. Это про оптимум-как-подсказка, а не оптимум-как-default."
+    },
+    {
+      "id": "state_files",
+      "kind": "details",
+      "title": "State-файлы — что лежит и как наполнять (кликни, чтобы развернуть)",
+      "summary": "Каждый файл — одна ответственность. Снапшоты ниже вытащены из существующих данных; добавлять новое не нужно.",
+      "files": [
+        {
+          "name": "athlete.json",
+          "path": "~/.hermes/coach/state/athlete.json",
+          "purpose": "Идентичность спортсмена. Меняется редко (травмы, новые PB, смена целей).",
+          "format_example": "{\n  'goals': ['spring_10k_2027_under_41', 'tri_olympic_2027_finish'],\n  'current_form': { 'vo2max': 51, 'race_pace_10k': '44:06' },\n  'form_trend_4w': 'recovering_after_back_injury',\n  'hr_zones': { 'hr_max': 182, 'rhr': 54, 'zones': { 'Z1': '110-125', 'Z2': '125-140', 'Z2': '125-145', 'Z3': '145-160', 'Z4': '160-170', 'Z5': '170-182' } },\n  'injuries': [{ 'date': '2026-09', 'type': 'back_pinched_nerve', 'status': 'resolved_w_care' }],\n  'adaptation_rates': { 'run': 1.0, 'bike': 0.7, 'swim': 0.55, 'strength': 1.5 },\n  'weight_kg_current': 101.7,\n  'weight_history': [\n    { 'date': '2026-09-30', 'kg': 101.7, 'source': 'manual' },\n    { 'date': '2026-10-07', 'kg': 101.4, 'source': 'garmin' },\n    { 'date': '2026-10-12', 'kg': 101.1, 'source': 'garmin' }\n  ]\n}",
+          "current_snapshot": "Источник: spring-10k-2027-v2.md (анкета), MEMORY.md (HR-зоны). adaptation_rates по умолчанию (HR-cost нормирован на бег).",
+          "how_to_fill": [
+            "coach-onboarding при первом заполнении — выгружает из Garmin (Intervals.icu / Renpho) + планов + истории писем.",
+            "Вручную: при смене PB, травме, изменении веса, смене глобальной цели.",
+            "Зоны HR: обновлять 1× в 6 мес или после burnout-блока."
+          ]
+        },
+        {
+          "name": "season_plan.json (v9 · с goals[])",
+          "path": "~/.hermes/coach/state/season_plan.json",
+          "purpose": "Долгосрочный план. goals[], phases_for_goals с goal_id, control_points[] (с goal_id или без), races[], adaptation_rates, volume_progression_rules.",
+          "format_example": "{\n  'horizon': { 'start': '2026-10-12', 'end': '2027-10-01' },\n  'goals': [\n    { 'id': 'g_run_spring', 'dishipline': 'run_10k', 'race_date': '2027-04-18', 'goal_metric': { 'type': 'time_sec', 'target': 2460 }, 'priority': 1, 'primary': true },\n    { 'id': 'g_tri_autumn', 'dishipline': 'tri_olympic', 'race_date': '2027-09-12', 'goal_metric': { 'type': 'finish_under', 'target_sec': 9900 }, 'priority': 2, 'primary': false }\n  ],\n  'phases': [\n    { 'id': 'run_base',     'goal_id': 'g_run_spring', 'start': '2026-10-12', 'end': '2027-01-03', 'hours_per_week_target': 5 },\n    { 'id': 'run_build',    'goal_id': 'g_run_spring', 'start': '2027-01-04', 'end': '2027-02-21', 'hours_per_week_target': 7 },\n    { 'id': 'run_specific', 'goal_id': 'g_run_spring', 'start': '2027-02-22', 'end': '2027-04-04', 'hours_per_week_target': 8 },\n    { 'id': 'run_taper',    'goal_id': 'g_run_spring', 'start': '2027-04-05', 'end': '2027-04-17', 'hours_per_week_target': 4 },\n    { 'id': 'race_run',     'goal_id': 'g_run_spring', 'start': '2027-04-18', 'end': '2027-04-18', 'event': true },\n    { 'id': 'transition',   'goal_id': 'g_tri_autumn', 'start': '2027-04-19', 'end': '2027-05-09', 'hours_per_week_target': 5, 'notes': 'снижение бега, вход в плавание/вело' },\n    { 'id': 'tri_base',     'goal_id': 'g_tri_autumn', 'start': '2027-05-10', 'end': '2027-06-20', 'hours_per_week_target': 6 },\n    { 'id': 'tri_build',    'goal_id': 'g_tri_autumn', 'start': '2027-06-21', 'end': '2027-08-08', 'hours_per_week_target': 8 },\n    { 'id': 'tri_specific', 'goal_id': 'g_tri_autumn', 'start': '2027-08-09', 'end': '2027-09-05', 'hours_per_week_target': 10 },\n    { 'id': 'tri_taper',    'goal_id': 'g_tri_autumn', 'start': '2027-09-06', 'end': '2027-09-11', 'hours_per_week_target': 5 },\n    { 'id': 'race_tri',     'goal_id': 'g_tri_autumn', 'start': '2027-09-12', 'end': '2027-09-12', 'event': true }\n  ],\n  'control_points': [\n    { 'id': 'cp_3k_w4',   'goal_id': 'g_run_spring', 'date': '2026-11-06', 'what': '3K time trial', 'metric_target': 'time_sec', 'measures': ['top_end_speed'] },\n    { 'id': 'cp_5k_w8',   'goal_id': 'g_run_spring', 'date': '2026-12-04', 'what': '5K max',        'metric_target': 'time_sec', 'measures': ['vo2max'] },\n    { 'id': 'cp_5k_w16',  'goal_id': 'g_run_spring', 'date': '2027-01-22', 'what': '2-3×3K avg',    'metric_target': 'avg_time_sec', 'measures': ['threshold_pace'] },\n    { 'id': 'cp_olympic_sim_w32', 'goal_id': 'g_tri_autumn', 'date': '2027-07-31', 'what': 'Olympic-distance brick (swim-bike-run)', 'metric_target': 'finish_sec', 'measures': ['transition_efficiency', 'race_pace_10k_under_fatigue'] },\n    { 'id': 'cp_general_hr_drift', 'goal_id': null, 'date': '2026-12-15', 'what': 'HR drift baseline', 'metric_target': 'drift_bpm_per_km', 'measures': ['hr_drift'] }\n  ],\n  'races': [\n    { 'goal_id': 'g_run_spring', 'date': '2027-04-18', 'name': 'S25 Berlin 10K', 'start_time': '10:30' },\n    { 'goal_id': 'g_tri_autumn', 'date': '2027-09-12', 'name': 'Olympic triathlon (TBD venue)', 'start_time': 'TBD' }\n  ],\n  'chosen_allocation': { 'snapshot_date': '2026-10-13', 'strategy': 'balanced_60_40', 'g_run_spring_eff_pct': 60, 'g_tri_autumn_eff_pct': 40, 'reason': 'primary 10K требует объёма, triathlon build требует времени на вело+плав' },\n  'volume_progression_rules': { 'weekly_increase_max_pct': 10, 'step_weeks': 3, 'step_hours': 1, 'deload_every_n_weeks': 4 }\n}",
+          "current_snapshot": "Источник: spring-10k-2027-v2.md. Цели: g_run_spring (10К 18.04.2027) + g_tri_autumn (олимпийка 12.09.2027). 11 фаз с явным goal_id. 5 control_points (4 привязаны к goal, 1 общий).",
+          "how_to_fill": [
+            "coach-onboarding или coach-plan-season при первом заполнении.",
+            "Правит coach-plan-season при replan (reason='add_goal' / 'swap_goal' / 'drop_goal' / 'change_allocation').",
+            "chosen_allocation фиксируется после явного решения Кирилла по кандидатам от goal_allocator."
+          ]
+        },
+        {
+          "name": "constraints.json",
+          "path": "~/.hermes/coach/state/constraints.json",
+          "purpose": "Окна доступного времени, предпочтения, запреты. Рамка для W_N.",
+          "format_example": "{\n  'version': 1,\n  'updated_at': '2026-10-13T20:00:00+00:00',\n  'weekly_windows': { 'ПН': [...], 'ВТ': [...], ... },\n  'preferred_slots': { 'ofp': ['morning'], 'long_run': [...], 'intervals': [...], 'tempo': [...], 'long_bike': ['sunday_or_wed'], 'swim': ['wed_evening_or_friday_evening'] },\n  'forbidden': { 'СР вечер': 'интенсивные запрещены (семейный тайм)', 'ПТ поздний вечер': 'только easy / мобилити' },\n  'min_total_hours_per_week': 2,\n  'max_total_hours_per_week': 11\n}",
+          "current_snapshot": "Источник: spring-10k-2027-v2.md, раздел 'ДОСТУПНЫЕ ОКНА НЕДЕЛИ'. Итого ~480–530 мин ≈ 8–9 ч. Сб = 0.",
+          "how_to_fill": [
+            "coach-onboarding при первом заполнении.",
+            "Правит coach-plan-adjust ТОЛЬКО по явному запросу Кирилла.",
+            "Любая правка инкрементит version + пишет updated_at."
+          ]
+        },
+        {
+          "name": "season_progress.json",
+          "path": "~/.hermes/coach/state/season_progress.json",
+          "purpose": "Факт выполнения: actual_metrics по control_points (с goal_id) + сводки по неделям.",
+          "format_example": "{\n  'weeks': { '2026-W42': { 'goal_breakdown': { 'g_run_spring': 6.5, 'g_tri_autumn': 0 }, 'planned_hours': 6.5, 'actual_hours': 6.2 } },\n  'control_points': { 'cp_3k_w4': { 'status': 'pending' } },\n  'deviations': []\n}",
+          "current_snapshot": "W42 — пока только g_run_spring (10К фаза), факт по 4 окт Вс — 13.6К за 70мин.",
+          "how_to_fill": [
+            "fit_ingest при загрузке FIT за дату control_point → пишет actual_metrics в season_progress.control_points[id].",
+            "coach-plan-week после закрытия W_N пишет weeks[iso] сводку + goal_breakdown.",
+            "Вручную: weekly review добавляет deviations / notes."
+          ]
+        },
+        {
+          "name": "overrides.json",
+          "path": "~/.hermes/coach/state/overrides.json",
+          "purpose": "Ручные правки Кирилла на W_N.",
+          "format_example": "{\n  'version': 1,\n  'overrides': [\n    { 'week': '2026-W42', 'add_swim_sessions': 1, 'reorder': [['ПН', 'bassik'], ['ВТ', 'easy']], 'shift_week_start': null, 'reason': 'спина ноет — пропустить ВТ утро', 'created_at': '2026-10-12T20:00:00+00:00' }\n  ]\n}",
+          "current_snapshot": "Файл пустой. Пока правок не было.",
+          "how_to_fill": [
+            "Кирилл голосовой/текстовой командой: 'сдвинь W_N, в среду не могу' → coach-plan-week пишет override.",
+            "Каждый override имеет reason.",
+            "История не очищается."
+          ]
+        },
+        {
+          "name": "fit_store/",
+          "path": "~/.hermes/coach/state/fit_store/",
+          "purpose": "Сырые FIT-файлы. Живут 14 дней, потом удаляются fit_retention.py.",
+          "format_example": "fit_store/2026-10/2026-10-13_running.garmin.fit\nfit_store/index.json: { 'fits': [ { 'id', 'path', 'date', 'type':'running'|'cycling'|'swimming', 'source', 'created_at', 'expires_at' } ] }",
+          "current_snapshot": "Сейчас FIT'ы лежат вне fit_store — вcoach/runs/ и coach/ofp/swim-logs/. Известные: 2026-10-07_sharpening.fit (run), 2026-10-05_pool_swim.fit (swim).",
+          "how_to_fill": [
+            "fit_ingest: 'загрузи FIT за сегодня' — копирует в fit_store/YYYY-MM/, обновляет index.json.",
+            "Если дата FIT совпала с control_point — fit_ingest пишет actual_metrics в season_progress.control_points[id].",
+            "fit_retention раз в неделю удаляет FIT с expires_at < now."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "problems",
+      "kind": "list",
+      "title": "Что сейчас не так (диагноз)",
+      "items": [
+        "9 спортивных skill'ов с тонкими SKILL.md — описывают что делать, но не как общаются между собой.",
+        "Три места для одних и техных фактов: plan-w1.json рядом с w1-mobile-v2.html, cards.md рядом с points-journal.md.",
+        "Skill'ы сами пишут промпты к модели. Python-кода с жёстким контрактом почти нет. Галлюцинации в числах.",
+        "Каждая сессия стартует с нуля: цели, форма, зоны, расписание агент собирает из обрывков MEMORY.md.",
+        "HTML-рендер размазан по 4 skill'ам.",
+        "Нет слоя для долгосрочного плана и его перепланирования.",
+        "Нет места для ручных overrides Кирилла.",
+        "Нет способа загрузить FIT-файл одной командой и получить разбор нужной глубины.",
+        "Нет привязки «тренерского взгляда» к источнику.",
+        "control_points в v6 жили внутри plan-wN.json — неправильно.",
+        "Нет constraints.",
+        "Нет volume_progression.",
+        "v8: одна цель = одна гонка. Реальность: Кирилл хочет 10К весной + олимпийку осенью. Без multiple goals plan_generate не справится — нечего оптимизировать."
+      ]
+    },
+    {
+      "id": "data",
+      "kind": "layer",
+      "title": "Где какие данные лежат — раскладка",
+      "summary": "Каждый файл = одна ответственность. season_plan теперь хранит goals[] и phases с goal_id.",
+      "path": "~/.hermes/coach/state/",
+      "modules": [
+        {
+          "name": "athlete.json",
+          "purpose": "идентичность: цели (несколько), форма, HR-зоны, травмы, adaptation_rates."
+        },
+        {
+          "name": "season_plan.json",
+          "purpose": "goals[], phases[] с goal_id, control_points[] (goal_id или null), races[], adaptation_rates, chosen_allocation, volume_progression_rules."
+        },
+        {
+          "name": "control_points/",
+          "purpose": "индекс для быстрого поиска по дате/типу/goal."
+        },
+        {
+          "name": "constraints.json",
+          "purpose": "weekly_windows + preferred_slots + forbidden + min/max hours/week."
+        },
+        {
+          "name": "season_progress.json",
+          "purpose": "actual_metrics по control_points (с goal_id) + сводки по неделям с goal_breakdown."
+        },
+        {
+          "name": "overrides.json",
+          "purpose": "ручные правки на W_N."
+        },
+        {
+          "name": "fit_store/",
+          "purpose": "сырые FIT. 14 дней."
+        },
+        {
+          "name": "fit_store/index.json",
+          "purpose": "указатель FIT (с type: running|cycling|swimming)."
+        },
+        {
+          "name": "coaching_corpus/",
+          "purpose": "принципы с source."
+        },
+        {
+          "name": "season_plan.archive/",
+          "purpose": "старые season_plan."
+        },
+        {
+          "name": "decisions/",
+          "purpose": "audit-trail: решения + retention."
+        }
+      ]
+    },
+    {
+      "id": "season_plan_shape",
+      "kind": "list",
+      "title": "season_plan.json — структура (v9, с goals[])",
+      "items": [
+        "goals[]: [{id, discipline, race_date, goal_metric, priority, primary}] — цели сезона.",
+        "phases[]: [{id, goal_id, start, end, hours_per_week_target?}] — каждая фаза принадлежит goal (или null для общих).",
+        "transition_phases: явный тип для перехода между goal.",
+        "control_points[]: [{id, goal_id|null, date, what, metric_target, measures, protocol?}].",
+        "races[]: [{goal_id, date, name, start_time}].",
+        "chosen_allocation: {strategy, g_xxx_eff_pct, reason, snapshot_date} — зафиксированное решение Кирилла.",
+        "adaptation_rates[]: per-discipline коэффициенты (используются goal_allocator).",
+        "fit_ingest матчит FIT-дату с CP и пишет actual_metrics в season_progress.control_points[id]."
+      ]
+    },
+    {
+      "id": "constraints",
+      "kind": "layer",
+      "title": "constraints.json — окна, предпочтения, запреты",
+      "summary": "Без этого plan_generate лепит «из фантазий».",
+      "path": "~/.hermes/coach/state/constraints.json",
+      "modules": [
+        {
+          "name": "weekly_windows",
+          "purpose": "по дням недели окна (start, end, duration_min, location)."
+        },
+        {
+          "name": "preferred_slots",
+          "purpose": "по виду — предпочтительные слоты (ofp, long_run, intervals, tempo, long_bike, swim, brick)."
+        },
+        {
+          "name": "forbidden",
+          "purpose": "запреты по видам в конкретные дни."
+        },
+        {
+          "name": "min_total_hours_per_week",
+          "purpose": "нижняя граница."
+        },
+        {
+          "name": "max_total_hours_per_week",
+          "purpose": "верхняя граница."
+        },
+        {
+          "name": "auto_zwift",
+          "purpose": "правила для inline Zwift-поиска внутри plan_generate: {enabled:true, duration_min_max:90, locations:['home_stationary_bike'], kinds:['bike','brick'], focus_must_have_any:['Z2','Z3','intervals','endurance'], candidates_max:3}. Когда slot удовлетворяет — plan_generate дёргает coach-plan-zwift inline, без отдельной команды Кирилла."
+        }
+      ],
+      "rule": "constraints редактируются Кириллом или через coach-plan-adjust с подтверждением. plan_generate только ЧИТАЕТ. auto_zwift управляет тем, что идёт в Zwift-поиск автоматически. По умолчанию enabled=true, ≤ 90 мин, location=home, kind in [bike, brick]. Зима: всё вело дома → почти все bike-слоты получат workout_ref. Лето/путешествия: Кирилл выключает auto_zwift.enabled, slot-ы остаются duration-only."
+    },
+    {
+      "id": "volume",
+      "kind": "flow",
+      "title": "volume_progression + goal_allocator — поведение plan_generate",
+      "steps": [
+        {
+          "n": 1,
+          "name": "Вход сезона",
+          "what": "season_plan.json → goals[], phases[] с goal_id, hours_per_week_target."
+        },
+        {
+          "n": 2,
+          "name": "Вход constraints",
+          "what": "weekly_windows, preferred_slots, forbidden."
+        },
+        {
+          "n": 3,
+          "name": "Normalize",
+          "what": "goal_allocator переводит raw hours → effective_cost hours через adaptation_rates."
+        },
+        {
+          "n": 4,
+          "name": "Candidates",
+          "what": "goal_allocator возвращает 2-3 варианта распределения (primary-приоритет / 60-40 / 50-50) с явным trade-off."
+        },
+        {
+          "n": 5,
+          "name": "Кирилл решает",
+          "what": "Применяется chosen_allocation. phases[].hours_per_week_target обновляется."
+        },
+        {
+          "n": 6,
+          "name": "volume_check",
+          "what": "STOP + diff + согласование при gap."
+        },
+        {
+          "n": 7,
+          "name": "Раскладка",
+          "what": "plan_generate раскладывает по weekly_windows с preferred_slots + запреты."
+        },
+        {
+          "n": 8,
+          "name": "Прогрессия",
+          "what": "Каждая W_N получает hours_target с учётом volume_progression_rules."
+        }
+      ],
+      "key": "Цели делят объём через goal_allocator. Объём — сезонный параметр. plan_generate НЕ фантазирует."
+    },
+    {
+      "id": "lib",
+      "kind": "layer",
+      "title": "Слой 1 · Python toolkit",
+      "summary": "Сюда ходят skill'ы. Модель только отсюда.",
+      "path": "~/.hermes/coach/lib/",
+      "modules": [
+        {
+          "name": "parse_fit.py",
+          "purpose": "FIT → dict."
+        },
+        {
+          "name": "fit_ingest.py",
+          "purpose": "FIT → fit_store/ + (если CP-дата) actual_metrics."
+        },
+        {
+          "name": "fit_retention.py",
+          "purpose": "еженедельно: FIT > 14 дней → удалить."
+        },
+        {
+          "name": "garmin_weight.py",
+          "purpose": "раз в день (cron eae7b0d88b4a): читает последний вес из Garmin. Если новее последней записи в athlete.weight_history — append (source='garmin')."
+        },
+        {
+          "name": "weekly_report.py",
+          "purpose": "athlete + 3 FIT + метрики → сводка недели (с goal_breakdown если целей > 1, +1 строка про вес)."
+        },
+        {
+          "name": "analyze.py",
+          "purpose": "analyze(fit_id, mode, context). mode ∈ {quick, contextual, coaching, lookback}. Lookback берёт CP из season_progress с фильтром по goal_id."
+        },
+        {
+          "name": "plan_adjust.py",
+          "purpose": "«сегодня перегруз» → diff JSON."
+        },
+        {
+          "name": "plan_generate.py",
+          "purpose": "season_plan (goals + phases_for_goals + chosen_allocation) + athlete + constraints + overrides → plan-wN.json с CP-слотами."
+        },
+        {
+          "name": "goal_allocator.py",
+          "purpose": "goals[] + phases[] + adaptation_rates + constraints → candidates[] с явным trade-off. Не выбирает за Кирилла."
+        },
+        {
+          "name": "season_replan.py",
+          "purpose": "новый season_plan.json (с поддержкой goals[]) + diff + archive."
+        },
+        {
+          "name": "volume_check.py",
+          "purpose": "phase_target vs constraints → STOP/OK + suggestion."
+        },
+        {
+          "name": "render_html.py",
+          "purpose": "plan/diff/report → self-contained HTML."
+        },
+        {
+          "name": "ask_model.py",
+          "purpose": "единственная обёртка над LLM + JSON-schema + cited_principle."
+        },
+        {
+          "name": "metrics/",
+          "purpose": "одна метрика = один файл. registry.py + @register."
+        },
+        {
+          "name": "coaching_corpus/",
+          "purpose": "принципы с source. Добавляются olympic-specific (transition, brick, race_pace_under_fatigue)."
+        },
+        {
+          "name": "zwift_search.py",
+          "purpose": "парсит WhatsOnZwift по критериям → candidates[]. Read-only, не хранит state."
+        },
+        {
+          "name": "zwift_sync.py",
+          "purpose": "тонкая обёртка над garmin_tools/zwift_sync.py. URL → workout JSON → Garmin Connect."
+        },
+        {
+          "name": "plan_runtime.py",
+          "purpose": "runtime entry point. generate_plan_with_html(season_week) → plan-wN.json + plan-wN.html. Каждая coach-plan-* skill вызывает его. v19: HTML — обязательная часть выхода."
+        },
+        {
+          "name": "step_builder.py",
+          "purpose": "строит list[step] для каждого subkind. build_structure() для run/bike/swim/brick (warmup/work/cooldown, intervals с reps), ofp_structure() для OFP (упражнения в circuit)."
+        }
+      ],
+      "rule": "Модель только через ask_model.py. fit_retention — единственная, кто удаляет FIT. plan_generate читает constraints, не правит. goal_allocator — только candidates, никогда default. coach-plan-zwift вызывает zwift_search.py (read-only) и zwift_sync.py (write через garmin_tools). coach-plan-* skills вызывают plan_runtime.generate_plan_with_html() — единственная точка где генерится и JSON и HTML. Нет обходного пути."
+    },
+    {
+      "id": "metrics",
+      "kind": "layer",
+      "title": "Точка расширения 1 · метрики",
+      "summary": "Изолированный слой с registry. Новые метрики (brick, transition) добавляются @register.",
+      "path": "~/.hermes/coach/lib/metrics/",
+      "modules": [
+        {
+          "name": "registry.py",
+          "purpose": "@register."
+        },
+        {
+          "name": "_template.py",
+          "purpose": "шаблон."
+        },
+        {
+          "name": "hr_drift.py",
+          "purpose": "HR drift."
+        },
+        {
+          "name": "cadence_30s.py",
+          "purpose": "30s rolling cadence."
+        },
+        {
+          "name": "pace_variability.py",
+          "purpose": "std/mean темпа."
+        },
+        {
+          "name": "training_effect.py",
+          "purpose": "TE aerobic/anaerobic."
+        },
+        {
+          "name": "fatigue_score.py",
+          "purpose": "композит."
+        },
+        {
+          "name": "transition_efficiency.py",
+          "purpose": "скорость трансфера T1/T2 в триатлоне."
+        },
+        {
+          "name": "race_pace_under_fatigue.py",
+          "purpose": "темп 10К после велосипеда — ключевая метрика triathlon."
+        }
+      ],
+      "rule": "Метрика = чистая функция (FIT-dict) → dict. Никакого I/O."
+    },
+    {
+      "id": "retention",
+      "kind": "mapping",
+      "title": "Точка расширения 5 · FIT retention",
+      "rows": [
+        {
+          "pain": "FIT копятся",
+          "fix": "fit_retention.py раз в неделю удаляет FIT > 14 дней."
+        },
+        {
+          "pain": "Нужен raw",
+          "fix": "actual_metrics по CP уже в season_progress."
+        },
+        {
+          "pain": "Хочу сохранить FIT разово",
+          "fix": "Исключение."
+        },
+        {
+          "pain": "Audit",
+          "fix": "decisions/retention-YYYY-MM-DD.json."
+        },
+        {
+          "pain": "Конфиг",
+          "fix": "retention.json: {fit_ttl_days: 14}."
+        }
+      ]
+    },
+    {
+      "id": "analyze",
+      "kind": "flow",
+      "title": "Точка расширения 4 · analyze (4 уровня)",
+      "steps": [
+        {
+          "n": 1,
+          "name": "Загрузка / выбор",
+          "what": "fit_ingest: FIT → fit_store/. fit_lookup: FIT или CP (с фильтром goal_id)."
+        },
+        {
+          "n": 2,
+          "name": "Выбор уровня",
+          "what": "mode ∈ {quick, contextual, coaching, lookback}. По умолчанию quick."
+        },
+        {
+          "n": 3,
+          "name": "quick",
+          "what": "parse_fit + одна метрика."
+        },
+        {
+          "n": 4,
+          "name": "contextual",
+          "what": "parse_fit + 3 предыдущих FIT + план дня + overrides. Корреляции Python."
+        },
+        {
+          "n": 5,
+          "name": "coaching",
+          "what": "contextual + corpus. ask_model с cited_principle."
+        },
+        {
+          "n": 6,
+          "name": "lookback",
+          "what": "season_progress.control_points.filter(goal_id|measures) → тренды. При двух целях — отдельный lookback по каждой."
+        },
+        {
+          "n": 7,
+          "name": "Валидация",
+          "what": "ask_model валидирует. coaching/lookback без cited_principle — REJECT."
+        },
+        {
+          "n": 8,
+          "name": "Audit + выход",
+          "what": "decisions/<date>-<slot>-analyze.json. Render."
+        }
+      ],
+      "key": "4 уровня = разные слои вычислений. FIT не нужен для lookback. С несколькими целями lookback можно фильтровать по goal_id."
+    },
+    {
+      "id": "corpus",
+      "kind": "layer",
+      "title": "Под-слой · coaching_corpus",
+      "summary": "Ground truth. С triathlon добавляются transition / brick / race_pace_under_fatigue.",
+      "path": "~/.hermes/coach/lib/coaching_corpus/",
+      "modules": [
+        {
+          "name": "index.json",
+          "purpose": "список принципов."
+        },
+        {
+          "name": "hr_drift.json",
+          "purpose": "HR drift."
+        },
+        {
+          "name": "cadence.json",
+          "purpose": "каденс."
+        },
+        {
+          "name": "long_run.json",
+          "purpose": "длинная."
+        },
+        {
+          "name": "intervals.json",
+          "purpose": "интервалы."
+        },
+        {
+          "name": "recovery.json",
+          "purpose": "recovery HR drop."
+        },
+        {
+          "name": "taper.json",
+          "purpose": "taper."
+        },
+        {
+          "name": "lookback.json",
+          "purpose": "интерпретация трендов по CP."
+        },
+        {
+          "name": "brick_workout.json",
+          "purpose": "принципы brick-сессий для triathlon."
+        },
+        {
+          "name": "transition.json",
+          "purpose": "T1/T2 эффективность, gear changes, обувь-клипсы."
+        },
+        {
+          "name": "race_pace_under_fatigue.json",
+          "purpose": "бег 10К после 40К вело — специфика олимпийки."
+        },
+        {
+          "name": "adaptation_rates.json",
+          "purpose": "per-discipline коэффициенты восприимчивости (HR-cost нормирован)."
+        }
+      ],
+      "rule": "{id, title, topics, source, principle, application}. Без source и application не регистрируется."
+    },
+    {
+      "id": "replan",
+      "kind": "mapping",
+      "title": "Точка расширения 2 · replan сезона",
+      "rows": [
+        {
+          "pain": "Вход: season_plan",
+          "fix": "state/season_plan.json целиком (с goals[])."
+        },
+        {
+          "pain": "Вход: выполнено",
+          "fix": "season_progress.json."
+        },
+        {
+          "pain": "Вход: форма и фаза",
+          "fix": "athlete.json + fatigue_score + lookback (per goal)."
+        },
+        {
+          "pain": "Вход: причина",
+          "fix": "reason: 'illness_2w' / 'travel_block' / 'goal_shift' / 'overreached' / 'increase_volume' / 'decrease_volume' / 'add_goal' / 'drop_goal' / 'swap_goal' / 'change_allocation'."
+        },
+        {
+          "pain": "Вход: до цели",
+          "fix": "goals[].race_date, weeks_to_race для primary."
+        },
+        {
+          "pain": "Выход",
+          "fix": "новый season_plan.json + diff (включая chosen_allocation, если менялось)."
+        },
+        {
+          "pain": "Constraints check",
+          "fix": "replan сверяет hours_per_week_target с constraints.max."
+        },
+        {
+          "pain": "Allocation check",
+          "fix": "replan при изменении goals или adaptation_rates вызывает goal_allocator для новых candidates."
+        },
+        {
+          "pain": "История",
+          "fix": "season_plan.archive/."
+        },
+        {
+          "pain": "Sanity",
+          "fix": "weeks_to_race, гонки на месте, volume рост ≤10%/нед, CP не уезжают за горизонт гонки, transition-фазы имеют длительность ≥ 3 нед."
+        }
+      ]
+    },
+    {
+      "id": "weekgen",
+      "kind": "flow",
+      "title": "Точка расширения 3 · W_N: season_plan + constraints + overrides + inline Zwift",
+      "steps": [
+        {
+          "n": 1,
+          "name": "Вход сезона",
+          "what": "season_plan.json → phase (goal_id), hours_target, CP_in_range, focus (например 'long Z2' / 'threshold intervals' / 'bike endurance')."
+        },
+        {
+          "n": 2,
+          "name": "Вход формы",
+          "what": "athlete.json + weekly_report (как прошла ПРЕДЫДУЩАЯ неделя) → fatigue_score, recovery_hr_drop."
+        },
+        {
+          "n": 3,
+          "name": "Вход constraints",
+          "what": "constraints.json → weekly_windows, preferred_slots, forbidden, auto_zwift (правила для inline Zwift)."
+        },
+        {
+          "n": 4,
+          "name": "Размещение slot-ов",
+          "what": "plan_generate раскладывает focus-недели по weekly_windows + preferred_slots. Каждый slot имеет: kind, duration_min, day, time, location, focus_tags."
+        },
+        {
+          "n": 5,
+          "name": "Inline Zwift check",
+          "what": "Для каждого bike/brick-слота plan_generate проверяет constraints.auto_zwift: {duration_min_max:90, location:'home_stationary_bike', kind:['bike','brick'], focus_must_have:['Z2','Z3','intervals']}. Если совпало → авто-дёргает coach-plan-zwift inline. Иначе → slot без workout_ref."
+        },
+        {
+          "n": 6,
+          "name": "Inline Zwift candidates",
+          "what": "coach-plan-zwift.search(criteria из slot.focus_tags + duration_min) → candidates[] (2-4). plan_generate пакетно собирает все bike-слоты требующие Zwift, рендерит ОДИН HTML с cards всех slot-ов."
+        },
+        {
+          "n": 7,
+          "name": "Решение Кирилла",
+          "what": "Кирилл голосует по каждому slot (или 'skip — оставить пустым'). Решения в decisions/<date>-<slot>-zwift.json. Если 'skip' — slot остаётся без workout_ref, Кирилл сам выберет workout позже (или сделает на улице)."
+        },
+        {
+          "n": 8,
+          "name": "workout_ref в slot",
+          "what": "Для каждого выбранного candidate: zwift_sync → Garmin Connect → workout_ref = {url, garmin_workout_id, scheduled_date} записывается в plan-wN.json в соответствующий slot."
+        },
+        {
+          "n": 9,
+          "name": "Overrides merge",
+          "what": "merge overrides + проверка конфликтов с focus, CP-датами и forbidden. Slot с workout_ref защищён от override (Кирилл должен явно 'отвязать workout')."
+        },
+        {
+          "n": 10,
+          "name": "Выход",
+          "what": "plan-wN.json со всеми slots (часть с workout_ref, часть без) + decisions/audit + render_html.py → wN-mobile.html. Один артефакт, всё сразу."
+        }
+      ],
+      "key": "ОДИН этап планирования. plan_generate раскладывает focus по окнам + INLINE дёргает coach-plan-zwift для bike/brick-слот-ов удовлетворяющих constraints.auto_zwift. Кирилл получает готовый план с workout_ref-ами, без отдельного шага 'искать Zwift'. Если Кирилл хочет перевыбрать workout — команда 'переподбери slot X', plan_generate передаёт в coach-plan-zwift заново. Это НЕ разорванный двухшаговый процесс."
+    },
+    {
+      "id": "zwift_search",
+      "kind": "flow",
+      "title": "Точка расширения 5 · поиск Zwift-тренировок по критериям",
+      "steps": [
+        {
+          "n": 1,
+          "name": "Запрос",
+          "what": "Кирилл говорит «нужна 45-мин Z2-вело на завтра». Или из plan_generate: 'нужен 60мин Z2-bike слот' с критериями. Skill coach-plan-zwift."
+        },
+        {
+          "n": 2,
+          "name": "Парсинг критериев",
+          "what": "criteria = {discipline, duration_min, zones[], workout_type, tags[]}. Один или комбинация."
+        },
+        {
+          "n": 3,
+          "name": "Скрапинг",
+          "what": "lib/zwift_search.py парсит WhatsOnZwift. Возвращает candidates[] 2-4 варианта (НЕ 'так и штук')."
+        },
+        {
+          "n": 4,
+          "name": "Презентация",
+          "what": "Рендер HTML с cards (заголовок, длительность, описание, ссылка). Кирилл видит, голосует."
+        },
+        {
+          "n": 5,
+          "name": "Выбор",
+          "what": "«беру вариант 2» (голосовое). Решение в decisions/<date>-<slot>-zwift.json."
+        },
+        {
+          "n": 6,
+          "name": "Конверсия",
+          "what": "lib/zwift_sync.py (bridge к garmin_tools/zwift_sync.py) → workout JSON → Garmin Connect. workout_ref в plan-wN.json."
+        },
+        {
+          "n": 7,
+          "name": "Расписание",
+          "what": "plan_generate обновляет slot: kind='bike'|'brick', workout_ref={url, garmin_workout_id, scheduled_date}."
+        },
+        {
+          "n": 8,
+          "name": "Выполнение",
+          "what": "Tacx / Garmin workout на велостанке → FIT → fit_ingest → season_progress."
+        }
+      ],
+      "key": "Zwift search — часть coach-plan-week. plan_generate не выдумывает структуру workout, а через coach-plan-zwift ищет готовую. Кирилл голосует. Никакого ручного копирования."
+    },
+    {
+      "id": "skills",
+      "kind": "layer",
+      "title": "Слой 2 · Skills",
+      "summary": "Схема coach-<area>-<verb>. Старые имена — aliases.",
+      "path": "~/.hermes/skills/",
+      "skills": [
+        {
+          "name": "coach-plan-week",
+          "uses": [
+            "plan_generate",
+            "render_html"
+          ],
+          "aliases": [
+            "weekly-helper",
+            "weekly-card-builder"
+          ]
+        },
+        {
+          "name": "coach-plan-season",
+          "uses": [
+            "season_replan",
+            "goal_allocator",
+            "render_html"
+          ],
+          "aliases": [
+            "plan-present"
+          ]
+        },
+        {
+          "name": "coach-plan-adjust",
+          "uses": [
+            "weekly_report",
+            "plan_adjust",
+            "constraints read/write"
+          ],
+          "aliases": [
+            "coaching-running"
+          ]
+        },
+        {
+          "name": "coach-fit-ingest",
+          "uses": [
+            "fit_ingest"
+          ],
+          "aliases": [
+            "garmin-fit-inspect"
+          ]
+        },
+        {
+          "name": "coach-fit-review",
+          "uses": [
+            "analyze(mode)",
+            "ask_model"
+          ],
+          "aliases": [
+            "garmin-fit-inspect"
+          ]
+        },
+        {
+          "name": "coach-fit-trend",
+          "uses": [
+            "analyze(mode='lookback')",
+            "render"
+          ],
+          "aliases": [
+            "garmin-running-analysis",
+            "coach-trend-lookback"
+          ]
+        },
+        {
+          "name": "coach-onboarding",
+          "uses": [
+            "импорт архивов → athlete.json + constraints.json + adaptation_rates"
+          ],
+          "aliases": [
+            "coach-onboarding"
+          ]
+        },
+        {
+          "name": "coach-plan-zwift",
+          "uses": [
+            "lib.zwift_search",
+            "lib.zwift_sync",
+            "lib.render_html"
+          ],
+          "aliases": []
+        }
+      ],
+      "rule": "area ∈ {plan, fit}, verb ∈ {week, season, adjust, ingest, review, trend, onboarding}. coach-plan-adjust — единственный, кто правит constraints (с подтверждением). coach-plan-season — единственный, кто вызывает goal_allocator. coach-plan-zwift — единственный, кто обращается к WhatsOnZwift.",
+      "preamble": "Pre-amble наследуется всеми: «Ты строго в рамках athlete.json + season_plan.json + constraints.json + вывод указанной функции. Любой факт вне — откажись. В coach-fit-review/coach-fit-trend каждое утверждение требует cited_principle.»"
+    },
+    {
+      "id": "flow",
+      "kind": "flow",
+      "title": "Scoreboard-флоу — каждый запрос проходит одну лестницу",
+      "steps": [
+        {
+          "n": 1,
+          "name": "Hook",
+          "what": "load_athlete_context: athlete + season_plan (goals, phases_for_goals, chosen_allocation) + constraints + last override + last decisions."
+        },
+        {
+          "n": 2,
+          "name": "Skill-route",
+          "what": "По смыслу → 1 из 7 coach-* skill'ов. Скилл НЕ пишет промпт."
+        },
+        {
+          "n": 3,
+          "name": "Загрузка?",
+          "what": "«загрузи FIT» → fit_ingest.py → fit_store/ + (если CP-дата) actual_metrics."
+        },
+        {
+          "n": 4,
+          "name": "Данные + метрики",
+          "what": "Python lib. W_N: goal_allocator (если ещё не выбран) + volume_check + constraints + CP-слоты. Analyze: tier по доступности + goal_id-фильтр."
+        },
+        {
+          "n": 5,
+          "name": "Allocation?",
+          "what": "«как распределить объём между целями» → goal_allocator.py → candidates[] с trade-off → Кирилл выбирает → chosen_allocation в season_plan."
+        },
+        {
+          "n": 6,
+          "name": "Inline Zwift для bike-слотов",
+          "what": "plan_generate проверяет constraints.auto_zwift. Для каждого bike/brick-слота удовлетворяющего правилу (≤90 min, home_stationary_bike, focus) — дёргает coach-plan-zwift inline, собирает candidates, Кирилл голосует голосом, zwift_sync пишет workout_ref в plan-wN.json. Один шаг, не два."
+        },
+        {
+          "n": 7,
+          "name": "Retention?",
+          "what": "cron (еженедельно) → fit_retention.py → удалить FIT > 14 дней."
+        },
+        {
+          "n": 8,
+          "name": "Replan?",
+          "what": "«перепланируй сезон» → season_replan.py → новый season_plan.json + constraints check + allocation check + archive старого."
+        },
+        {
+          "n": 9,
+          "name": "Модель",
+          "what": "ask_model.py с JSON-schema. coach-fit-review/coach-fit-trend → обязателен cited_principle."
+        },
+        {
+          "n": 10,
+          "name": "Audit + выход",
+          "what": "decisions/<date>-<slot>-{analyze,w,replan,retention,allocation}.json. Render: JSON + self-contained HTML."
+        }
+      ],
+      "key": "Всё, что считается — Python. Интерпретации — ask_model + JSON-schema + cited_principle. Несколько целей: распределение через goal_allocator (candidates, не default). control_points в season_plan. constraints = рамка. FIT retention = 14 дней."
+    },
+    {
+      "id": "first_step",
+      "kind": "checklist",
+      "title": "Минимальный шаг (1–2 дня работы)",
+      "items": [
+        "state/athlete.json (включая adaptation_rates)",
+        "state/season_plan.json: goals[] (g_run_spring, g_tri_autumn) + 11 phases с goal_id + 5 control_points (4 к goal, 1 общий) + races[] + chosen_allocation",
+        "state/constraints.json (weekly_windows + preferred_slots с swim/long_bike/brick)",
+        "state/season_progress.json (со структурой под control_points[] с goal_id и weeks[].goal_breakdown)",
+        "state/overrides.json",
+        "state/fit_store/ + index.json + retention.json (fit_ttl_days: 14)",
+        "lib/fit_ingest.py + lib/fit_retention.py",
+        "lib/garmin_weight.py (1-строчный no-op если новых измерений нет)",
+        "lib/goal_allocator.py (candidates[] с trade-off)",
+        "lib/volume_check.py",
+        "lib/plan_generate.py с поддержкой goals[]",
+        "lib/season_replan.py с reason='add_goal' / 'change_allocation' / etc.",
+        "lib/{parse_fit, plan_adjust, render_html, ask_model}.py",
+        "lib/metrics/{registry, _template, hr_drift, cadence_30s, fatigue_score, transition_efficiency, race_pace_under_fatigue}.py",
+        "lib/coaching_corpus/ с brick_workout.json, transition.json, race_pace_under_fatigue.json, adaptation_rates.json + lookback.json",
+        "lib/analyze.py с 4 mode (с goal_id-фильтром в lookback)",
+        "Переименовать skill'ы по схеме coach-<area>-<verb> + aliases",
+        "Hook load_athlete_context.py",
+        "Cron: weekly → fit_retention.py",
+        "Прогнать 7 типовых: (а) «загрузи FIT за CP-дату», (б) «разбор FIT (quick)», (в) «разбор (coaching)», (г) «тренд по g_run_spring за 12 нед», (д) «goal_allocator: кандидаты для 10К+tri», (е) «сгенерируй W_N», (ж) «replan: add_goal=triathlon»",
+        "lib/zwift_search.py (scraping whatsonzwift.com по критериям)",
+        "lib/zwift_sync.py (bridge к garmin_tools/zwift_sync.py)",
+        "skills/coach-plan-zwift.md"
+      ]
+    },
+    {
+      "id": "helper",
+      "kind": "details",
+      "title": "Помощник — что говорить агенту в каждой ситуации (кликни, чтобы развернуть)",
+      "summary": "Эта машинерия выглядит страшно, но в работе тебе нужно знать только фразы ниже. Каждая фраза → конкретный skill → конкретный результат. Если не помнишь фразу — скажи «помощь», агент покажет.",
+      "files": [
+        {
+          "name": "Разбор тренировки",
+          "path": "→ coach-fit-review",
+          "purpose": "Ты отбегал и хочешь понять, что произошло.",
+          "format_example": "Скажи одну из фраз:",
+          "current_snapshot": "• «разбери FIT за сегодня» — quick, только цифры.\n• «проанализируй вчерашнюю тренировку» — quick + план дня.\n• «что скажет тренер про каденс» — coaching: модель ссылается на принцип из corpus.\n• «как это стыкуется с прошлой неделей» — contextual: 3 предыдущих + override.\n\nКоманда: «загрузи FIT за <дата>» — кладёт FIT в fit_store/, матчит с control_point если дата совпала.\n\nАлиасы: «разбери FIT», «проанализируй», «что скажет тренер», «посмотри последнюю».",
+          "how_to_fill": [
+            "Если хочешь тренерский взгляд — всегда говори «как тренер» или «со ссылкой на принципы».",
+            "Если FIT не загружен — скажи «загрузи FIT за сегодня» ПЕРЕД разбором.",
+            "Если результат не сходится с ощущениями — «покажи decisions/<slot>.json» — откроется полный аудит."
+          ]
+        },
+        {
+          "name": "Планирование недели",
+          "path": "→ coach-plan-week",
+          "purpose": "Сгенерировать или поправить план на текущую/следующую неделю.",
+          "format_example": "Скажи:",
+          "current_snapshot": "• «собери план на следующую неделю» — plan_generate с goals+constraints.\n• Inline Zwift: если в constraints.auto_zwift включено и недельный план содержит bike/brick-слот ≤ 90 мин на home_stationary_bike, plan_generate САМ дёргает coach-plan-zwift inline. Ты получаешь план со ссылками на workouts, голосуешь по каждому slot одним из списком (или 'skip'). Один этап.\n• «добавь в эту среду бассейн» — override.\n• «сдвинь длинный с воскресенья на субботу» — override.\n• «покажи план на эту неделю» — рендер plan-wN.json.\n• «переподбери workout на слот X» — coach-plan-zwift заново для конкретного слота.\n\nЕсли volume_check сработал: «покажи кандидатов» → goal_allocator → выбор.\n\nАлиасы: «собери неделю», «сгенерируй W_N», «что в плане», «поправь план», «найди Zwift на среду».\n\nВЫХОД: всегда пара state/plan-wN.json + state/plan-wN.html (v19). Файл отправляется в Telegram или открывается двойным тапом.",
+          "how_to_fill": [
+            "Overrides требуют reason. Без причины — нет override.",
+            "Если constraints не совпадают с реальностью — скажи «обнови constraints: ...» — coach-plan-adjust спросит подтверждение.",
+            "Контрольные точки (TT) проставляются автоматически из season_plan в нужную дату. Не двигай их override'ом — для этого season_replan."
+          ]
+        },
+        {
+          "name": "Долгосрочный план и цели",
+          "path": "→ coach-plan-season",
+          "purpose": "Добавить/убрать цель, перепланировать сезон, посмотреть горизонт.",
+          "format_example": "Скажи:",
+          "current_snapshot": "• «покажи сезонный план» — рендер phases с goal_id.\n• «добавь цель: олимпийка 12.09.2027» — replan с reason='add_goal'.\n• «убери цель триатлона» — replan с reason='drop_goal'.\n• «как перераспределить объём между 10К и три?» — goal_allocator → candidates → Кирилл выбирает.\n• «сдвинь гонку 10К на неделю позже» — replan с reason='goal_shift'.\n\nАлиасы: «перепланируй сезон», «replan», «смени цель», «как поделить часы между целями».",
+          "how_to_fill": [
+            "Любое изменение goals[] = season_replan. Не править 'concepts' руками.",
+            "replan сначала вызывает goal_allocator, потом спрашивает Кирилла о chosen_allocation, потом обновляет season_plan.json.",
+            "Старые версии сезона автоматически уходят в season_plan.archive/. Не удалять вручную."
+          ]
+        },
+        {
+          "name": "Контрольные точки (TT)",
+          "path": "→ coach-fit-review (lookback) + coach-plan-season",
+          "purpose": "Как устроены TT в плане и как их результат влияет на план.",
+          "format_example": "control_points (TT) живут в season_plan.json. В plan-wN они проявляются как обязательные слоты в нужную дату. fit_ingest матчит FIT-дату и пишет actual_metrics в season_progress.",
+          "current_snapshot": "Примеры (из текущего снапшота):\n• cp_3k_w4 (06.11.2026) — 3К на время, цель 14:00\n• cp_5k_w8 (04.12.2026) — 5К max, цель 22:30\n• cp_olympic_sim_w32 (31.07.2027) — Olympic-distance brick для триатлона\n• cp_general_hr_drift (15.12.2026) — общий (без goal_id)\n\nКоманды:\n• «когда следующий TT» — список ближайших control_points.\n• «как я бегал 3К в прошлый раз» — lookback по cp_3k_*, без FIT.\n• «как шла подготовка к TT» — lookback за N нед до даты CP.\n• «проанализируй вчерашнюю» (если вчера был TT) — coach-fit-review, режим auto=coaching.",
+          "how_to_fill": [
+            "TT нельзя перенести override'ом. Для переноса — «сдвинь cp_3k_w4 на 13.11» → season_replan с reason='control_point_shift'.",
+            "Проваленный TT (время хуже цели) не останавливает план автоматически. Кирилл решает: оставить фазу, удлинить, или replan."
+          ]
+        },
+        {
+          "name": "Состояние и форма",
+          "path": "→ coach-fit-review (lookback) + coach-plan-adjust",
+          "purpose": "Как я сейчас в форме? Как менялась? Как менялся вес?",
+          "format_example": "Скажи:",
+          "current_snapshot": "• «какая у меня форма сейчас» — weekly_report текущей недели.\n• «как форма менялась за 8 недель» — lookback по метрикам из season_progress.control_points + trends по weight_history.\n• «покажи тренд веса» — последние N точек weight_history.\n• «HR drift на длинных — норма?» — coach-fit-review, режим contextual, метрика hr_drift.\n• «VO2max по Garmin за 12 нед» — coach-fit-trend (включает Garmin-прокси).\n\nВсе ответы стартуют с одного и того же pre-amble: цели, форма, тренд, HR-зоны, расписание. Не нужно каждый раз спрашивать.",
+          "how_to_fill": [
+            "Если в weekly_report что-то не сходится — «покажи solutions/<slot>.json».",
+            "Вес: «я взвесился — X кг» → coach-plan-adjust пишет в weight_history."
+          ]
+        },
+        {
+          "name": "Конфликт: план vs реальность",
+          "path": "→ coach-plan-adjust / coach-plan-season",
+          "purpose": "Когда реальность расходится с планом (болезнь, поездка, перегруз, нехватка времени).",
+          "format_example": "Скажи:",
+          "current_snapshot": "• «сегодня был перегруз — что делать с остатком недели» — plan_adjust: diff JSON по оставшимся слотам.\n• «я заболел на 5 дней» — replan с reason='illness_2w' → откат, новые control_points.\n• «уезжаю в отпуск 14–21 декабря, окна в hotel-станке 45 мин утром» — обновить constraints + replan.\n• «объём не влезает в окна — покажи кандидатов» — goal_allocator → candidates[] → выбираешь.\n• «в среду вечером не могу интенсивные» — обновить constraints.forbidden.\n\nАлиасы: «подкрути план», «replan», «сдвинь», «объём не влезает», «перераспредели».",
+          "how_to_fill": [
+            "Всегда начинай с описания причины, а не с готового решения. Агент сам подберёт replan reason.",
+            "Если нужна помощь выбрать между trade-offs — скажи «покажи trade-off»."
+          ]
+        },
+        {
+          "name": "Под капотом: audit и решения",
+          "path": "→ напрямую к decisions/",
+          "purpose": "Если хочешь проверить, почему агент решил так, а не иначе.",
+          "format_example": "Каждое решение моделью и каждый retention-проход логируется в ~/.hermes/coach/decisions/. Файлы immutable — записи никогда не перезаписываются, только добавляются новые.",
+          "current_snapshot": "Структура: decisions/YYYY-MM-DD-<slot>-<kind>.json\nПримеры:\n• decisions/2026-10-13-19-30-analyze.json — разбор FIT с cited_principle\n• decisions/2026-10-13-02-00-retention.json — что удалено из fit_store/\n• decisions/2026-10-12-20-00-w.json — генерация plan-wN.json\n• decisions/2026-10-11-19-45-replan.json — сезонный replan\n\nКоманда: «покажи последние 3 decisions» — список + краткое summary.\n\nСодержимое каждого файла:\n• input_hash (хэш входа: FIT + context)\n• prompt_hash (хэш промпта к модели)\n• output (полный ответ модели)\n• sources / cited_principle (на что сослалась модель)\n• timestamp\n\nЕсли что-то «агент уносит» — открой последний decision и увидишь, что именно модель вернула и на каких данных.",
+          "how_to_fill": [
+            "decisions/ — append-only. Не редактировать руками.",
+            "Если решение хочется откатить — это через новый decision (replan / override / constraints change), не правкой старого."
+          ]
+        },
+        {
+          "name": "Забыл фразу — что делать",
+          "path": "→ coach-onboarding (помощь)",
+          "purpose": "Паника: «не помню как пользоваться».",
+          "format_example": "Скажи одну из:",
+          "current_snapshot": "• «помощь» — список типовых сценариев с фразами.\n• «покажи команды» — все доступные skill'ы с триггерами.\n• «объясни как работает coach-fit-review» — справка по конкретному skill'у.\n• «что ты умеешь» — общий список возможностей.\n\nНикаких навыков не нужно — помощник помнит контекст и подскажет фразу под ситуацию.",
+          "how_to_fill": [
+            "Эта HTML-страница — твоя главная шпаргалка. Открывается двойным тапом из Downloads/Files."
+          ]
+        }
+      ]
+    }
+  ]
+}

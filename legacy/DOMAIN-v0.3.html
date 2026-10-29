@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Coach App — domain v0.3: слоты, оборудование, один план</title>
+<style>
+  :root {
+    --bg: #fdf6ed; --card-bg: #fffefb; --ink: #1a1a1a; --muted: #6a6056; --faint: #9a9085;
+    --border: #e6dac4; --coral: #ff6b5a; --teal: #14b8a6; --mustard: #d4a017;
+    --terra: #c2410c; --sky: #0284c7; --grass: #65a30d; --code-bg: #f4ede0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.55; font-size: 16px; padding-bottom: 60px; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  header { padding: 20px 16px 14px; border-bottom: 1px solid var(--border); background: var(--card-bg); }
+  header h1 { font-size: 20px; font-weight: 700; }
+  header .sub { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+  header .meta { font-size: 11px; color: var(--faint); margin-top: 8px; }
+  .chg { background: #fff4e8; border: 1px solid #ffd9a8; border-radius: 10px; padding: 10px 12px; font-size: 13.5px; margin-top: 10px; }
+  .chg b { display: block; margin-bottom: 3px; color: var(--terra); }
+
+  nav { position: sticky; top: 0; z-index: 10; background: rgba(253,246,237,0.96); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; padding: 8px 12px; scrollbar-width: none; }
+  nav::-webkit-scrollbar { display: none; }
+  nav a { display: inline-block; font-size: 12px; color: var(--muted); text-decoration: none; padding: 5px 10px; margin-right: 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--card-bg); }
+
+  main { padding: 0 14px; max-width: 780px; margin: 0 auto; }
+  section { margin-top: 32px; scroll-margin-top: 60px; }
+  .h2 { display: flex; align-items: baseline; gap: 9px; font-size: 17px; font-weight: 700; padding-bottom: 7px; border-bottom: 2px solid var(--ink); margin-bottom: 14px; }
+  .h2 .n { font-size: 12px; color: var(--coral); font-weight: 700; }
+  h3 { font-size: 15px; font-weight: 700; margin: 20px 0 8px; }
+  h4 { font-size: 12px; font-weight: 700; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  p { font-size: 15px; margin-bottom: 10px; }
+  ul, ol { margin: 0 0 12px; padding-left: 20px; }
+  li { font-size: 14.5px; margin-bottom: 5px; }
+
+  .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+  .card > .ct { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; margin-bottom: 3px; flex-wrap: wrap; }
+  .card > .ct .tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 999px; background: var(--code-bg); color: var(--muted); }
+  .role { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+
+  .fld { border-top: 1px dashed var(--border); padding: 7px 0; }
+  .fld:first-of-type { border-top: none; }
+  .fld .row1 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; }
+  .fname { font-size: 13.5px; font-weight: 700; }
+  .ftype { font-size: 11.5px; color: var(--sky); background: #e8f3fb; padding: 1px 6px; border-radius: 4px; }
+  .fdesc { font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+  .fdesc em { color: var(--terra); font-style: normal; font-weight: 600; }
+
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; overflow-x: auto; font-size: 12px; line-height: 1.5; margin: 8px 0 12px; -webkit-overflow-scrolling: touch; }
+  pre code { white-space: pre; }
+  .inline { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+
+  .note { border-left: 3px solid var(--sky); background: #f0f8fd; padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 14px; margin: 10px 0 14px; }
+  .warn { border-left: 3px solid var(--coral); background: #fff2ef; padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 14px; margin: 10px 0 14px; }
+  .dec { border-left: 3px solid var(--grass); background: #f3f9ec; padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 14px; margin: 10px 0 14px; }
+  .note b, .warn b, .dec b { display: block; margin-bottom: 3px; }
+
+  .tw { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 8px 0 14px; position: relative; }
+  table { border-collapse: collapse; width: 100%; min-width: 440px; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; background: var(--code-bg); }
+  td code { font-size: 11.5px; }
+  td.n { white-space: nowrap; color: var(--faint); }
+  td b { font-weight: 700; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 12px; }
+  .chip { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; background: var(--code-bg); border: 1px solid var(--border); color: var(--muted); }
+  .chip.c { background: #ffeceb; border-color: #ffc9c3; color: var(--terra); }
+  .chip.t { background: #e6f7f5; border-color: #b6e8e3; color: #0b7d71; }
+  .chip.m { background: #fdf3dd; border-color: #eddca8; color: #8a6a06; }
+  .chip.s { background: #e8f3fb; border-color: #c2e2f5; color: #026092; }
+  .chip.g { background: #eff7e6; border-color: #cfe5b8; color: #4a7a12; }
+
+  .casc { display: flex; flex-direction: column; margin: 12px 0 18px; }
+  .casc .lvl { background: var(--card-bg); border: 1.5px solid var(--ink); border-radius: 10px; padding: 10px 13px; position: relative; }
+  .casc .lvl .nm { font-size: 14.5px; font-weight: 700; }
+  .casc .lvl .ds { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+  .casc .lvl .ov { font-size: 12px; margin-top: 5px; color: var(--terra); }
+  .casc .gap { height: 20px; position: relative; }
+  .casc .gap::before { content: '↓ перекрывает'; position: absolute; left: 13px; top: 1px; font-size: 10.5px; color: var(--terra); font-weight: 700; }
+
+  .chain { display: flex; flex-direction: column; margin: 12px 0 18px; }
+  .chain .node { background: var(--card-bg); border: 1.5px solid var(--ink); border-radius: 10px; padding: 10px 13px; position: relative; }
+  .chain .node .nm { font-size: 14.5px; font-weight: 700; }
+  .chain .node .ds { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+  .chain .gap { height: 22px; position: relative; }
+  .chain .gap::before { content: '↓'; position: absolute; left: 15px; top: 0; font-size: 14px; color: var(--terra); font-weight: 700; }
+  .chain .node.l1 { border-color: var(--terra); }
+  .chain .node.l2 { border-color: var(--mustard); }
+  .chain .node.l3 { border-color: var(--sky); }
+  .chain .node.l4 { border-color: var(--teal); }
+  .chain .node.l5 { border-color: var(--grass); }
+
+  .flat { display: grid; grid-template-columns: 26px 1fr; gap: 0 8px; font-size: 13px; }
+  .flat .i { color: var(--faint); font-size: 11px; padding-top: 2px; text-align: right; }
+  .flat .r { border-left: 2px solid var(--border); padding: 3px 0 3px 9px; margin-bottom: 2px; }
+  .flat .r.w { border-left-color: var(--terra); }
+  .flat .r.r { border-left-color: var(--sky); }
+  .flat .r.n { border-left-color: var(--mustard); }
+
+  .bar { display: flex; height: 24px; border-radius: 6px; overflow: hidden; margin: 6px 0 10px; font-size: 10.5px; }
+  .bar > div { display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; overflow: hidden; white-space: nowrap; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 26px 0 0; }
+  .end { text-align: center; font-size: 12px; color: var(--faint); padding: 26px 0 10px; }
+
+  @media (max-width: 560px) {
+    body { font-size: 15px; }
+    main { padding: 0 11px; }
+    header { padding: 16px 14px 12px; }
+    header h1 { font-size: 18px; }
+    p { font-size: 14.5px; }
+    li { font-size: 14px; }
+    pre { font-size: 11px; padding: 10px; }
+    table { min-width: 380px; font-size: 12.5px; }
+    th, td { padding: 6px 8px; }
+    .tw::after { content: '→ свайп'; position: absolute; right: 2px; bottom: 2px; font-size: 9.5px; color: var(--faint); background: var(--card-bg); padding: 0 4px; border-radius: 4px; pointer-events: none; }
+    .h2 { font-size: 16px; }
+    .fdesc { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Domain v0.3 — слоты, оборудование, один план</h1>
+  <div class="sub">Слоты с наследованием Season → Phase → Week. Реестр оборудования. ОФП — обычная тренировка. Один активный план, планы идут последовательно.</div>
+  <div class="meta">v0.3 · к доменной модели v0.2 · 25.10.2026</div>
+  <div class="chg">
+    <b>Что изменилось против v0.2</b>
+    Слоты получили <b>оборудование</b> и трёхуровневое наследование: сезон → фаза → неделя. <b>Планы последовательные</b>, один активный; спорт внутри плана — не свойство плана, а его содержимое. <b>ОФП — обычная тренировка</b> с шагами-упражнениями из каталога. Добавлена <b>нормированная нагрузка</b> как общий бюджет плана.
+  </div>
+</header>
+
+<nav>
+  <a href="#plan">Один план</a>
+  <a href="#slots">Слоты</a>
+  <a href="#equip">Оборудование</a>
+  <a href="#casc">Наследование</a>
+  <a href="#load">Нагрузка</a>
+  <a href="#ofp">ОФП</a>
+  <a href="#cat">Каталог упражнений</a>
+  <a href="#step">Шаг</a>
+  <a href="#week">Неделя</a>
+  <a href="#rules">Правила</a>
+  <a href="#holes">Дыры</a>
+</nav>
+
+<main>
+
+<section id="plan">
+  <div class="h2"><span class="n">01</span> Один активный план</div>
+
+  <p>Ты прав, и вот почему это правильно, а не просто удобно. Разделение по видам спорта разрушает главное — <b>общий бюджет нагрузки</b>. Считаем по реальному W3.</p>
+
+  <h3>Что показывает нормированная нагрузка</h3>
+  <p>Нормировка: <code>минуты × доля VO2max зоны × adaptation_rate вида спорта</code>. Это ровно то, что уже есть в данных — <code>adaptation_rates</code>.</p>
+
+  <div class="tw">
+  <table>
+    <tr><th>Вид спорта</th><th>Время</th><th>Доля времени</th><th>Норм. нагрузка</th><th>Доля нагрузки</th></tr>
+    <tr><td>Бег</td><td>241 мин</td><td>61.6 %</td><td>174.9</td><td>64.1 %</td></tr>
+    <tr><td>Силовая</td><td>60 мин</td><td>15.3 %</td><td>60.3</td><td><b>22.1 %</b></td></tr>
+    <tr><td>Вел</td><td>45 мин</td><td>11.5 %</td><td>21.1</td><td>7.7 %</td></tr>
+    <tr><td>Плавание</td><td>45 мин</td><td>11.5 %</td><td>16.6</td><td>6.1 %</td></tr>
+  </table>
+  </div>
+
+  <div class="warn">
+    <b>Стоимость часа по видам спорта</b>
+    <b>1 час бега Z2</b> = 40.2 норм. мин · <b>1 час силовой</b> = 60.3 · <b>1 час вел Z2</b> = 28.1 · <b>1 час плавания Z2</b> = 22.1.<br><br>
+    То есть при равном времени <b>1 час плавания даёт на 45 % меньше нагрузки, чем 1 час бега</b>. А 1 час силовой — на 50 % больше. Время и нагрузка — разные величины, и «недельная норма 7 часов» не означает «недельная норма 7 часов нагрузки».<br><br>
+    Если у каждого вида спорта свой план, у каждого будет свой счётчик — и <b>суммарная интенсивность перестанет считаться</b>. Ты сможешь посмотреть «вот план по бегу, там всё ок», но не сможешь ответить на вопрос «а сколько у меня всего нагрузки за неделю и не слишком ли». Это ровно та задача, которую ты описал: поставить всего один плавательный час — и не должно создаться впечатление, что это вся неделя.
+  </div>
+
+  <div class="dec">
+    <b>Отсюда структура</b>
+    <b>Один активный план</b>, у него — <b>срок</b>, <b>набор целей</b>, <b>набор видов спорта</b> и, главное, <b>общий бюджет нагрузки</b>. Спорт не выносится в отдельные планы — он живёт внутри плана как «линия». Когда меняется цель — начинается новый план, старый закрывается. Поэтому планы идут последовательно: <b>план до апреля</b> (фокус на 10К), потом <b>новый план с апреля</b> (фокус на триатлон, перераспределение часов между видами спорта).
+  </div>
+
+  <div class="card">
+    <div class="ct">Plan <span class="tag">aggregate</span></div>
+    <div class="role">Один активный план = одна стратегия на отрезок сезона. Несколько видов спорта внутри, одна модель на каждый вид, один общий бюджет.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">id · status</span><span class="ftype">string · enum</span></div><div class="fdesc"><code>plan_2026_10k</code> · <code>active | completed | draft</code>. <em>Активный ровно один на сезон — это инвариант.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">goal_ids</span><span class="ftype">string[]</span></div><div class="fdesc">цели плана. Обычно одна (<code>g_run_spring</code>), но при двух близких гонках — две, с приоритетом.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">period</span><span class="ftype">date range</span></div><div class="fdesc"><code>2026-10-11 → 2027-04-18</code>. План заканчивается с целью — дальше начинается следующий.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">sport_lines</span><span class="ftype">map</span></div><div class="fdesc"><code>{run: {model_ref:'daniels_run_v1', weight:0.62}, bike: {model_ref:'bike_v1', weight:0.12}, swim: {model_ref:'swim_v1', weight:0.11}, strength: {model_ref:'ofp_v1', weight:0.15}}</code> — <b>вес линии = доля плана в недельной нормированной нагрузке</b></div></div>
+    <div class="fld"><div class="row1"><span class="fname">load_budget</span><span class="ftype">object</span></div><div class="fdesc"><code>{hours_range:[4.96,9.74], normalized_min_target, intensity_pct_max, sessions_range}</code> — <b>общий бюджет, в который укладываются все виды спорта сразу</b></div></div>
+    <div class="fld"><div class="row1"><span class="fname">phases</span><span class="ftype">Phase[]</span></div><div class="fdesc">фазы плана с собственными <code>slot_overrides</code> и <code>sport_weights</code> (внутри фазы распределение часов может меняться).</div></div>
+    <div class="fld"><div class="row1"><span class="fname">weeks</span><span class="ftype">Week[]</span></div><div class="fdesc">недели плана — намерения, без шагов.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">transition</span><span class="ftype">object?</span></div><div class="fdesc">как новый план сменяет старый: <code>{overlap_weeks, carry_over, reason}</code>. <em>Нужен, потому что 10К 18.04 и триатлон 12.09 — не стык, а перекрытие.</em></div></div>
+  </div>
+
+  <h3>Как выглядит смена плана</h3>
+  <div class="chain">
+    <div class="node l1"><div class="nm">Season · 49 недель · 2 цели</div><div class="ds">общий бюджет сезона, правила, календарь по умолчанию</div></div>
+    <div class="gap"></div>
+    <div class="node l2"><div class="nm">plan_2026_10k · active</div><div class="ds">11.10.2026 → 18.04.2027 · цель 10К · линии: run 62 % · strength 15 % · bike 12 % · swim 11 %</div></div>
+    <div class="gap"></div>
+    <div class="node l2"><div class="nm">plan_2027_tri · draft → active</div><div class="ds">с ~18.04.2027 → 12.09.2027 · цель триатлон · линии: run 45 % · bike 25 % · swim 20 % · strength 10 % · <b>перекрытие 2 недели</b></div></div>
+  </div>
+</section>
+
+<section id="slots">
+  <div class="h2"><span class="n">02</span> Слот — окно доступного времени</div>
+
+  <p>Слот — это не «тренировка стоит в 18:45», а <b>окно, в котором можно тренироваться</b>, с указанием, <b>что в нём доступно</b>. Кто в него встанет — решает план, но что доступно — определяет календарь.</p>
+
+  <div class="card">
+    <div class="ct">Slot <span class="tag">value object</span></div>
+    <div class="role">Дефолтное окно недели. Живёт на уровне сезона, переопределяется на фазе и неделе.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">id</span><span class="ftype">string</span></div><div class="fdesc">стабильный ключ: <code>mon-evening</code> · <code>sun-long</code> · <code>fri-pool</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">day</span><span class="ftype">enum</span></div><div class="fdesc">ПН…ВС (неделя вс→сб). <em>День недели, а не дата — слот повторяется каждую неделю, пока не переопределён.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">start · end</span><span class="ftype">time</span></div><div class="fdesc">18:45–20:15</div></div>
+    <div class="fld"><div class="row1"><span class="fname">capacity_min</span><span class="ftype">int</span></div><div class="fdesc">сколько минут всего можно занять. <em>Слот на 90 мин может принять и 25-минутную силовую, и 90-минутный бег — но не оба.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">equipment</span><span class="ftype">EquipmentRef[]</span></div><div class="fdesc"><b>что доступно в этом слоте.</b> Список, а не «X or Y» — конфликт возникает, когда за один ресурс просят дважды, и это видно. <code>[{equipment:'stadium', note:'400м тафтан'}]</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">constraints</span><span class="ftype">object?</span></div><div class="fdesc">локальные запреты: <code>{max_intensity:'Z4', forbidden_sports:[], note:'семейный тайм'}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">priority_hint</span><span class="ftype">int?</span></div><div class="fdesc">насколько это окно желанно для качественной работы. <em>ПН 18:45 = 90, ЧТ 10:30 = 30.</em></div></div>
+  </div>
+
+  <h3>Почему слот — это «доступно», а не «стоит тренировка»</h3>
+  <ul>
+    <li>Слот <b>не знает про тренировки</b> — иначе он не переиспользуется от недели к неделе.</li>
+    <li>Вместимость выражена в минутах, а не в количестве тренировок: слот на 90 мин вмещает одну длинную или две коротких.</li>
+    <li>Доступное оборудование — <b>список</b>. «Или» из старой модели («stadium_or_pool») превращается в «оба доступны», и конфликт возникает не на этапе описания, а на этапе раскладки — где его и надо решать.</li>
+    <li>Запрет по интенсивности живёт в слоте, а не в плане: «в СР вечером интенсивных нельзя» — это свойство окна, а не вида спорта.</li>
+  </ul>
+
+  <div class="note">
+    <b>Дефолты сезона — по фактическим данным</b>
+    8 окон: ПН 18:45–20:15 (90) · ВТ 09:00–09:30 (30) · ВТ 18:30–19:45 (75) · СР 17:00–19:00 (120) · ЧТ 10:30–11:15 (45) · ПТ 18:00–19:00 (60) · СБ 10:00–11:00 (60) · ВС 11:00–13:00 (120). Сумма — <b>600 мин = 10 ч/нед</b>.
+  </div>
+</section>
+
+<section id="equip">
+  <div class="h2"><span class="n">03</span> Оборудование</div>
+
+  <p>Оборудование — это <b>то, чем тренировка обеспечена</b>. Реестр живёт в сезоне: он задаёт, какое оборудование у тебя есть вообще, и какие у него ограничения (доступность по дням, срок действия, сезонность).</p>
+
+  <div class="card">
+    <div class="ct">Equipment <span class="tag">реестр</span></div>
+    <div class="role">Справочник сезона. Не владение ресурсом в конкретную неделю, а сам ресурс и его свойства.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">id · name</span><span class="ftype">string</span></div><div class="fdesc"><code>stadium</code> «Стадион 400 м» · <code>pool</code> «Бассейн» · <code>bike_trainer</code> «Велотренажёр» · <code>road</code> «Дорога» · <code>trail</code> «Трейл» · <code>bike_road</code> «Велодорожка»</div></div>
+    <div class="fld"><div class="row1"><span class="fname">kind</span><span class="ftype">enum</span></div><div class="fdesc"><b>track</b> (стадион) · <b>water</b> (бассейн) · <b>machine</b> (тренажёр) · <b>route</b> (маршрут: дорога, трейл) · <b>vehicle</b> (велосипед)</div></div>
+    <div class="fld"><div class="row1"><span class="fname">sports</span><span class="ftype">enum[]</span></div><div class="fdesc">для каких видов спорта годится: <code>stadium → [run]</code>, <code>pool → [swim]</code>, <code>bike_trainer → [bike]</code>, <code>road → [run, bike]</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">availability</span><span class="ftype">object</span></div><div class="fdesc">когда доступен по умолчанию: <code>{days:['ПН','ПТ'], valid_until:'2026-12-31', seasonal_note:'январь-февраль — мёртвый сезон, не чистят'}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">limitations</span><span class="ftype">object?</span></div><div class="fdesc"><code>{max_distance_m:400, needs_booking:true, surface:'тафтан'}</code></div></div>
+  </div>
+
+  <h3>Про длинную тренировку — названия</h3>
+  <p>Ты прав, что длинная тренировка требует отдельного ресурса: стадион на 400 м не годится на 14 км, а бассейн — не то же, что открытая вода. Но «длинная» — это не вид ресурса, а <b>длина тренировки</b>. Ресурс нужен другой, и вот как это лучше назвать.</p>
+
+  <div class="tw">
+  <table>
+    <tr><th>id</th><th>Название</th><th>kind</th><th>Что даёт</th></tr>
+    <tr><td><code>stadium</code></td><td>Стадион 400 м</td><td>track</td><td>точный темп, интервалы с отметкой</td></tr>
+    <tr><td><code>pool</code></td><td>Бассейн</td><td>water</td><td>плавание, круги по дорожке</td></tr>
+    <tr><td><code>bike_trainer</code></td><td>Велотренажёр</td><td>machine</td><td>велосипед в помещении</td></tr>
+    <tr><td><code>road</code></td><td><b>Дорожный маршрут</b></td><td>route</td><td>длинный бег, длинная поездка</td></tr>
+    <tr><td><code>trail</code></td><td><b>Трейл / парк</b></td><td>route</td><td>длинный бег по рельефу</td></tr>
+    <tr><td><code>bike_road</code></td><td><b>Велодорожка</b></td><td>vehicle</td><td>длинная поездка на улице</td></tr>
+  </table>
+  </div>
+
+  <div class="note">
+    <b>Моё предложение по именованию</b>
+    Вместо «оборудование» — <b>«место»</b> (<code>venue</code>)? Нет: велотренажёр — это не место, а снаряд. Оставляю <b>equipment</b>, но с типологией по <code>kind</code>: <code>track / water / machine / route / vehicle</code>. Тогда «длинная» тренировка требует <code>kind: route</code> или <code>vehicle</code>, и это проверяемо, а не зашито в текст.<br><br>
+    <b>«Длинная с фартлеком»</b> — это не ресурс, а <b>вид тренировки</b>: длинная, внутри которой интенсивность меняется. В модели это <code>kind: 'long'</code> + <code>focus: 'fartlek'</code>. Ресурс ей по-прежнему нужен маршрут. Смешивать ресурс и вид тренировки — значит завести сущность, которая про другое.
+  </div>
+
+  <div class="warn">
+    <b>Скрытое противоречие в данных</b>
+    В <code>athlete.json</code> записано: «стадион: 400 м тафтан, открыт; <b>январь-февраль — мёртвый сезон (не чистят)</b>». А фаза <code>run_build</code> (с 03.01.2027) — как раз проходит по январь-февраль, и именно там нужен точный темп для пороговых 1К. Это ровно тот случай, ради которого нужны переопределения на уровне фазы: <b>стадион недоступен два месяца</b> → пороговые интервалы переезжают на дорогу, и это должно быть видно как решение, а не случаться молча.
+  </div>
+</section>
+
+<section id="casc">
+  <div class="h2"><span class="n">04</span> Наследование: Season → Phase → Week</div>
+
+  <p>Сезон задаёт дефолтные слоты. Фаза может их переопределить. Неделя может переопределить ещё раз. Что не переопределено — берётся снизу вверх.</p>
+
+  <div class="casc">
+    <div class="lvl"><div class="nm">Season · default slots</div><div class="ds">8 окон, 10 ч/нед. База для всего.</div><div class="ov">← задаёт</div></div>
+    <div class="gap"></div>
+    <div class="lvl"><div class="nm">Phase · slot_overrides</div><div class="ds">run_build (янв–фев): стадион закрыт → слот ПН меняется на дорогу. Летом: добавить второе окно в СР.</div><div class="ov">← перекрывает</div></div>
+    <div class="gap"></div>
+    <div class="lvl"><div class="nm">Week · slot_overrides</div><div class="ds">конкретная неделя: поездка, больничный, семейное — всё сдвигается точечно.</div></div>
+  </div>
+
+  <div class="card">
+    <div class="ct">SlotOverride <span class="tag">patch</span></div>
+    <div class="role">Не слот целиком, а изменение. Потому что неделя обычно меняет одно окно, а не весь календарь.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">slot_id</span><span class="ftype">string</span></div><div class="fdesc">какой слот трогаем.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">ops</span><span class="ftype">enum[]</span></div><div class="fdesc"><code>remove</code> · <code>set_time</code> · <code>set_capacity</code> · <code>add_equipment</code> · <code>remove_equipment</code> · <code>set_constraints</code> · <code>add</code> (новый слот целиком)</div></div>
+    <div class="fld"><div class="row1"><span class="fname">reason</span><span class="ftype">string</span></div><div class="fdesc">обязательно. <em>«Стадион не чистят январь-февраль», «поездка 25.10», «больничный».</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">scope</span><span class="ftype">enum</span></div><div class="fdesc"><code>season | phase | week</code> — на каком уровне объявлено (для отображения и отката).</div></div>
+  </div>
+
+  <h3>Правила разрешения</h3>
+  <ol>
+    <li>Итоговый слот недели = <b>дефолт сезона</b> ← <b>patch фазы</b> ← <b>patch недели</b>. Каждый уровень применяется последним и перекрывает предыдущий.</li>
+    <li>Patch недели может <code>add</code> новый слот — этого нет ни у фазы, ни у сезона (разовый额外-окно под конкретную тренировку).</li>
+    <li><code>remove</code> на уровне недели отменяет слот только в этой неделе.</li>
+    <li>Каждый patch обязан иметь причину — иначе не отличить «перенос отпуска» от «баг в календаре».</li>
+    <li>Переопределение <b>не меняет</b> прошлые недели. История иммунна.</li>
+  </ol>
+
+  <div class="dec">
+    <b>Почему это правильно</b>
+    Ты описал ровно то, что нужно: <b>дефолт живёт в сезоне, меняется на фазе, перекрывается на неделе</b>. Ничего не дублируется: неделя хранит только отличия от фазы, фаза — только отличия от сезона. Это даёт бесплатную историю («почему в ту неделю стадиона не было») и позволяет показывать в UI «в эту неделю слот изменён: <b>было</b> 18:45 стадион → <b>стало</b> 07:00 дорога» без отдельного журнала.
+  </div>
+
+  <div class="note">
+    <b>Нюанс: дефолт сезона — это не навсегда</b>
+    Доступность бассейна ты описал как «доступен ПН и ПТ <b>до 5 недель</b>» — то есть это не постоянное свойство, а <b>окно</b>. Поэтому у equipment нужен <code>valid_until</code>, а слот, ссылающийся на бассейн, должен <b>перестать предлагать плавание</b> после этой даты. Иначе через месяц мозг продолжит планировать плавки в понедельник, куда не пускают. Это ещё один аргумент за то, чтобы доступность была <b>данными с датами</b>, а не зашитым списком дней.
+  </div>
+</section>
+
+<section id="load">
+  <div class="h2"><span class="n">05</span> Нормированная нагрузка — общий бюджет</div>
+
+  <p>Ради этого и нужен один план. Нагрузка — единственная величина, которая честно сравнивает бег, вел, плавание и силовую.</p>
+
+  <div class="card">
+    <div class="ct">LoadModel <span class="tag">правило</span></div>
+    <div class="role">Считает нормированную нагрузку тренировки и недели. Чистая функция, детерминированная.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">intensity_factor</span><span class="ftype">map</span></div><div class="fdesc">HR-зона → доля VO2max. Z1 0.60 · Z2 0.67 · Z3 0.79 · Z4 0.85 · Z5 0.90 · Z6 0.975 · Z7 1.0</div></div>
+    <div class="fld"><div class="row1"><span class="fname">adaptation_rate</span><span class="ftype">map</span></div><div class="fdesc">вид спорта → коэффициент стоимости. run 1.0 · bike 0.7 · swim 0.55 · strength 1.5</div></div>
+    <div class="fld"><div class="row1"><span class="fname">formula</span><span class="ftype">text</span></div><div class="fdesc"><code>load = Σ (minutes × intensity_factor × adaptation_rate)</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">budget</span><span class="ftype">object</span></div><div class="fdesc"><code>{normalized_min_range, hours_range, intensity_pct_max}</code> — коридор плана, в который обязана попасть сумма.</div></div>
+  </div>
+
+  <h3>Как выглядит неделя в этой модели</h3>
+<pre><code>W3 · 391 мин · 6.52 ч · нормированная нагрузка 273
+
+  бег       241 мин (61.6% времени)  →  174.9 (64.1% нагрузки)
+  силовая    60 мин (15.3%)          →   60.3 (22.1%)   ← час силовой = 1.5 часа бега
+  вел        45 мин (11.5%)          →   21.1 ( 7.7%)
+  плавание   45 мин (11.5%)          →   16.6 ( 6.1%)
+
+  1 час плавания Z2 = 22.1 норм. мин = 8.1% недельной нормы
+  1 час бега    Z2 = 40.2 норм. мин = 14.7% недельной нормы</code></pre>
+
+  <div class="warn">
+    <b>Что это даёт UI</b>
+    «Неделя: 6.5 ч · нагрузка 273 (норма 250–300) · бег 64 % · силовая 22 % · вел 8 % · плавание 6 %». Одна строка вместо трёх планов, у каждого из которых была бы своя «норма», и сумма которых ничего не говорила.<br><br>
+    И главное: <b>поставить один плавательный час не может создать впечатление, что это вся неделя</b> — потому что план показывает нагрузку, а не только часы. Плавательный час — это 8 % недельной нормы, и приложение скажет об этом прямо.
+  </div>
+
+  <div class="note">
+    <b>Два открытых вопроса по нагрузке</b>
+    <b>1.</b> У нормировки <b>нет обратной задачи</b>: «сколько минут плавания даст мне эквивалент недели бега?» — 273 / (0.67 × 0.55) ≈ 741 мин. Это полезно для планирования триатлона: сколько плавок нужно, чтобы закрыть объём.<br>
+    <b>2.</b> Формула <code>minutes × IF × AR</code> — первое приближение. Она не учитывает длительность (длинная тренировка дороже короткой за ту же интенсивность) и не различает аэробную и анаэробную работу. Но она <b>уже считается</b> по твоим данным, поэтому лучше её, чем ничего.
+  </div>
+</section>
+
+<section id="ofp">
+  <div class="h2"><span class="n">06</span> ОФП — обычная тренировка</div>
+
+  <p>Согласен: ОФП не должна жить отдельно. Это тренировка со своими шагами; отличается только тип шага — <b>упражнение</b> вместо дистанции.</p>
+
+  <div class="card">
+    <div class="ct">Workout · sport: strength</div>
+    <div class="role">Тренировка ОФП устроена ровно как любая другая: список шагов, у каждого — роль, спорт, тип цели, величина, фокус.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">sport</span><span class="ftype">enum</span></div><div class="fdesc"><code>strength</code> — наравне с run / bike / swim. <em>Никакого отдельного «ofp» в списке видов спорта.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">kind</span><span class="ftype">enum</span></div><div class="fdesc"><code>strength</code> (силовая работа) · <code>mobility</code> (мобилити) · <code>core</code> (стойка) — вид, не вид спорта.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">focus</span><span class="ftype">enum</span></div><div class="fdesc"><code>posterior_chain</code> · <code>core</code> · <code>mobility</code> · <code>general</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">objective</span><span class="ftype">object</span></div><div class="fdesc"><code>{metric:'duration_min', target:25}</code> — тот же механизм, что и у беговой тренировки.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">equipment</span><span class="ftype">EquipmentRef[]</span></div><div class="fdesc"><code>[{equipment:'mat'}]</code> — коврик. <em>Домашние тренировки тоже требуют ресурса, просто дешёвого.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">steps</span><span class="ftype">Step[]</span></div><div class="fdesc">плоский список шагов-упражнений.</div></div>
+  </div>
+
+  <h3>Как выглядит тренировка ОФП</h3>
+  <p>Плоский список, как и всё остальное. Раунды — это отдельные шаги-отдых, а не вложенность.</p>
+
+<pre><code>Core 25мин (задняя цепь) · sport: strength · kind: core · focus: posterior_chain
+
+  1  warmup    mobility   5 мин    hip openers, glute bridge
+  2  work      strength  45 с     Планка
+  3  rest      rest      30 с     отдых
+  4  work      strength  12 пов   Медведи на коленях (на сторону)
+  5  rest      rest      30 с     отдых
+  6  work      strength  10 пов   Bird-dog (на сторону)
+  7  rest      rest      30 с     отдых
+  8  work      strength  15 пов   Glute bridge
+  9  rest      rest      30 с     отдых
+ 10  work      strength  15 пов   Гиперэкстензия на полу
+ 11  rest      rest      60 с     отдых между кругами
+ 12  work      strength  45 с     Планка        ← раунд 2
+ 13  rest      rest      30 с
+ ...                              (те же 5 упражнений, раунд 2)
+ 22  cooldown  mobility   5 мин   растяжка, без агрессии на грушевидную</code></pre>
+
+  <div class="note">
+    <b>Цена и польза</b>
+    Развёрнутый список из 22 шагов вместо вложенного «circuit ×2» — длиннее, но: каждый шаг редактируется сам по себе; два круга сравниваются как два плоских списка; «2 круга» восстанавливается для показа, считая повторы шага-упражнения. <b>Ровно та же плата, что и за разворот прогрессии</b>, и та же выгода.
+  </div>
+</section>
+
+<section id="cat">
+  <div class="h2"><span class="n">07</span> Каталог упражнений</div>
+
+  <p>Упражнение — не свободный текст, а запись в каталоге. Иначе «Планка» и «планка» и «планка 3×45с» — три разных упражнения, и нормализация нагрузки по ним не работает.</p>
+
+  <div class="card">
+    <div class="ct">Exercise <span class="tag">справочник</span></div>
+    <div class="role">Живёт в сезоне рядом с реестром оборудования. Справочник, а не часть тренировки.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">id · name</span><span class="ftype">string</span></div><div class="fdesc"><code>plank</code> «Планка» · <code>bird_dog</code> «Bird-dog» · <code>glute_bridge</code> «Glute bridge» · <code>bear_crawl</code> «Медведи на коленях» · <code>hip_raiser</code> «Гиперэкстензия на полу»</div></div>
+    <div class="fld"><div class="row1"><span class="fname">pattern</span><span class="ftype">enum</span></div><div class="fdesc"><code>anti_rotation | hip_extension | anti_extension | shoulder_stability | rotation</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">equipment_required</span><span class="ftype">enum[]</span></div><div class="fdesc"><code>['mat']</code> · <code>['dumbbell']</code> · <code>['bands']</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">default_dosage</span><span class="ftype">object</span></div><div class="fdesc"><code>{type:'hold', seconds:45}</code> или <code>{type:'reps', count:12, per_side:true}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">contraindications</span><span class="ftype">string[]</span></div><div class="fdesc"><code>['high_spine_load']</code> — упражнения, которые нельзя при защемлении спины. <em>Сейчас это зашито текстом «Без СБУ» в notes — должно быть данными.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">focus</span><span class="ftype">enum</span></div><div class="fdesc"><code>posterior_chain | core | shoulders | mobility</code></div></div>
+  </div>
+
+  <div class="warn">
+    <b>Что это даёт</b>
+    <b>1.</b> Противопоказания становятся проверяемыми: «спина» + <code>high_spine_load</code> → упражнение не попадёт в план. Сегодня это строка в notes, которую человек должен прочитать глазами.<br>
+    <b>2.</b> Модель ОФП может считать нагрузку по каталогу: <code>plank 45с × 2 круга</code> — это 90 с удержания, а не 90 с «работы вообще».<br>
+    <b>3.</b> Можно считать, какая группа мышц недогружена на неделе, и не строить вторую тренировку на ту же группу.
+  </div>
+</section>
+
+<section id="step">
+  <div class="h2"><span class="n">08</span> Шаг — единая модель для всего</div>
+
+  <p>Шаг один на все виды спорта. Различается только <b>тип цели</b> и наличие ссылки на упражнение.</p>
+
+  <div class="card">
+    <div class="ct">Step <span class="tag">value object</span></div>
+    <div class="role">Одно выполнимое действие. В шаге нет ничего предметного, кроме объёма, фокуса и — для силовой — упражнения.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">role</span><span class="ftype">enum</span></div><div class="fdesc">warmup · work · rest · cooldown · transition</div></div>
+    <div class="fld"><div class="row1"><span class="fname">sport</span><span class="ftype">enum</span></div><div class="fdesc">run · bike · swim · strength · mobility</div></div>
+    <div class="fld"><div class="row1"><span class="fname">target_type</span><span class="ftype">enum</span></div><div class="fdesc"><code>time</code> · <code>distance</code> · <code>laps</code> · <code>reps</code> · <code>open</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">target_value</span><span class="ftype">number</span></div><div class="fdesc">минуты · метры · круги · повторы</div></div>
+    <div class="fld"><div class="row1"><span class="fname">focus</span><span class="ftype">enum</span></div><div class="fdesc"><code>pace</code> · <code>hr</code> · <code>power</code> · <code>rpe</code> · <code>none</code> · <code>strength_pattern</code> (для силовой)</div></div>
+    <div class="fld"><div class="row1"><span class="fname">focus_value</span><span class="ftype">object?</span></div><div class="fdesc"><code>{pace:'4:15', per:'km'}</code> · <code>{hr_zone:'Z5', hr_cap:172}</code> · <code>{pattern:'anti_rotation'}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">exercise_id</span><span class="ftype">string?</span></div><div class="fdesc">для силовой: ссылка на каталог. <em>Нужен, чтобы «Планка» была одной и той же сущностью во всех тренировках.</em></div></div>
+    <div class="fld"><div class="row1"><span class="fname">group · round</span><span class="ftype">string? · int?</span></div><div class="fdesc">«Core circuit», 2 — чтобы круги восстанавливались для показа, оставаясь плоским списком.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">label · notes</span><span class="ftype">string?</span></div><div class="fdesc">человекочитаемо и пояснение.</div></div>
+  </div>
+
+  <h3>Тип цели и что ещё бывает</h3>
+  <div class="tw">
+  <table>
+    <tr><th>target_type</th><th>Единица</th><th>Когда</th><th>Пример</th></tr>
+    <tr><td><code>time</code></td><td>мин</td><td>всё, что меряется часами</td><td>разминка 15 мин · отдых 30 с</td></tr>
+    <tr><td><code>distance</code></td><td>м / км</td><td>отрезки, длинная, плавание</td><td>800 м · 14 км</td></tr>
+    <tr><td><code>laps</code></td><td>штуки</td><td>бассейн: круги по дорожке</td><td>8 кругов по 400 м</td></tr>
+    <tr><td><code>reps</code></td><td>штуки</td><td>силовая: повторы упражнения</td><td>12 пов bird-dog</td></tr>
+    <tr><td><code>open</code></td><td>—</td><td>свободная тренировка без заданного объёма</td><td>«плавание на свободной скорости»</td></tr>
+  </table>
+  </div>
+
+  <div class="note">
+    <b>Одно измерение на шаг</b>
+    Правило «один шаг — одно измерение» держит шаг простым и проверяемым: 45 с удержания — это <code>time</code>, 12 повторов — это <code>reps</code>. Смешивать «12 пов по 45 с» в одном шаге нельзя — это два измерения, значит два шага или отдельное поле объёма. Для силовой это работает, потому что упражнение задаёт <b>вид</b> работы, а шаг — <b>объём</b>.
+  </div>
+</section>
+
+<section id="week">
+  <div class="h2"><span class="n">09</span> Неделя</div>
+
+  <p>Без изменений по сути, но теперь неделя — часть <b>плана</b>, а не сезона, и её намерения — это запросы к слотам с требованиями к оборудованию.</p>
+
+  <div class="card">
+    <div class="ct">Week <span class="tag">aggregate</span></div>
+    <div class="role">Намерение недели. Детализация — по требованию, помечена версией входов.</div>
+
+    <div class="fld"><div class="row1"><span class="fname">plan_id · season_week</span><span class="ftype">ref · int</span></div><div class="fdesc">неделя внутри плана и её порядковый номер в сезоне.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">focus</span><span class="ftype">enum</span></div><div class="fdesc">адаптационная цель недели: <code>vo2max</code> · <code>threshold</code> · <code>base</code> · <code>recovery</code> · <code>taper</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">load_target</span><span class="ftype">object</span></div><div class="fdesc"><code>{hours, distance_m, sessions, intensity_pct, normalized_min}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">requests</span><span class="ftype">Request[]</span></div><div class="fdesc">что нужно поставить: <code>{id, sport, kind, focus, duration_min, equipment_required[], priority, min_slot_quality}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">slot_overrides</span><span class="ftype">SlotOverride[]</span></div><div class="fdesc">переопределения слотов именно на эту неделю.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">assignments</span><span class="ftype">Assignment[]</span></div><div class="fdesc">что во что легло: <code>{request_id, slot_id, start, duration_min, equipment}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">unplaced</span><span class="ftype">Request[]</span></div><div class="fdesc">то, что не поместилось, — с причиной.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">detail</span><span class="ftype">WeekDetail?</span></div><div class="fdesc"><code>{generated_at, inputs_version, workouts[]}</code> — развёрнутые тренировки.</div></div>
+  </div>
+
+  <div class="dec">
+    <b>Результат смены подхода</b>
+    Порядок стал таким: <b>план решает, что нужно</b> (объём, распределение по видам спорта, приоритеты) → <b>неделя уточняет</b> (что именно в эту неделю) → <b>слоты решают, где это стоит</b> (с учётом доступного оборудования) → <b>детализация считает шаги</b> (по модели плана и текущему профилю). Четыре уровня, каждый отвечает за своё, ничего не дублируется.
+  </div>
+</section>
+
+<section id="rules">
+  <div class="h2"><span class="n">10</span> Правила домена</div>
+
+  <h3>Инварианты</h3>
+  <ol>
+    <li>В сезоне <b>ровно один активный план</b>.</li>
+    <li>Слот определён на уровне сезона; фаза и неделя могут его переопределить; неделя может добавить свой.</li>
+    <li>Каждый слот ссылается на существующее оборудование из реестра.</li>
+    <li>Доступность оборудования имеет срок; слот не может предлагать ресурс вне срока.</li>
+    <li>Один слот — одна единица оборудования на тренировку: если в слоте два ресурса, тренировка занимает один.</li>
+    <li>Суммарная ёмкость слотов недели ≤ лимита сезона.</li>
+    <li>Суммарная нормированная нагрузка недели — в коридоре плана.</li>
+    <li>В тренировке sport один; шаги тренировки не пересекаются по времени.</li>
+    <li>Силовой шаг ссылается на упражнение из каталога; упражнение с противопоказанием, совпадающим с ограничением атлета, в план не попадает.</li>
+    <li>Каждое переопределение имеет причину.</li>
+    <li>Детализация недели помечена версией входов.</li>
+  </ol>
+
+  <h3>Производные — считаются, не хранятся</h3>
+  <ul>
+    <li>Итоговые слоты недели — слияние уровней.</li>
+    <li>Нагрузка тренировки и недели — по LoadModel.</li>
+    <li>Темпы шагов — от VDOT через модель плана.</li>
+    <li>Границы HR-зон — от HRmax/RHR/LTH.</li>
+    <li>Длительность тренировки, дистанция, объём работы — из шагов.</li>
+    <li>Норма недели — от фазы плана.</li>
+  </ul>
+</section>
+
+<section id="holes">
+  <div class="h2"><span class="n">11</span> Дыры — обновлённый список</div>
+
+  <p>Новые сходятся со старыми: №30–38 из v0.3-предыдущего остаются в силе, кроме частично закрытых. Ниже — полный актуальный список по текущей модели.</p>
+
+  <h3>Слоты и оборудование</h3>
+  <div class="tw">
+  <table>
+    <tr><th>#</th><th>Дыра</th><th>Следствие</th></tr>
+    <tr><td class="n">30</td><td>Календарь живёт в <code>constraints.json</code>, отдельно от сезона</td><td>слоты не участвуют в проверке плана</td></tr>
+    <tr><td class="n">31</td><td><b>Лимит 11 ч при ёмкости календаря 10 ч</b></td><td>лимит-обманка: проверка проходит, места нет</td></tr>
+    <tr><td class="n">32</td><td>Альтернативы «X or Y» не структурированы</td><td>конфликт за ресурс нельзя ни увидеть, ни разрешить</td></tr>
+    <tr><td class="n">39</td><td>Нет реестра оборудования</td><td>доступность ресурсов — разбросанные строки в <code>location</code></td></tr>
+    <tr><td class="n">40</td><td>Нет слота как сущности: есть только <code>weekly_windows</code> с плоским списком</td><td>нет вместимости, нет привязки к тренировке, нет переопределений</td></tr>
+    <tr><td class="n">41</td><td>Нет уровня «фаза» для переопределений календаря</td><td>сезонный дефолт приходится править вручную на весь сезон</td></tr>
+    <tr><td class="n">42</td><td>Стадион недоступен январь-февраль («мёртвый сезон»), это только текст в <code>athlete.json</code></td><td>пороговые интервалы в <code>run_build</code> не имеют ресурса — и это незаметно</td></tr>
+    <tr><td class="n">43</td><td>Доступность бассейна «до 5 недель» не выражена датой</td><td>через месяц планировщик продолжит ставить плавки в запертый бассейн</td></tr>
+    <tr><td class="n">44</td><td>Велотренажёр — один слот в неделю (45 мин), но план обещает 60–90</td><td>внутреннее противоречие уже сейчас</td></tr>
+  </table>
+  </div>
+
+  <h3>Планы и нагрузка</h3>
+  <div class="tw">
+  <table>
+    <tr><th>#</th><th>Дыра</th><th>Следствие</th></tr>
+    <tr><td class="n">45</td><td>Нет сущности Plan со статусом и периодом</td><td>«сменить план» нечем — только фазами внутри одного файла</td></tr>
+    <tr><td class="n">46</td><td>Распределение усилий 60/40 — на уровне сезона, привязано к целям, а не к планам</td><td>при смене плана распределение надо пересчитывать вручную</td></tr>
+    <tr><td class="n">47</td><td><b>Нет нормированной нагрузки как величины</b></td><td>суммарную интенсивность за неделю не посчитать; «час плавания» неотличим от «часа бега»</td></tr>
+    <tr><td class="n">48</td><td><code>adaptation_rates</code> есть, но не описан как механизм нагрузки</td><td>работающая идея выглядит справочными данными</td></tr>
+    <tr><td class="n">49</td><td>У <code>weekly_macro</code> нет <code>normalized_min</code> и <code>intensity_pct</code> в единой форме</td><td>нечем сравнивать неделю с неделей по нагрузке</td></tr>
+    <tr><td class="n">50</td><td>Триатлонные фазы требуют 8–10 ч при ёмкости 10 ч</td><td>в финале нет резерва ни на болезнь, ни на поездку</td></tr>
+    <tr><td class="n">51</td><td>Нет перекрытия между планами</td><td>10К 18.04 и триатлон 12.09 — переход не описан</td></tr>
+  </table>
+  </div>
+
+  <h3>Тренировка, шаг, ОФП</h3>
+  <div class="tw">
+  <table>
+    <tr><th>#</th><th>Дыра</th><th>Следствие</th></tr>
+    <tr><td class="n">18</td><td>Вложенность <code>set_repeats</code> и прогрессия внутри блока</td><td>шаг не редактируется независимо</td></tr>
+    <tr><td class="n">20</td><td>Отдых хранится двумя полями <code>rest_min</code> + <code>rest_distance_m</code></td><td>неясно, что основное</td></tr>
+    <tr><td class="n">21</td><td><code>kind: 'ofp'</code> смешан со спортом</td><td>фильтр по виду спорта не работает</td></tr>
+    <tr><td class="n">22</td><td>Темп без базы (<code>/км</code> или <code>/100м</code>)</td><td>шаги разных видов спорта несопоставимы</td></tr>
+    <tr><td class="n">24</td><td>Силовая лежит в <code>structure[]</code> со <code>exercise</code>/<code>set</code></td><td>один тип шага на два разных мира</td></tr>
+    <tr><td class="n">52</td><td>Нет каталога упражнений: упражнения — свободный текст в <code>notes</code></td><td>«Планка» и «планка» — разные сущности; противопоказания не проверяются</td></tr>
+    <tr><td class="n">53</td><td>«Без СБУ» зашито в текст, а не в данные</td><td>запрет не машиночитаем и не влияет на план</td></tr>
+    <tr><td class="n">54</td><td>Круг силовой — вложенная структура <code>set.exercises[]</code></td><td>раунды нельзя показать плоско и нельзя сравнить</td></tr>
+    <tr><td class="n">55</td><td>Силовая без <code>equipment</code> (коврик)</td><td>домашняя тренировка считается доступной всегда</td></tr>
+  </table>
+  </div>
+
+  <div class="dec">
+    <b>Что чинить первым</b>
+    <b>1.</b> Дыры <b>47, 30–32, 39–41</b> — это фундамент новой модели: <b>нормированная нагрузка</b> (общий бюджет) + <b>слоты с реестром оборудования</b> + перенос календаря в сезон. Без этого «один план» не сможет контролировать суммарную нагрузку.<br>
+    <b>2.</b> Дыры <b>52–54, 18, 20, 21</b> — переработка шага и тренировки: плоский список, каталог упражнений, типы цели.<br>
+    <b>3.</b> Дыры <b>42–44</b> — данные: стадион зимой, бассейн до даты, велотренажёр 45 против 60 мин. Это уже сейчас противоречия, которые слоты и реестр сделают видимыми.
+  </div>
+</section>
+
+<hr>
+<p class="end">Coach App · domain v0.3 · Season → Plan → Phase → Week → Slot → Workout → Step · 25.10.2026</p>
+
+</main>
+</body>
+</html>

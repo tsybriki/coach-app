@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Coach App — модель домена (спецификация)</title>
+<style>
+  :root {
+    --bg: #fdf6ed; --card-bg: #fffefb; --ink: #1a1a1a; --muted: #6a6056; --faint: #9a9085;
+    --border: #e6dac4; --coral: #ff6b5a; --teal: #14b8a6; --mustard: #d4a017;
+    --terra: #c2410c; --sky: #0284c7; --grass: #65a30d; --code-bg: #f4ede0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.5; font-size: 16px; padding-bottom: 50px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  header { padding: 16px 14px 12px; border-bottom: 1px solid var(--border); background: var(--card-bg); }
+  header h1 { font-size: 19px; font-weight: 700; }
+  header .meta { font-size: 11px; color: var(--faint); margin-top: 5px; }
+
+  nav { position: sticky; top: 0; z-index: 10; background: rgba(253,246,237,0.96); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; padding: 7px 12px; scrollbar-width: none; }
+  nav::-webkit-scrollbar { display: none; }
+  nav a { display: inline-block; font-size: 12px; color: var(--muted); text-decoration: none; padding: 4px 9px; margin-right: 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--card-bg); }
+
+  main { padding: 0 12px; max-width: 760px; margin: 0 auto; }
+  section { margin-top: 26px; }
+  .h2 { font-size: 16px; font-weight: 700; padding-bottom: 6px; border-bottom: 2px solid var(--ink); margin-bottom: 10px; }
+  h3 { font-size: 14px; font-weight: 700; margin: 16px 0 6px; }
+  p { font-size: 14.5px; margin-bottom: 8px; }
+
+  .tw { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 6px 0 12px; position: relative; }
+  table { border-collapse: collapse; width: 100%; min-width: 420px; font-size: 12.5px; }
+  th, td { text-align: left; padding: 5px 7px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; background: var(--code-bg); }
+  td code { font-size: 11.5px; }
+  td.n { white-space: nowrap; color: var(--faint); }
+
+  .dia { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .dia svg { width: 100%; min-width: 340px; display: block; }
+
+  .ent { border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); margin-bottom: 8px; overflow: hidden; }
+  .ent > .eh { background: var(--ink); color: #fff; padding: 5px 10px; font-size: 13px; font-weight: 700; display: flex; justify-content: space-between; gap: 8px; }
+  .ent > .eh .k { font-size: 10px; font-weight: 600; background: rgba(255,255,255,0.18); padding: 1px 7px; border-radius: 999px; }
+  .ent .body { padding: 0; }
+
+  .pl { margin: 0; padding: 8px 10px 8px 26px; font-size: 12.5px; }
+  .pl li { margin-bottom: 2px; }
+  .pl code { font-size: 11.5px; }
+
+  /* ---------- подтверждение инвариантов ---------- */
+  .inv-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .inv-count { font-size: 12px; color: var(--muted); font-weight: 700; }
+  .inv-bar { flex: 1 1 140px; min-width: 120px; height: 8px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+  .inv-bar > i { display: block; height: 100%; background: var(--grass); width: 0%; transition: width .3s ease; }
+  .inv-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--code-bg); color: var(--faint); white-space: nowrap; }
+  .inv-badge.ok { background: #eff7e6; border-color: #cfe5b8; color: #4a7a12; }
+  td.st { width: 22px; text-align: center; }
+  td.st .ok { display: inline-block; width: 15px; height: 15px; line-height: 14px; border-radius: 50%; background: var(--grass); color: #fff; font-size: 10px; font-weight: 700; }
+  td.st .no { color: var(--border); font-size: 11px; }
+  tr.confirmed td { background: #f7fbf1; }
+  .oklist { background: #f3f9ec; border: 1px solid #cfe5b8; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+  .oklist .ttl { font-size: 12px; font-weight: 700; color: #4a7a12; margin-bottom: 5px; }
+  .oklist ul { margin: 0; padding-left: 18px; }
+  .oklist li { font-size: 12.5px; margin-bottom: 2px; color: #4a5c2e; }
+  .oklist .none { font-size: 12.5px; color: var(--faint); }
+
+  .probs { counter-reset: p; margin: 0; padding-left: 22px; font-size: 13.5px; }
+  .probs li { margin-bottom: 7px; }
+  .probs b { font-weight: 700; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 22px 0 0; }
+  .end { text-align: center; font-size: 11.5px; color: var(--faint); padding: 20px 0 8px; }
+
+  @media (max-width: 560px) {
+    main { padding: 0 10px; }
+    header h1 { font-size: 17px; }
+    p { font-size: 14px; }
+    table { min-width: 380px; font-size: 12px; }
+    .tw::after { content: '→ свайп'; position: absolute; right: 2px; bottom: 2px; font-size: 9px; color: var(--faint); background: var(--card-bg); padding: 0 4px; pointer-events: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Модель домена — спецификация</h1>
+  <div class="meta">Coach App · v3.6 · 18 сущностей · 43 инвариантов (43 подтверждено) · 6 вопросов</div>
+  <div class="meta">состав: диаграмма · сущности · связи · вопросы</div>
+</header>
+
+<nav>
+  <a href="#d">1 · Диаграмма</a>
+  <a href="#e">2 · Сущности</a>
+  <a href="#r">3 · Связи</a>
+  <a href="#p">4 · Вопросы</a>
+</nav>
+
+<main>
+
+<section id="d">
+  <div class="h2">1 · Диаграмма сущностей</div>
+
+  <div class="dia">
+    <svg viewBox="0 0 380 1024">
+    <defs>
+      <marker id="ar" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+        <polygon points="0 0, 9 3.5, 0 7" fill="#6a6056"/>
+      </marker>
+      <marker id="ar2" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+        <polygon points="0 0, 9 3.5, 0 7" fill="#c2410c"/>
+      </marker>
+      <marker id="ar3" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+        <polygon points="0 0, 9 3.5, 0 7" fill="#026092"/>
+      </marker>
+      <marker id="ar4" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+        <polygon points="0 0, 9 3.5, 0 7" fill="#65a30d"/>
+      </marker>
+    </defs>
+    <path d="M 344 640 L 364 640 L 364 470 L 312 470" fill="none" stroke="#026092" stroke-width="1.4" marker-end="url(#ar3)"/>
+    <text x="356" y="556" fill="#026092" font-size="8.5" text-anchor="middle" transform="rotate(-90 356 556)">actual_id</text>
+    <path d="M 18 646 L 8 646 L 8 386 L 196 386" fill="none" stroke="#65a30d" stroke-width="1.3" stroke-dasharray="4,3" marker-end="url(#ar4)"/>
+    <text x="12" y="506" fill="#4a7a12" font-size="8.5" text-anchor="middle" transform="rotate(-90 12 506)">intensity</text>
+    <path d="M 18 672 L 30 672 L 30 384 L 62 384" fill="none" stroke="#c2410c" stroke-width="1.3" stroke-dasharray="4,3" marker-end="url(#ar2)"/>
+    <text x="24" y="526" fill="#c2410c" font-size="8.5" text-anchor="middle" transform="rotate(-90 24 526)">факт → итог</text>
+    <line x1="186" y1="162" x2="186" y2="178" stroke="#6a6056" stroke-width="1.2" stroke-dasharray="3,2" marker-end="url(#ar)"/>
+    <rect x="4" y="10" width="372" height="762" rx="11" fill="rgba(255,107,90,0.05)" stroke="#c2410c" stroke-width="1.4" stroke-dasharray="9,5"/>
+    <text x="16" y="32" fill="#c2410c" font-size="13.5" font-weight="700">Season</text>
+    <text x="16" y="46" fill="#6a6056" font-size="9.5">календарь · справочники · факт · один активный план</text>
+    <text x="16" y="66" fill="#6a6056" font-size="9.5" font-weight="700">справочники и входные данные</text>
+    <rect x="16" y="74" width="108" height="40" rx="5" fill="#fffefb" stroke="#6a6056" stroke-width="1.2"/>
+    <text x="26" y="90" fill="#1a1a1a" font-size="10.5" font-weight="700">Equipment</text>
+    <text x="26" y="103" fill="#6a6056" font-size="8.5">kind · sports</text>
+    <text x="26" y="114" fill="#6a6056" font-size="8.5">availability</text>
+    <rect x="130" y="74" width="108" height="40" rx="5" fill="#fffefb" stroke="#6a6056" stroke-width="1.2"/>
+    <text x="140" y="90" fill="#1a1a1a" font-size="10.5" font-weight="700">PlanModel</text>
+    <text x="140" y="103" fill="#6a6056" font-size="8.5">rules · guard</text>
+    <text x="140" y="114" fill="#6a6056" font-size="8.5">budget</text>
+    <rect x="244" y="74" width="108" height="40" rx="5" fill="#fffefb" stroke="#6a6056" stroke-width="1.2"/>
+    <text x="254" y="90" fill="#1a1a1a" font-size="10.5" font-weight="700">LoadModel</text>
+    <text x="254" y="103" fill="#6a6056" font-size="8.5">intensity_factor</text>
+    <text x="254" y="114" fill="#6a6056" font-size="8.5">adaptation_rate</text>
+    <rect x="16" y="120" width="108" height="40" rx="5" fill="#fffefb" stroke="#6a6056" stroke-width="1.2"/>
+    <text x="26" y="136" fill="#1a1a1a" font-size="10.5" font-weight="700">Athlete</text>
+    <text x="26" y="149" fill="#6a6056" font-size="8.5">vdot · hr_zones</text>
+    <text x="26" y="160" fill="#6a6056" font-size="8.5">injuries</text>
+    <rect x="130" y="120" width="108" height="40" rx="5" fill="#fffefb" stroke="#6a6056" stroke-width="1.2"/>
+    <text x="140" y="136" fill="#1a1a1a" font-size="10.5" font-weight="700">Slot</text>
+    <text x="140" y="149" fill="#6a6056" font-size="8.5">day · capacity</text>
+    <text x="140" y="160" fill="#6a6056" font-size="8.5">equipment[]</text>
+    <rect x="244" y="120" width="108" height="40" rx="5" fill="#fffefb" stroke="#6a6056" stroke-width="1.2"/>
+    <text x="254" y="136" fill="#1a1a1a" font-size="10.5" font-weight="700">GoalMetric</text>
+    <text x="254" y="149" fill="#6a6056" font-size="8.5">target · pace</text>
+    <text x="254" y="160" fill="#6a6056" font-size="8.5">fork</text>
+    <rect x="16" y="182" width="340" height="400" rx="9" fill="rgba(212,160,23,0.08)" stroke="#d4a017" stroke-width="1.4"/>
+    <text x="28" y="202" fill="#a17405" font-size="12.5" font-weight="700">Plan</text>
+    <text x="28" y="215" fill="#6a6056" font-size="9">goal · period · status · sport_lines · load_budget</text>
+    <rect x="28" y="224" width="316" height="40" rx="5" fill="#fffefb" stroke="#6a6056" stroke-width="1.2"/>
+    <text x="38" y="240" fill="#1a1a1a" font-size="10.5" font-weight="700">Goal</text>
+    <text x="38" y="253" fill="#6a6056" font-size="8.5">metric · race_date · venue · race_pace</text>
+    <text x="38" y="264" fill="#6a6056" font-size="8.5">одна цель на план</text>
+    <rect x="40" y="276" width="292" height="296" rx="8" fill="rgba(212,160,23,0.10)" stroke="#d4a017" stroke-width="1.3"/>
+    <text x="52" y="294" fill="#a17405" font-size="11.5" font-weight="700">Phase</text>
+    <text x="52" y="306" fill="#6a6056" font-size="8.5">focus · load_range · sport_weights</text>
+    <rect x="52" y="316" width="268" height="246" rx="8" fill="rgba(2,132,199,0.08)" stroke="#0284c7" stroke-width="1.3"/>
+    <text x="64" y="334" fill="#026092" font-size="11.5" font-weight="700">Week</text>
+    <text x="64" y="346" fill="#6a6056" font-size="8.5">status · focus · load_target · requests[]</text>
+    <text x="64" y="358" fill="#6a6056" font-size="8">proposed → active → closed</text>
+    <rect x="64" y="366" width="244" height="60" rx="5" fill="#fffefb" stroke="#6a6056" stroke-width="1.2"/>
+    <text x="74" y="382" fill="#1a1a1a" font-size="9.5" font-weight="700">WeekSummary</text>
+    <text x="74" y="393" fill="#6a6056" font-size="8.5">totals{} · deviations[] · closed_at</text>
+    <text x="74" y="404" fill="#4a7a12" font-size="8.5">intensity: planned · actual · goal · contributions[] · zones</text>
+    <text x="74" y="415" fill="#6a6056" font-size="8.5">per_session[] · verdict · missed[] · extra[]</text>
+    <rect x="64" y="436" width="244" height="122" rx="8" fill="rgba(20,184,166,0.10)" stroke="#14b8a6" stroke-width="1.3"/>
+    <text x="76" y="453" fill="#0b7d71" font-size="11.5" font-weight="700">Workout</text>
+    <text x="76" y="465" fill="#6a6056" font-size="8.5">sport · kind · focus · objective</text>
+    <rect x="76" y="470" width="220" height="72" rx="5" fill="#fffefb" stroke="#6a6056" stroke-width="1.2"/>
+    <text x="86" y="476" fill="#1a1a1a" font-size="9.5" font-weight="700">Step</text>
+    <text x="86" y="489" fill="#6a6056" font-size="8.5">role · target_type · target_value</text>
+    <text x="86" y="500" fill="#6a6056" font-size="8.5">focus · focus_value · group · round</text>
+    <text x="86" y="511" fill="#6a6056" font-size="8.5">плоский список:</text>
+    <text x="86" y="522" fill="#6a6056" font-size="8.5">work 800м 4:15 / rest 250м Z1</text>
+    <text x="86" y="533" fill="#6a6056" font-size="8.5">work 800м 4:00 / rest 250м Z1</text>
+    <text x="76" y="553" fill="#026092" font-size="8.5">actual_id → факт-сессия</text>
+    <rect x="16" y="600" width="340" height="160" rx="8" fill="rgba(2,132,199,0.05)" stroke="#0284c7" stroke-width="1.2" stroke-dasharray="5,3"/>
+    <text x="26" y="618" fill="#026092" font-size="10.5" font-weight="700">ФАКТ — загружено из Garmin / Stryd / TrainingPeaks</text>
+    <rect x="26" y="626" width="316" height="64" rx="5" fill="#fffefb" stroke="#6a6056" stroke-width="1.2"/>
+    <text x="36" y="642" fill="#1a1a1a" font-size="10" font-weight="700">ActualSession</text>
+    <text x="36" y="655" fill="#6a6056" font-size="8.5">date · sport · duration_min · distance_m</text>
+    <text x="36" y="666" fill="#6a6056" font-size="8.5">hr_avg · hr_max · hr_zones_min{} · aerobic_te</text>
+    <text x="36" y="677" fill="#6a6056" font-size="8.5">moderate_min · vigorous_min — intensity этой сессии</text>
+    <text x="36" y="688" fill="#6a6056" font-size="8.5">source{garmin,stryd,trainingpeaks} · external_id</text>
+    <text x="26" y="706" fill="#6a6056" font-size="8.5">связь хранится на Workout: Workout.actual_id</text>
+    <text x="26" y="719" fill="#6a6056" font-size="8.5">факт без ссылки = extra · план без факта = missed</text>
+    <text x="26" y="732" fill="#6a6056" font-size="8.5">связь — только вручную: link_actual / unlink_actual</text>
+    <text x="26" y="745" fill="#6a6056" font-size="8.5">автоматического сопоставления нет</text>
+    <text x="26" y="757" fill="#6a6056" font-size="8.5">поздно пришедшая активность меняет закрытую неделю</text>
+    <text x="16" y="800" fill="#6a6056" font-size="10" font-weight="700">Слоты недели</text>
+    <text x="16" y="814" fill="#6a6056" font-size="9">слияние трёх уровней, каждый перекрывает предыдущий</text>
+    <rect x="16" y="824" width="348" height="42" rx="5" fill="#fffefb" stroke="#6a6056" stroke-width="1.2"/>
+    <text x="26" y="840" fill="#1a1a1a" font-size="10" font-weight="700">Season.calendar.slots[]</text>
+    <text x="26" y="853" fill="#6a6056" font-size="8.5">база — 8 окон, 10 ч</text>
+    <line x1="190" y1="866" x2="190" y2="884" stroke="#c2410c" stroke-width="1.3" stroke-dasharray="4,3" marker-end="url(#ar2)"/>
+    <text x="198" y="880" fill="#c2410c" font-size="8.5">перекрывает</text>
+    <rect x="16" y="886" width="348" height="42" rx="5" fill="#fffefb" stroke="#6a6056" stroke-width="1.2"/>
+    <text x="26" y="902" fill="#1a1a1a" font-size="10" font-weight="700">Phase.slot_overrides[]</text>
+    <text x="26" y="915" fill="#6a6056" font-size="8.5">на весь период фазы</text>
+    <line x1="190" y1="928" x2="190" y2="946" stroke="#c2410c" stroke-width="1.3" stroke-dasharray="4,3" marker-end="url(#ar2)"/>
+    <text x="198" y="942" fill="#c2410c" font-size="8.5">перекрывает</text>
+    <rect x="16" y="948" width="348" height="42" rx="5" fill="#fffefb" stroke="#6a6056" stroke-width="1.2"/>
+    <text x="26" y="964" fill="#1a1a1a" font-size="10" font-weight="700">Week.slot_overrides[]</text>
+    <text x="26" y="977" fill="#6a6056" font-size="8.5">на одну неделю</text>
+    <text x="16" y="1010" fill="#6a6056" font-size="9">Итог: слот недели = Season ← Phase ← Week. Хранится только отличие от уровня выше.</text>
+    </svg>
+  </div>
+
+  <p style="font-size:12.5px;color:#6a6056;margin-top:6px">Вложенность = владение. Пунктир красный — переопределение слота или сопоставление план↔факт. Пунктир серый — ссылка на справочник. Блок «ФАКТ» — данные, приходящие извне плана.</p>
+</section>
+
+<section id="e">
+  <div class="h2">2 · Сущности</div>
+
+  <div class="ent">
+    <div class="eh"><span>Season</span><span class="k">корень</span></div>
+    <ul class="pl">
+      <li><code>id</code> · <code>horizon{start,end,season_week_count}</code></li>
+      <li><code>calendar.slots[]</code> — дефолтные слоты</li>
+      <li><code>equipment[]</code> · <code>plan_models[]</code> · <code>load_model</code></li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>Plan</span><span class="k">aggregate</span></div>
+    <ul class="pl">
+      <li><code>id</code> · <code>status{active,completed,draft}</code></li>
+      <li><code>goal</code> — одна цель плана</li>
+      <li><code>period{start,end}</code></li>
+      <li><code>sport_lines{sport → {model_ref, weight}}</code></li>
+      <li><code>load_budget{hours_range,normalized_min_range,intensity_pct_max}</code></li>
+      <li><code>phase_ids[]</code> · <code>transition{overlap_weeks,reason}</code></li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>Goal</span><span class="k">value</span></div>
+    <ul class="pl">
+      <li><code>id</code> · <code>discipline</code> · <code>race_date</code> · <code>venue</code> · <code>start_time</code></li>
+      <li><code>metric{type,target,target_friendly}</code></li>
+      <li><code>race_pace_min_per_km</code> · <code>realistic_fork{best,likely,conservative}</code></li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>Phase</span><span class="k">aggregate</span></div>
+    <ul class="pl">
+      <li><code>id</code> · <code>objective</code> — <b>цель фазы текстом</b> («набрать беговой объём»). Не путать с <code>Plan.goal</code> — это цель плана (10К за 40:00)</li>
+      <li><code>load_range</code> · <code>volume_range</code> · <code>intensity_pct_mean</code> · <code>deload_weeks[]</code></li>
+      <li><code>sport_weights{}</code> — распределение внутри фазы</li>
+      <li><code>slot_overrides[]</code></li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>Week</span><span class="k">aggregate</span></div>
+    <ul class="role">Три состояния. Расписание не обязано быть жёстким: что не разложилось — остаётся висеть и ждёт решения.</ul>
+    <ul class="pl">
+      <li><code>plan_id</code> · <code>season_week</code> · <code>start,end</code></li>
+      <li><code>status{proposed,active,closed}</code></li>
+      <li><code>focus</code> — адаптационная цель недели</li>
+      <li><code>load_target{hours,distance_m,sessions,intensity_pct,normalized_min}</code></li>
+      <li><code>requests[]</code> — намерения из макро</li>
+      <li><code>assignments[]</code> — что разложилось по слотам</li>
+      <li><code>unplaced[]</code> — <b>висяки</b>: не разложилось, ждёт решения пользователя. <b>Без привязки к дню</b>, учитываются в плане недели</li>
+      <li><code>workouts[]</code> — тренировки со счётом шагов; могут быть уже в <code>proposed</code></li>
+      <li><code>summary</code> → <code>WeekSummary</code></li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>WeekSummary</span><span class="k">value</span></div>
+    <ul class="role">Итог недели: что планировали против того, что сделали. Живёт и обновляется по мере выполнения; окончательно фиксируется при закрытии недели.</ul>
+    <ul class="pl">
+      <li><code>week_id</code> · <code>closed_at</code> · <code>updated_at</code></li>
+      <li><code>totals{planned,actual,delta_pct}</code> — по часам, дистанции, нагрузке</li>
+      <li><code>per_session[]</code> — сопоставление: <code>{request_id, actual_id, verdict}</code></li>
+      <li><code>verdict{done,partial,missed,extra,substituted}</code> — по каждой сессии</li>
+      <li><code>missed[]</code> · <code>extra[]</code> — не запланированное, но сделанное</li>
+      <li><code>deviations[]</code> — <code>{metric,planned,actual,reason}</code></li>
+      <li><code>intensity{planned_moderate,actual_moderate,planned_vigorous,actual_vigorous,goal_min}</code> — <b>интенсивность: план, факт, цель</b></li>
+      <li><code>intensity.contributions[]</code> — <code>{actual_id, moderate_min, vigorous_min}</code>: из чего сложился факт</li>
+      <li><code>intensity.zones{moderate_bpm_low,moderate_bpm_high,vigorous_bpm_low,vigorous_bpm_high}</code> — пороги источника; <b>приоритет — зоны атлета</b></li>
+      <li><code>intensity.sources[]</code> — <code>garmin</code></li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>ActualSession</span><span class="k">value</span></div>
+    <ul class="role">Что фактически сделано. Одна запись на выполненную тренировку: объём, пульс и intensity minutes. Живёт вне плана; связан с планом через <code>Workout.actual_id</code>. Всё не связанное всё равно учитывается в actuals.</ul>
+    <ul class="pl">
+      <li><code>id</code> · <code>date</code> · <code>sport</code> · <code>duration_min</code> · <code>distance_m</code></li>
+      <li><code>hr_avg</code> · <code>hr_max</code> · <code>hr_zones_min{}</code> — минуты по зонам атлета</li>
+      <li><code>aerobic_te</code> · <code>anaerobic_te</code> · <code>vo2max</code></li>
+      <li><code>moderate_min</code> · <code>vigorous_min</code> — intensity minutes тренировки от источника; если источник не делит — <b>всё в moderate</b></li>
+      <li><code>source{garmin,manual}</code> · <code>external_id</code> — id активности Garmin, <b>уникален</b></li>
+      <li><code>fetched_at</code> — когда вытянуто из источника</li>
+      <li><code>linked_workout_id</code> — <b>обратная ссылка</b>, ставится вручную; null = факт без плана, но он всё равно в actuals</li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>Command</span><span class="k">command</span></div>
+    <ul class="role">Любое изменение состояния. Ничего не меняется само — только по команде.</ul>
+    <ul class="pl">
+      <li><code>id</code> · <code>type</code> — <code>propose_week · activate_week · close_week · replan_remainder · link_actual · unlink_actual · place_unplaced</code></li>
+      <li><code>target{week_id, ...}</code> · <code>args{}</code></li>
+      <li><code>reason</code> · <code>issued_at</code> · <code>issued_by{user,brain}</code></li>
+      <li><code>status{proposed,applied,rejected}</code> · <code>diff[]</code></li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>Request</span><span class="k">value</span></div>
+    <ul class="pl">
+      <li><code>id</code> · <code>sport</code> · <code>kind</code> · <code>focus</code></li>
+      <li><code>duration_min</code> · <code>equipment_required[]</code></li>
+      <li><code>priority</code> · <code>min_slot_quality</code></li>
+      <li><b>статуса нет</b> — состояние выводится: размещён (есть Assignment) или висит (в <code>unplaced[]</code>)</li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>Assignment</span><span class="k">value</span></div>
+    <ul class="pl">
+      <li><code>request_id</code> · <code>slot_id</code> · <code>start</code> · <code>duration_min</code></li>
+      <li><code>equipment</code> · <code>fit_score</code></li>
+      <li><b>статуса нет</b> — факт выполнения живёт в <code>Workout.status</code></li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>Slot</span><span class="k">value</span></div>
+    <ul class="pl">
+      <li><code>id</code> · <code>day</code> · <code>start,end</code> · <code>capacity_min</code></li>
+      <li><code>equipment[{equipment_id}]</code></li>
+      <li><code>constraints{max_intensity,forbidden_sports,note}</code></li>
+      <li><code>priority_hint</code></li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>SlotOverride</span><span class="k">patch</span></div>
+    <ul class="pl">
+      <li><code>slot_id</code> · <code>ops[]{remove,set_time,set_capacity,add_equipment,remove_equipment,set_constraints,add}</code></li>
+      <li><code>reason</code> · <code>scope{season,phase,week}</code></li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>Workout</span><span class="k">value</span></div>
+    <ul class="pl">
+      <li><code>id</code> · <code>request_id</code> → <code>Request</code> — из какого намерения выросла</li>
+      <li><code>sport</code> · <code>kind</code> · <code>focus</code></li>
+      <li><code>objective{metric,target}</code></li>
+      <li><code>equipment[]</code> · <code>location</code> · <code>time</code></li>
+      <li><code>steps[]</code> · <code>priority</code> · <code>status{planned,done,skipped,moved}</code> · <code>rationale</code></li>
+      <li><code>actual_id</code> → <code>ActualSession</code> — <b>связь с фактом, ставится вручную</b></li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>Step</span><span class="k">value</span></div>
+    <ul class="pl">
+      <li><code>role{warmup,work,rest,cooldown,transition}</code></li>
+      <li><code>sport</code> · <code>target_type{time,distance,laps,reps,open}</code> · <code>target_value</code> — <b>длительности в минутах</b>; для силовой/ОФП — общая длительность тренировки, округлённая до минут</li>
+      <li><code>focus{pace,hr,power,rpe,none,strength_pattern}</code> · <code>focus_value{}</code></li>
+      <li><code>group</code> · <code>round</code></li>
+      <li><code>label</code> · <code>notes</code></li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>Equipment</span><span class="k">реестр</span></div>
+    <ul class="pl">
+      <li><code>id</code> · <code>name</code> · <code>kind{track,water,machine,route,vehicle}</code></li>
+      <li><code>sports[]</code> · <code>availability{days,valid_until,seasonal_note}</code></li>
+      <li><code>limitations{max_distance_m,needs_booking,surface}</code></li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>Athlete</span><span class="k">value</span></div>
+    <ul class="pl">
+      <li><code>vdot</code> · <code>hr_zones{zone → bpm}</code> · <code>hr_max,rhr,lth</code></li>
+      <li><code>injuries[]</code> · <code>form</code></li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>PlanModel</span><span class="k">стратегия</span></div>
+    <ul class="pl">
+      <li><code>id</code> · <code>name</code> · <code>version</code> · <code>sports[]</code></li>
+      <li><code>inputs{}</code> · <code>intensity_map{}</code> · <code>intensity_units[]</code></li>
+      <li><code>block_rules{}</code> · <code>progression_rules{}</code> · <code>guard{}</code></li>
+      <li><code>description</code> — текстовое описание модели</li>
+    </ul>
+  </div>
+
+  <div class="ent">
+    <div class="eh"><span>LoadModel</span><span class="k">правило</span></div>
+    <ul class="pl">
+      <li><code>intensity_factor{zone → доля VO2max}</code></li>
+      <li><code>adaptation_rate{sport → коэффициент}</code> — <b>единственный владелец</b> (в Athlete нет)</li>
+      <li><code>formula</code> · <code>budget{}</code></li>
+    </ul>
+  </div>
+</section>
+
+<section id="r">
+  <div class="h2">3 · Связи</div>
+
+  <div class="tw">
+  <table>
+    <tr><th>Откуда</th><th>Куда</th><th>Тип</th><th>Кардинальность</th></tr>
+    <tr><td>Season</td><td>Plan</td><td>владение</td><td>1 → N; <b>ровно 1 active</b></td></tr>
+    <tr><td>Season</td><td>Slot</td><td>дефолт</td><td>1 → N</td></tr>
+    <tr><td>Season</td><td>Equipment</td><td>реестр</td><td>1 → N</td></tr>
+    <tr><td>Season</td><td>LoadModel</td><td>реестр</td><td>1 → 1</td></tr>
+    <tr><td>Plan</td><td>Goal</td><td>владение</td><td>1 → 1</td></tr>
+    <tr><td>Plan</td><td>PlanModel</td><td>ссылка</td><td>N → N</td></tr>
+    <tr><td>Plan</td><td>Phase</td><td>владение</td><td>1 → N</td></tr>
+    <tr><td>Plan</td><td>Week</td><td>владение</td><td>1 → N</td></tr>
+    <tr><td>Phase</td><td>SlotOverride</td><td>перекрытие</td><td>1 → N</td></tr>
+    <tr><td>Season</td><td>Command</td><td>журнал</td><td>1 → N</td></tr>
+    <tr><td>Command</td><td>Week</td><td>применение</td><td>N → 1</td></tr>
+    <tr><td>Week</td><td>Request</td><td>владение</td><td>1 → N</td></tr>
+    <tr><td>Week</td><td>SlotOverride</td><td>перекрытие</td><td>1 → N</td></tr>
+    <tr><td>Week</td><td>Assignment</td><td>владение</td><td>1 → N</td></tr>
+    <tr><td>Request</td><td>Assignment</td><td>ссылка</td><td>1 → 0..1</td></tr>
+    <tr><td>Request</td><td>Workout</td><td>детализация</td><td>1 → 0..1</td></tr>
+    <tr><td>Assignment</td><td>Slot</td><td>размещение</td><td>N → 1</td></tr>
+    <tr><td>Slot</td><td>Equipment</td><td>доступность</td><td>N → N</td></tr>
+    <tr><td>Week</td><td>Workout</td><td>владение</td><td>1 → N</td></tr>
+    <tr><td>Week</td><td>WeekSummary</td><td>итог</td><td>1 → 0..1</td></tr>
+    <tr><td>WeekSummary</td><td>Request</td><td>ссылка</td><td>N → 0..1</td></tr>
+    <tr><td>WeekSummary</td><td>ActualSession</td><td>вклад в интенсивность</td><td>N → 1</td></tr>
+    <tr><td>Season</td><td>ActualSession</td><td>факт</td><td>1 → N</td></tr>
+    <tr><td><b>Workout</b></td><td><b>ActualSession</b></td><td><b>связь план↔факт</b></td><td><b>0..1 → 1</b></td></tr>
+    <tr><td>Workout</td><td>Step</td><td>владение</td><td>1 → N</td></tr>
+    <tr><td>Step</td><td>Equipment</td><td>требование</td><td>N → N</td></tr>
+    <tr><td>Athlete</td><td>Step / PlanModel</td><td>вход</td><td>1 → N</td></tr>
+    <tr><td>LoadModel</td><td>Step</td><td>вход</td><td>1 → N</td></tr>
+  </table>
+  </div>
+
+  <h3>Наследование слотов</h3>
+  <div class="tw">
+  <table>
+    <tr><th>Уровень</th><th>Источник</th><th>Что делает</th></tr>
+    <tr><td>Season</td><td><code>calendar.slots[]</code></td><td>базовое окно: день, время, ёмкость, оборудование</td></tr>
+    <tr><td>Phase</td><td><code>slot_overrides[]</code></td><td>перекрытие на весь период фазы</td></tr>
+    <tr><td>Week</td><td><code>slot_overrides[]</code></td><td>перекрытие на одну неделю</td></tr>
+  </table>
+  </div>
+  <p>Итог: <code>Season ← Phase ← Week</code>, каждое перекрытие применяется последним. Patch хранит только отличие от уровня выше.</p>
+
+  <h3>Инварианты</h3>
+  <div class="inv-head">
+    <span class="inv-count">Подтверждено <span id="ok-n">0</span> из <span id="inv-total">0</span></span>
+    <span class="inv-bar"><i id="ok-bar"></i></span>
+    <span class="inv-badge" id="ok-badge">не начато</span>
+  </div>
+  <div class="oklist" id="ok-list">
+    <div class="ttl">Подтверждённые инварианты</div>
+    <div class="none">Пока ни одного. Кирилл читает и подтверждает по одному — подтверждённые помечаются здесь и в таблице.</div>
+  </div>
+  <div class="tw">
+  <table>
+    <tr><th>#</th><th></th><th>Правило</th></tr>
+    <tr class="confirmed"><td class="n">I1</td><td class="st"><span class="no">·</span></td><td>В сезоне ровно один Plan со статусом <code>active</code></td></tr>
+    <tr class="confirmed"><td class="n">I2</td><td class="st"><span class="no">·</span></td><td>Слот определён на уровне сезона; фаза и неделя его перекрывают; неделя может добавить свой</td></tr>
+    <tr class="confirmed"><td class="n">I3</td><td class="st"><span class="no">·</span></td><td>Ссылка слота — на существующее оборудование из реестра</td></tr>
+                <tr class="confirmed"><td class="n">I4</td><td class="st"><span class="no">·</span></td><td>В тренировке один <code>sport</code>; все шаги этого спорта</td></tr>
+    <tr class="confirmed"><td class="n">I5</td><td class="st"><span class="no">·</span></td><td>Σ длительностей шагов = длительность тренировки</td></tr>
+    <tr class="confirmed"><td class="n">I6</td><td class="st"><span class="no">·</span></td><td>Шаги не пересекаются по времени; <code>rest</code> идёт после <code>work</code></td></tr>
+            <tr class="confirmed"><td class="n">I7</td><td class="st"><span class="no">·</span></td><td>Запрос без размещения попадает в <code>unplaced</code> с причиной</td></tr>
+    <tr class="confirmed"><td class="n">I8</td><td class="st"><span class="no">·</span></td><td>У недели со статусом <code>closed</code> есть <code>WeekSummary</code></td></tr>
+    <tr class="confirmed"><td class="n">I9</td><td class="st"><span class="no">·</span></td><td><code>Workout.actual_id</code> и <code>ActualSession.linked_workout_id</code> указывают друг на друга</td></tr>
+    <tr class="confirmed"><td class="n">I10</td><td class="st"><span class="no">·</span></td><td>Связь 1:1 — один факт ↔ одна тренировка, и наоборот</td></tr>
+    <tr class="confirmed"><td class="n">I11</td><td class="st"><span class="no">·</span></td><td><code>actual_id</code> ставится только через <code>link_actual</code>, вручную</td></tr>
+    <tr class="confirmed"><td class="n">I12</td><td class="st"><span class="no">·</span></td><td>Всё, что попало в план до активации, — планирование; без связи с фактом к закрытию ⇒ <code>missed</code></td></tr>
+    <tr class="confirmed"><td class="n">I13</td><td class="st"><span class="no">·</span></td><td>Факт без плановой сессии ⇒ <code>linked_workout_id = null</code>; он всё равно учитывается в actuals</td></tr>
+    <tr class="confirmed"><td class="n">I14</td><td class="st"><span class="no">·</span></td><td>Активности берутся только из Garmin</td></tr>
+    <tr class="confirmed"><td class="n">I15</td><td class="st"><span class="no">·</span></td><td>Автоматического сопоставления нет: связь ставится только вручную</td></tr>
+        <tr class="confirmed"><td class="n">I16</td><td class="st"><span class="no">·</span></td><td><code>summary.intensity.actual_moderate</code> = Σ <code>summary.intensity.contributions[].moderate_min</code> по факту недели</td></tr>
+    <tr class="confirmed"><td class="n">I17</td><td class="st"><span class="no">·</span></td><td>Вклад в неделю принимается только из факта с датой в её диапазоне</td></tr>
+    <tr class="confirmed"><td class="n">I18</td><td class="st"><span class="no">·</span></td><td>Один факт — один вклад в неделю</td></tr>
+    <tr class="confirmed"><td class="n">I19</td><td class="st"><span class="no">·</span></td><td>Статус недели меняется только через <code>Command</code></td></tr>
+                <tr class="confirmed"><td class="n">I20</td><td class="st"><span class="no">·</span></td><td>Каждый <code>Workout</code> вырос из <code>Request</code> (<code>request_id</code> задан)</td></tr>
+    <tr class="confirmed"><td class="n">I21</td><td class="st"><span class="no">·</span></td><td>Повторный <code>propose_week</code> полностью заменяет содержимое <code>proposed</code>-недели</td></tr>
+    <tr class="confirmed"><td class="n">I22</td><td class="st"><span class="no">·</span></td><td><code>replan_remainder</code> меняет только сессии на сегодня и позже</td></tr>
+    <tr class="confirmed"><td class="n">I23</td><td class="st"><span class="no">·</span></td><td>Закрытая неделя не меняется; поздний факт игнорируется</td></tr>
+    <tr class="confirmed"><td class="n">I24</td><td class="st"><span class="no">·</span></td><td>Неделя закрывается <b>только по команде</b>; сама не закрывается</td></tr>
+    <tr class="confirmed"><td class="n">I25</td><td class="st"><span class="no">·</span></td><td>Переносов между неделями нет: закрываем одну, потом планируем следующую</td></tr>
+    <tr class="confirmed"><td class="n">I26</td><td class="st"><span class="no">·</span></td><td>Висяки (<code>unplaced[]</code>) учитываются в плане недели</td></tr>
+    <tr class="confirmed"><td class="n">I27</td><td class="st"><span class="no">·</span></td><td>Intensity minutes берутся только из тренировок; нет тренировок — нет intensity minutes</td></tr>
+    <tr class="confirmed"><td class="n">I28</td><td class="st"><span class="no">·</span></td><td>Недельные агрегаты Garmin (пн→вс) не используются — считаем сами по тренировкам</td></tr>
+    <tr class="confirmed"><td class="n">I29</td><td class="st"><span class="no">·</span></td><td>Если источник не делит интенсивность — всё в <code>moderate</code></td></tr>
+    <tr class="confirmed"><td class="n">I30</td><td class="st"><span class="no">·</span></td><td>Неделя без факта показывается с нулями; причины низких цифр не учитываются</td></tr>
+    <tr class="confirmed"><td class="n">I31</td><td class="st"><span class="no">·</span></td><td>Висяк (<code>unplaced[]</code>) не привязан к дню</td></tr>
+    <tr class="confirmed"><td class="n">I32</td><td class="st"><span class="no">·</span></td><td>Размещение висяка решает пользователь — вручную</td></tr>
+    <tr class="confirmed"><td class="n">I33</td><td class="st"><span class="no">·</span></td><td>Неделя гонки принадлежит плану</td></tr>
+    <tr class="confirmed"><td class="n">I34</td><td class="st"><span class="no">·</span></td><td>Планы не перекрываются</td></tr>
+    <tr class="confirmed"><td class="n">I35</td><td class="st"><span class="no">·</span></td><td>Длительности силовой и ОФП — общая длительность тренировки, округлённая до минут</td></tr>
+    <tr class="confirmed"><td class="n">I36</td><td class="st"><span class="no">·</span></td><td><code>Plan.goal</code> и <code>Phase.objective</code> — разные вещи, не дублируют друг друга</td></tr>
+    <tr class="confirmed"><td class="n">I37</td><td class="st"><span class="no">·</span></td><td>У Request и Assignment нет статуса — состояние выводится из наличия Assignment</td></tr>
+    <tr class="confirmed"><td class="n">I38</td><td class="st"><span class="no">·</span></td><td>Висящая тренировка без факта ⇒ пропущена</td></tr>
+    <tr class="confirmed"><td class="n">I39</td><td class="st"><span class="no">·</span></td><td><code>replan_remainder</code> определяет «сегодня» по календарной дате</td></tr>
+    <tr class="confirmed"><td class="n">I40</td><td class="st"><span class="no">·</span></td><td>Повторный propose переделывает план; привязки факта пользователь ставит заново</td></tr>
+    <tr class="confirmed"><td class="n">I41</td><td class="st"><span class="no">·</span></td><td>План готовит propose <b>для одной</b> следующей недели</td></tr>
+    <tr class="confirmed"><td class="n">I42</td><td class="st"><span class="no">·</span></td><td><code>external_id</code> уникален (id активности Garmin)</td></tr>
+    <tr class="confirmed"><td class="n">I43</td><td class="st"><span class="no">·</span></td><td>Единственный <code>adaptation_rate</code> — в <code>LoadModel</code></td></tr>
+              </table>
+  </div>
+
+  <h3>Решения по вопросам</h3>
+  <p>Зафиксированные ответы Кирилла. Действуют как правила модели.</p>
+  <div class="tw">
+  <table>
+    <tr><th>Вопрос</th><th>Решение</th></tr>
+    <tr><td>Методология подсчёта TSS</td><td><b>тикет</b> — <a href="https://github.com/tsybriki/coach/issues/6">tsybriki/coach#6</a>. Референс: <a href="https://share.google/JlFPisYIM7Fczte8R">Training Stress Scores (TSS) Explained</a></td></tr>
+    <tr><td>Дисбаланс sport_lines</td><td><b>пользователь руками</b></td></tr>
+    <tr><td>Единицы длительности</td><td><b>силовую и ОФП — общая длительность тренировки, округлять до минут</b></td></tr>
+    <tr><td>Цель плана vs цель фазы</td><td><b>разные вещи</b>: <code>Plan.goal</code> — «10К за 40:00», <code>Phase.objective</code> — «набрать беговой объём»</td></tr>
+    <tr><td>Статус Request и Assignment</td><td><b>статуса нет</b> — состояние выводится: размещён (есть Assignment) или висит (в <code>unplaced[]</code>)</td></tr>
+    <tr><td><code>external_id</code></td><td><b>уникален</b> — id активности Garmin</td></tr>
+    <tr><td>Висящая тренировка в итогах</td><td><b>нет факта — пропущена</b></td></tr>
+    <tr><td>Граница replan_remainder</td><td><b>«сегодня» — по календарной дате</b></td></tr>
+    <tr><td>Wipe при повторном propose</td><td><b>переделывает план</b>; привязки пользователь может поставить заново</td></tr>
+    <tr><td>Сколько недель планировать наперёд</td><td><b>одну</b></td></tr>
+    <tr><td>Перекрытие планов</td><td><b>не перекрываются</b></td></tr>
+    <tr><td>Неделя гонки</td><td><b>плану</b></td></tr>
+    <tr><td>Висяки</td><td><b>решение за пользователем</b>: остаётся висеть и учитывается в плане недели; <b>без привязки к дню</b>. Факт берётся из факта; при закрытии сравниваем план с фактом</td></tr>
+    <tr><td>Поздний факт</td><td><b>игнорировать</b></td></tr>
+    <tr><td>Тренировка без факта</td><td><b>нет факта — не выполнено</b></td></tr>
+    <tr><td>Факт без интенсивности</td><td><b>всё в moderate</b></td></tr>
+    <tr><td>Intensity minutes</td><td><b>только из тренировок</b>; нет тренировок — нет intensity minutes</td></tr>
+    <tr><td>Граница недели</td><td><b>считать самому</b> — недельные агрегаты Garmin (пн→вс) не используем</td></tr>
+    <tr><td>Неделя без данных</td><td><b>с нулями</b>; всегда показываем фактические цифры, причины не важны</td></tr>
+    <tr><td>Закрытие недели</td><td><b>только по команде</b>, само не закрывается</td></tr>
+    <tr><td>Переносы между неделями</td><td><b>нет</b> — закрываем одну, потом планируем следующую</td></tr>
+    <tr><td>Источник активностей</td><td><b>только Garmin</b></td></tr>
+    <tr><td>Связывание план↔факт</td><td><b>только ручное</b>, 1:1; всё не связанное учитывается в actuals</td></tr>
+  </table>
+  </div>
+
+  <h3>Производные значения</h3>
+  <div class="tw">
+  <table>
+    <tr><th>Значение</th><th>Формула</th></tr>
+    <tr><td>Нагрузка тренировки</td><td>Σ (минуты шага × intensity_factor(зона) × adaptation_rate(спорт)) — <code>LoadModel</code></td></tr>
+    <tr><td>Нагрузка недели</td><td>Σ по тренировкам</td></tr>
+    <tr><td>Итоговые слоты недели</td><td>Season ← Phase.patch ← Week.patch</td></tr>
+    <tr><td>Темп шага</td><td>PlanModel.intensity_map + Athlete.vdot</td></tr>
+    <tr><td>Границы HR-зон</td><td>Athlete.hr_max, rhr, lth</td></tr>
+    <tr><td>Длительность / дистанция тренировки</td><td>Σ по шагам</td></tr>
+    <tr><td>Норма недели</td><td>Phase недели</td></tr>
+    <tr><td>Итог недели (WeekSummary)</td><td>план (requests + load_target) против факта (ActualSession)</td></tr>
+    <tr><td>Verdict по сессии</td><td>по факту связанной <code>ActualSession</code>: полное совпадение, частичное, замена</td></tr>
+    <tr><td>Отклонение недели</td><td>факт − план по каждой метрике, с причиной</td></tr>
+    <tr><td>Verdict факта без плана</td><td><code>extra</code> — попадает в нагрузку недели, но не в выполнение плана</td></tr>
+    <tr><td>Интенсивность недели</td><td><code>summary.intensity</code>: Σ по тренировкам недели; если источник не делит — всё в moderate. Нет тренировок — нет intensity minutes</td></tr>
+    <tr><td>Плановые intensity minutes</td><td>расчёт по шагам недели через <b>зоны атлета</b> (решение 7)</td></tr>
+    <tr><td>Граница недели</td><td>считаем сами по тренировкам — недельные агрегаты Garmin (пн→вс) не используем</td></tr>
+  </table>
+  </div>
+
+  <h3>Жизненный цикл недели</h3>
+  <p>Три состояния. Всё инициирует пользователь. Изменений назад нет: прошедшие сессии не трогаются, закрытая неделя не переоткрывается.</p>
+  <div class="tw">
+  <table>
+    <tr><th>Состояние</th><th>Что есть</th><th>Переход</th></tr>
+    <tr><td><code>proposed</code></td><td>план предложил неделю из макро и попробовал разложить по слотам; что не разложилось — в <code>unplaced</code></td><td><code>propose_week</code></td></tr>
+    <tr><td><code>active</code></td><td>разложенные тренировки стоят по слотам; неразложенные висят в <code>unplaced[]</code></td><td><code>activate_week</code></td></tr>
+    <tr><td><code>closed</code></td><td>саммари посчитано и записано; можно планировать следующую</td><td><code>close_week</code></td></tr>
+  </table>
+  </div>
+
+  <h4>propose_week — можно вызывать многократно</h4>
+  <p>Планировщик берёт макро фазы, собирает намерения и раскладывает их по слотам. Всё, что не разложилось, уходит в <b>ручной режим</b> — <code>unplaced[]</code>. Каждый новый propose <b>вытирает предыдущий</b>: неделю можно предлагать заново, пока она не активна.</p>
+
+  <h4>activate_week — неделя оживает</h4>
+  <p>Все тренировки, которые удалось разложить, стоят по слотам. То, что не разложилось, <b>остаётся висеть</b> в <code>unplaced[]</code> — расписание не обязано быть жёстким. Дальше неделя живёт: тренировки выполняются, факт привязывается, висялки можно разложить позже командой <code>place_unplaced</code>.</p>
+
+  <h4>close_week — явный ритуал</h4>
+  <p>Считаем саммари, записываем. После этого неделя закрыта и <b>не меняется</b>: ни новый факт, ни поздняя активность её не трогают. Дальше планируется следующая неделя.</p>
+
+  <h4>replan_remainder — переплан остатка</h4>
+  <p>Внутри недели можно запросить перепланирование <b>остатка</b>: сессии на сегодня и позже. Прошедшие сессии не меняются. Запрос инициирует пользователь.</p>
+
+  <div class="note">
+    <b>Что из этого следует</b>
+    <b>1.</b> Черновик не считается: <code>proposed</code> не влияет на расчёт нагрузки до активации.<br>
+    <b>2.</b> Висяки (<code>unplaced[]</code>) допустимы в любом состоянии, включая <code>active</code>. Расписание мягкое: лучше оставить тренировку неразложенной, чем насильно приткнуть её в неподходящий слот.<br>
+    <b>3.</b> Висящая тренировка не выполнена, но и не отменена — она ждёт места. Отличие от <code>missed</code> в саммари: <code>missed</code> — тренировка стояла по слоту, но не выполнена.<br>
+    <b>4.</b> Закрытие — всегда ручное действие. Автоматика может предложить, но не закрыть.<br>
+    <b>5.</b> Никаких отмен и откатов: активированная неделя живёт до закрытия, закрытая — навсегда.
+  </div>
+
+  <h4>Что появляется на каждом шаге</h4>
+  <div class="tw">
+  <table>
+    <tr><th>Шаг</th><th>Появляется</th><th>Чего нет</th></tr>
+    <tr><td>propose_week</td><td><code>focus</code>, <code>load_target</code>, <code>requests[]</code>, <code>assignments[]</code>, <code>unplaced[]</code>; частично — <code>workouts[]</code></td><td>факта</td></tr>
+    <tr><td>activate_week</td><td>полный счёт <code>workouts[]</code> со <code>steps[]</code>, <code>inputs_version</code>; висялки остаются</td><td>факта</td></tr>
+    <tr><td>факт загружен</td><td><code>ActualSession[]</code>, кандидаты на связывание, вклад в <code>summary.intensity</code></td><td>итогов</td></tr>
+    <tr><td>связывание подтверждено</td><td><code>Workout.actual_id</code>, <code>verdict</code> по каждой сессии</td><td>—</td></tr>
+    <tr><td>replan_remainder</td><td>новые <code>workouts[]</code> для сессий на сегодня и позже</td><td>изменений в прошедших</td></tr>
+    <tr><td>close_week</td><td><code>summary</code> финализирован, <code>deviations[]</code></td><td>—</td></tr>
+  </table>
+  </div>
+
+  <h4>Порядок внутри close_week</h4>
+  <p><code>вытянуть остаток факта → сопоставить руками → посчитать и записать</code>. Неподтверждённые сессии не блокируют закрытие — они попадают в саммари как <code>missed</code>. Переносов в следующую неделю нет.</p>
+
+  <h3>Висяки и план недели</h3>
+  <p>Решение по висякам — <b>за пользователем</b>: он остаётся висеть и учитывается в плане недели. Факт всё равно берётся из факта. При закрытии недели сравниваем план с фактом.</p>
+
+  <h3>Связывание факта и плана</h3>
+  <p>Автоматического сопоставления нет вообще. Факт и план связывает пользователь, вручную.</p>
+  <p><b>Цель связывания</b> — сопоставить задачу сессии с её выполнением. Всё, что не связано, в любом случае учитывается в actuals: связывание уточняет отчёт, но не решает, что считать сделанным.</p>
+  <p><b>Активности берутся только из Garmin.</b> Поздний факт (пришедший после закрытия недели) игнорируется — закрытые недели не трогаются.</p>
+  <div class="tw">
+  <table>
+    <tr><th>Шаг</th><th>Что происходит</th></tr>
+    <tr><td>Загрузка факта</td><td>в любой момент можно вытянуть тренировки из Garmin — вручную или по кнопке. Активность → <code>ActualSession</code> с её <code>moderate_min</code>/<code>vigorous_min</code></td></tr>
+    <tr><td>Связывание</td><td>пользователь выбирает факт для конкретной тренировки → <code>link_actual</code>: <code>Workout.actual_id</code> + <code>ActualSession.linked_workout_id</code>, обновляются вместе</td></tr>
+    <tr><td>Отвязывание</td><td><code>unlink_actual</code> — если связали не то</td></tr>
+    <tr><td>Пересчёт</td><td>изменение связи пересчитывает <code>WeekSummary</code> затронутой недели</td></tr>
+  </table>
+  </div>
+
+  <h3>Закрытие недели</h3>
+  <p>Простой явный ритуал, три шага.</p>
+  <p><b>Планирование и выполнение</b> — всё, что попало в план до активации, считается планированием. Всё, что планировалось, но к моменту закрытия не связано с фактом, — не выполнено.</p>
+  <p><b>Закрытие — только по команде</b>, само ничего не закрывается. Недель с переносами между собой нет: закрываем одну, потом планируем следующую.</p>
+  <div class="tw">
+  <table>
+    <tr><th>Шаг</th><th>Что происходит</th></tr>
+    <tr><td>1 · вытянуть</td><td>достать из Garmin всё, что ещё не вытянуто</td></tr>
+    <tr><td>2 · сопоставить</td><td>связать факт с плановыми тренировками — руками</td></tr>
+    <tr><td>3 · посчитать</td><td>считать цифры и записать в <code>summary</code></td></tr>
+  </table>
+  </div>
+
+  <h3>Неделя в работе</h3>
+  <div class="tw">
+  <table>
+    <tr><th>Момент</th><th>Что меняется в неделе</th></tr>
+    <tr><td>Вытянут факт</td><td><code>ActualSession</code> появляется в сезоне; вклад в <code>summary.intensity.contributions[]</code> не делается, пока факт не связан</td></tr>
+    <tr><td>Факт связан</td><td><code>link_actual</code>: <code>Workout.actual_id</code> ← факт; статус тренировки → <code>done</code>; факт добавляется в <code>summary.intensity.contributions[]</code></td></tr>
+    <tr><td>Неделя закончилась</td><td><code>close_week</code> — <b>только по команде</b>: вытянуть остаток факта → сопоставить руками → посчитать и записать. Переносов в следующую неделю нет</td></tr>
+  </table>
+  </div>
+</section>
+
+<section id="p">
+  <div class="h2">4 · Вопросы</div>
+
+  <ol class="probs">
+    <li><b>Как устроен переход между планами?</b> Планы не перекрываются — граница проходит по дате цели. Вопрос: как технически закрывается первый план и открывается второй.</li>
+    <li><b>Какие виды спорта поддержаны и по каким правилам?</b> Набор PlanModel.</li>
+    <li><b>На каком расстоянии считается темп?</b> Километр / 100 м / миля — база не задана на уровне модели.</li>
+    <li><b>Обязаны ли шаги соответствовать фокусу тренировки?</b></li>
+    <li><b>Что входит в <code>inputs_version</code>?</b> vdot, hr_zones, план, модель, слоты — полный набор не зафиксирован.</li>
+    <li><b>Где и как храним?</b> Формат и объём: JSON-файлы или БД; правило атомарной записи и миграции схемы.</li>
+  </ol>
+</section>
+
+<hr>
+<p class="end">Coach App · модель домена v3.6</p>
+
+</main>
+
+<script>
+(function () {
+  var rows = document.querySelectorAll('#r table tr');
+  var inv = [];
+  rows.forEach(function (tr) {
+    var n = tr.querySelector('td.n');
+    if (!n || !/^I\d+$/.test(n.textContent.trim())) return;
+    inv.push({ num: n.textContent.trim(), tr: tr, cell: tr.querySelector('td.st') });
+  });
+  var total = inv.length;
+  document.getElementById('inv-total').textContent = total;
+  function paint() {
+  var ok = [];
+  inv.forEach(function (r) {
+    if (r.tr.classList.contains('confirmed')) {
+      ok.push(r);
+      r.cell.innerHTML = '<span class="ok">\u2713</span>';
+    } else {
+      r.cell.innerHTML = '<span class="no">\u00b7</span>';
+    }
+  });
+  document.getElementById('ok-n').textContent = ok.length;
+  document.getElementById('ok-bar').style.width = (total ? (ok.length / total * 100) : 0) + '%';
+  var badge = document.getElementById('ok-badge');
+  var list = document.getElementById('ok-list');
+  if (ok.length === 0) {
+    badge.className = 'inv-badge';
+    badge.textContent = 'не начато';
+  } else if (ok.length === total) {
+    badge.className = 'inv-badge ok';
+    badge.textContent = 'все подтверждены';
+  } else {
+    badge.className = 'inv-badge';
+    badge.textContent = 'в работе';
+  }
+  if (ok.length) {
+    var items = ok.map(function (r) {
+      var t = r.tr.querySelector('td:last-child').textContent.trim();
+      return '<li><b>' + r.num + '</b> — ' + t + '</li>';
+    }).join('');
+    list.innerHTML = '<div class="ttl">Подтверждённые инварианты (' + ok.length + ')</div><ul>' + items + '</ul>';
+  } else {
+    list.innerHTML = '<div class="ttl">Подтверждённые инварианты</div><div class="none">Пока ни одного. Кирилл читает и подтверждает по одному — подтверждённые помечаются здесь и в таблице.</div>';
+  }
+  }
+  paint();
+  var pending = false;
+  new MutationObserver(function (muts) {
+    var hit = muts.some(function (m) { return m.target.tagName === 'TR'; });
+    if (!hit || pending) return;
+    pending = true;
+    setTimeout(function () { pending = false; paint(); }, 0);
+  }).observe(document.getElementById('r'), { attributes: true, subtree: true, attributeFilter: ['class'] });
+})();
+</script>
+</body>
+</html>

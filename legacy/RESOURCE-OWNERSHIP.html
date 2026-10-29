@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Coach App — владельцы ресурсов: разбор</title>
+<style>
+  :root {
+    --bg: #fdf6ed; --card-bg: #fffefb; --ink: #1a1a1a; --muted: #6a6056; --faint: #9a9085;
+    --border: #e6dac4; --coral: #ff6b5a; --teal: #14b8a6; --mustard: #d4a017;
+    --terra: #c2410c; --sky: #0284c7; --grass: #65a30d; --code-bg: #f4ede0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.55; font-size: 16px; padding-bottom: 60px; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  header { padding: 20px 16px 14px; border-bottom: 1px solid var(--border); background: var(--card-bg); }
+  header h1 { font-size: 20px; font-weight: 700; }
+  header .sub { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+  header .meta { font-size: 11px; color: var(--faint); margin-top: 8px; }
+
+  nav { position: sticky; top: 0; z-index: 10; background: rgba(253,246,237,0.96); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; padding: 8px 12px; scrollbar-width: none; }
+  nav::-webkit-scrollbar { display: none; }
+  nav a { display: inline-block; font-size: 12px; color: var(--muted); text-decoration: none; padding: 5px 10px; margin-right: 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--card-bg); }
+
+  main { padding: 0 14px; max-width: 780px; margin: 0 auto; }
+  section { margin-top: 32px; scroll-margin-top: 60px; }
+  .h2 { display: flex; align-items: baseline; gap: 9px; font-size: 17px; font-weight: 700; padding-bottom: 7px; border-bottom: 2px solid var(--ink); margin-bottom: 14px; }
+  .h2 .n { font-size: 12px; color: var(--coral); font-weight: 700; }
+  h3 { font-size: 15px; font-weight: 700; margin: 20px 0 8px; }
+  h4 { font-size: 12px; font-weight: 700; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  p { font-size: 15px; margin-bottom: 10px; }
+  ul, ol { margin: 0 0 12px; padding-left: 20px; }
+  li { font-size: 14.5px; margin-bottom: 5px; }
+
+  .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+  .card > .ct { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; margin-bottom: 3px; flex-wrap: wrap; }
+  .card > .ct .tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 999px; background: var(--code-bg); color: var(--muted); }
+  .role { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; overflow-x: auto; font-size: 12px; line-height: 1.5; margin: 8px 0 12px; -webkit-overflow-scrolling: touch; }
+  pre code { white-space: pre; }
+  .inline { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+
+  .note { border-left: 3px solid var(--sky); background: #f0f8fd; padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 14px; margin: 10px 0 14px; }
+  .warn { border-left: 3px solid var(--coral); background: #fff2ef; padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 14px; margin: 10px 0 14px; }
+  .dec { border-left: 3px solid var(--grass); background: #f3f9ec; padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 14px; margin: 10px 0 14px; }
+  .note b, .warn b, .dec b { display: block; margin-bottom: 3px; }
+
+  .tw { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 8px 0 14px; position: relative; }
+  table { border-collapse: collapse; width: 100%; min-width: 440px; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 700; background: var(--code-bg); }
+  td code { font-size: 11.5px; }
+  td.n { white-space: nowrap; color: var(--faint); }
+  td b { font-weight: 700; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 12px; }
+  .chip { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; background: var(--code-bg); border: 1px solid var(--border); color: var(--muted); }
+  .chip.c { background: #ffeceb; border-color: #ffc9c3; color: var(--terra); }
+  .chip.t { background: #e6f7f5; border-color: #b6e8e3; color: #0b7d71; }
+  .chip.m { background: #fdf3dd; border-color: #eddca8; color: #8a6a06; }
+  .chip.s { background: #e8f3fb; border-color: #c2e2f5; color: #026092; }
+  .chip.g { background: #eff7e6; border-color: #cfe5b8; color: #4a7a12; }
+
+  .bar { display: flex; height: 26px; border-radius: 6px; overflow: hidden; margin: 6px 0 10px; font-size: 10.5px; }
+  .bar > div { display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; overflow: hidden; white-space: nowrap; }
+  .b1 { background: var(--terra); }
+  .b2 { background: var(--mustard); }
+  .b3 { background: var(--sky); }
+  .b4 { background: var(--teal); }
+  .b5 { background: var(--grass); }
+
+  .chain { display: flex; flex-direction: column; margin: 12px 0 18px; }
+  .chain .node { background: var(--card-bg); border: 1.5px solid var(--ink); border-radius: 10px; padding: 10px 13px; position: relative; }
+  .chain .node .nm { font-size: 14.5px; font-weight: 700; }
+  .chain .node .ds { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+  .chain .gap { height: 22px; position: relative; }
+  .chain .gap::before { content: '↓'; position: absolute; left: 15px; top: 0; font-size: 14px; color: var(--terra); font-weight: 700; }
+  .chain .node.l1 { border-color: var(--terra); }
+  .chain .node.l2 { border-color: var(--mustard); }
+  .chain .node.l3 { border-color: var(--sky); }
+  .chain .node.l4 { border-color: var(--teal); }
+  .chain .node.l5 { border-color: var(--grass); }
+  .chain .node.side { border-style: dashed; border-color: var(--faint); background: #faf6ee; }
+
+  .own { display: grid; grid-template-columns: 1fr; gap: 0; margin: 10px 0; }
+  .own .row { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--border); font-size: 13.5px; }
+  .own .row:last-child { border-bottom: none; }
+  .own .who { flex: 0 0 92px; font-weight: 700; font-size: 12px; }
+  .own .what { flex: 1; color: var(--muted); }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 26px 0 0; }
+  .end { text-align: center; font-size: 12px; color: var(--faint); padding: 26px 0 10px; }
+
+  @media (max-width: 560px) {
+    body { font-size: 15px; }
+    main { padding: 0 11px; }
+    header { padding: 16px 14px 12px; }
+    header h1 { font-size: 18px; }
+    p { font-size: 14.5px; }
+    li { font-size: 14px; }
+    pre { font-size: 11px; padding: 10px; }
+    table { min-width: 380px; font-size: 12.5px; }
+    th, td { padding: 6px 8px; }
+    .tw::after { content: '→ свайп'; position: absolute; right: 2px; bottom: 2px; font-size: 9.5px; color: var(--faint); background: var(--card-bg); padding: 0 4px; border-radius: 4px; pointer-events: none; }
+    .h2 { font-size: 16px; }
+    .own .who { flex: 0 0 76px; font-size: 11.5px; }
+    .own .row { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Кто владеет ресурсом</h1>
+  <div class="sub">Разбор: держат ли параллельные планы. Считаем по фактическим данным календаря.</div>
+  <div class="meta">v0.3 · к доменной модели v0.2 · 25.10.2026</div>
+</header>
+
+<nav>
+  <a href="#fact">Факты</a>
+  <a href="#frame">Рамка</a>
+  <a href="#own">Владение</a>
+  <a href="#grid">Сетка</a>
+  <a href="#corr">Корреляции</a>
+  <a href="#verdict">Вердикт</a>
+  <a href="#delta">Дельта</a>
+  <a href="#holes">Дыры</a>
+</nav>
+
+<main>
+
+<section id="fact">
+  <div class="h2"><span class="n">01</span> Факты по календарю</div>
+
+  <p>Прежде чем спорить о структуре — что вообще scarce. Посчитано из <code>constraints.json</code> и фактического W3.</p>
+
+  <h4>Ёмкость календаря</h4>
+  <div class="bar">
+    <div class="b1" style="width:15%">ПН 1.5</div>
+    <div class="b2" style="width:17.5%">ВТ 1.75</div>
+    <div class="b3" style="width:20%">СР 2.0</div>
+    <div class="b4" style="width:7.5%">ЧТ .75</div>
+    <div class="b5" style="width:10%">ПТ 1.0</div>
+    <div class="b2" style="width:10%">СБ 1.0</div>
+    <div class="b1" style="width:20%">ВС 2.0</div>
+  </div>
+  <p class="fdesc">8 окон, суммарно <b>600 мин = 10.0 ч/нед</b>. Дефицит всегда сидит здесь, а не в лимите нагрузки: <code>max_total_hours_per_week</code> = <b>11 ч</b> — то есть <b>никогда не срабатывает</b>. Реальная граница — 10 ч, и она нигде не записана.</p>
+
+  <h4>Сколько нужно по фазам</h4>
+  <div class="tw">
+  <table>
+    <tr><th>Фаза</th><th>Нужно</th><th>Занято календаря</th><th>Свободно</th></tr>
+    <tr><td>run_base (сейчас)</td><td>6.24 ч</td><td>62 %</td><td><b>3.8 ч</b></td></tr>
+    <tr><td>tri_build</td><td>8 ч</td><td>80 %</td><td>2 ч</td></tr>
+    <tr><td>tri_specific</td><td>10 ч</td><td><b>100 %</b></td><td><b>0</b></td></tr>
+    <tr><td>tri_taper</td><td>5 ч</td><td>50 %</td><td>5 ч</td></tr>
+  </table>
+  </div>
+
+  <div class="warn">
+    <b>Триатлон в финальной фазе занимает календарь целиком</b>
+    При 10 ч из 10 любая болезнь, поездка или семейный вечер делают неделю невыполнимой — и не потому, что «не хватило времени», а потому, что нет ни одного свободного слота. Это следствие того, что <b>календарь — единственный настоящий ограничитель</b>, а лимит 11 ч создаёт ложное ощущение запаса.
+  </div>
+
+  <h4>Сколько ресурсов реально scarce</h4>
+  <div class="tw">
+  <table>
+    <tr><th>Ресурс</th><th>Окна</th><th>Дефицит</th></tr>
+    <tr><td><b>Слот времени</b></td><td>8/нед, 10 ч</td><td>связывает всё</td></tr>
+    <tr><td>Бассейн</td><td>ПН · ПТ (плюс СР — неоднозначно)</td><td><b>2 окна</b></td></tr>
+    <tr><td>Стадион 400м</td><td>ПН · СР (неоднозначно)</td><td>2 окна</td></tr>
+    <tr><td>Велотренажёр</td><td>ЧТ</td><td><b>1 окно</b></td></tr>
+    <tr><td>Длинная поездка</td><td>ВС</td><td><b>1 окно</b></td></tr>
+  </table>
+  </div>
+
+  <div class="note">
+    <b>Ключевое наблюдение про «или»</b>
+    Три окна записаны как <code>stadium_or_pool</code>, <code>pool_or_asphalt</code>, <code>long_ride_or_station</code>. Это не небрежность — это ровно то место, где **два плана будут конфликтовать**. Воскресенье 11:00–13:00 — один слот на двоих: длинный бег или длинная поездка. В W3 там стоит лёгкая пятёрка 30 мин, а длинный бег уехал на среду — потому что в среду `stadium_or_pool`.
+  </div>
+</section>
+
+<section id="frame">
+  <div class="h2"><span class="n">02</span> Рамка разговора</div>
+
+  <div class="warn">
+    <b>Вопрос поставлен не туда</b>
+    «Параллельные или последовательные планы» — это вопрос про <em>сроки</em>. А проблема, которую ты описал — «план держишь в одном месте, доступность смотришь в другом» — это вопрос про <b>владение</b>. Два разных вопроса, и второй важнее.
+  </div>
+
+  <p>Переформулирую: <b>кто владеет дефицитным ресурсом?</b> План может быть один или три — это не меняет того, что окно в 19:00 в четверг достаётся ровно одному.</p>
+
+  <h3>Конфликт уже существует — он не от параллельности</h3>
+  <p>В W3 одновременно стоят бег, вел, плавание и силовая. То есть **конкуренция за 8 окон уже происходит**, в одном плане. Параллельные планы её не создают — они лишь дают ей <b>имя</b> и владельца. Сейчас конкуренция прячется внутри одного плана, где её никто не разбирает.</p>
+
+  <div class="dec">
+    <b>Следствие</b>
+    Отказ от параллельных планов не решает проблему управления ресурсами — он просто прячет её обратно внутрь одного плана, где конфликт всё равно надо разрешать, только теперь без внясного арбитра. Проблема не в количестве планов, а в том, <b>что нигде не записано, кто решает</b>.
+  </div>
+
+  <h3>Корреляции — тоже не от параллельности</h3>
+  <p>«Очень сложно учитывать корреляции» — тоже верно, но это про <em>что именно</em> коррелирует. Разберу по видам в §05: разные корреляции требуют разных владельцев, и часть из них уже имеет механизм в данных.</p>
+</section>
+
+<section id="own">
+  <div class="h2"><span class="n">03</span> Кто что владеет</div>
+
+  <p>Предлагаю разделить владение на четыре уровня. Каждая вещь живёт ровно в одном месте — это и есть лечение «разделённого» владения.</p>
+
+  <div class="card">
+    <div class="ct">Раскладка владения</div>
+    <div class="own">
+      <div class="row"><div class="who">Сезон</div><div class="what"><b>Слоты времени.</b> Календарь как список окон с длительностью и альтернативами. Плюс лимиты нагрузки, распределение усилий между целями, правила сезона.</div></div>
+      <div class="row"><div class="who">План</div><div class="what"><b>Намерения.</b> «Мне в эту неделю нужна качественная vo2max, 51 мин, приоритет 90». План не знает, в какое окно это попадёт.</div></div>
+      <div class="row"><div class="who">Сетка</div><div class="what"><b>Раскладка.</b> Единственное место, где слоты, ресурсы и намерения встречаются. Здесь решается, что куда попало.</div></div>
+      <div class="row"><div class="who">Модель плана</div><div class="what"><b>Как строить тренировку.</b> Дэниэлс, силовая, плавательная. Знает про спорт и цель, не знает про календарь.</div></div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Почему сетка — отдельный слой, а не функция плана</b>
+    Если распределение живёт внутри плана, то при двух параллельных планах у каждого своя копия этого кода, и они не видят друг друга: оба считают, что слот свободен. Если распределение живёт в сезоне, то оно видит все планы разом — и это единственное место, где можно проверить суммарную нагрузку. <b>Арбитраж по слотам не может быть свойством двух независимых планов.</b>
+  </div>
+
+  <h3>Двусторонняя связь вместо односторонней</h3>
+  <p>Сейчас связь односторонняя: план смотрит в календарь и подстраивается. Отсюда ощущение «смотрю в другом месте». Предлагаю двустороннюю: план публикует <b>требования</b> (что нужно, сколько длительности, какой ресурс, какой приоритет), сетка отдаёт <b>назначения</b> (что куда встало, что осталось без места, что пришлось ужать).</p>
+
+  <div class="tw">
+  <table>
+    <tr><th></th><th>Было</th><th>Стало</th></tr>
+    <tr><td>План знает календарь</td><td>да, жёстко</td><td>нет — только публикует требования</td></tr>
+    <tr><td>Календарь знает планы</td><td>нет</td><td>да — через сетку</td></tr>
+    <tr><td>Конфликт двух планов за слот</td><td>не обнаруживается</td><td>обнаруживается в сетке, один арбитр</td></tr>
+    <tr><td>Суммарная нагрузка 3 планов</td><td>не проверяется</td><td>проверяется один раз, в сезоне</td></tr>
+    <tr><td>Свободное окно</td><td>план в него не лезет</td><td>сетка отдаёт его тому, кому нужнее</td></tr>
+  </table>
+  </div>
+</section>
+
+<section id="grid">
+  <div class="h2"><span class="n">04</span> Сетка недели</div>
+
+  <p>Сетка — это одна неделя, разложенная по окнам. Она принадлежит сезону, а не плану: в ней видно всё, включая конфликты.</p>
+
+  <div class="card">
+    <div class="ct">WeekGrid <span class="tag">новое</span></div>
+    <div class="role">Раскладка одной недели. Единственное место, где встречаются спрос (намерения планов) и предложение (окна календаря).</div>
+
+    <div class="fld"><div class="row1"><span class="fname">season_week</span><span class="ftype">int</span></div><div class="fdesc">номер недели в сезоне.</div></div>
+    <div class="fld"><div class="row1"><span class="fname">slots</span><span class="ftype">Slot[]</span></div><div class="fdesc">по одному на каждое окно календаря: <code>{day, start, end, capacity_min, resource_options[], assignment}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">requests</span><span class="ftype">Request[]</span></div><div class="fdesc">что планы хотят: <code>{plan_id, sport, kind, focus, duration_min, resource_required[], priority}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">assignments</span><span class="ftype">Assignment[]</span></div><div class="fdesc">что во что легло: <code>{request_id, slot_id, start, actual_duration_min, resource, fit_score}</code></div></div>
+    <div class="fld"><div class="row1"><span class="fname">unplaced</span><span class="ftype">Request[]</span></div><div class="fdesc"><b>то, что не влезло</b> — и это главный выход для UI: не «план сломался», а «это не поместилось, вот почему».</div></div>
+    <div class="fld"><div class="row1"><span class="fname">load_total</span><span class="ftype">object</span></div><div class="fdesc"><code>{hours, per_sport, per_plan, capacity_h, over_pct}</code> — сумма считается один раз, здесь.</div></div>
+  </div>
+
+  <h3>Что это даёт UI</h3>
+  <div class="tw">
+  <table>
+    <tr><th>Экран</th><th>Как выглядит</th></tr>
+    <tr><td>Неделя</td><td>сетка: окна по дням, в каждом — что стоит. Пустое окно видно явно.</td></tr>
+    <tr><td>Конфликт</td><td>«ВС 11:00 просили длинный бег и длинную поездку — встал бег, поездка перенесена на ВС 13:00»</td></tr>
+    <tr><td>Не влезло</td><td>«Качественная vo2max 51 мин: в ПН 18:45 осталось 14 мин, в СР интенсивные запрещены, в ВС окно отдано велоплану»</td></tr>
+    <tr><td>Суммарно</td><td>«Неделя: 9.4 ч из 10.0 доступных · бег 5.2 · вел 2.5 · плавание 1.2 · силовая 0.5»</td></tr>
+  </table>
+  </div>
+
+  <h3>Правило разрешения конфликта</h3>
+  <p>Детерминированное, без «как получится»: слоты сортируются по дефициту ресурса, внутри — по приоритету намерения; несовместимые по времени (интенсивное в СР вечером запрещено) отбрасываются первыми; при равенстве — правило сезона.</p>
+
+  <div class="note">
+    <b>Детерминизм — обязателен</b>
+    Одна и та же входная неделя должна всегда давать одну и ту же раскладку, иначе приложение будет «переставлять» тренировки при каждом обновлении формы. Поэтому: фиксированный порядок, явные правила, версия входа у результата.
+  </div>
+</section>
+
+<section id="corr">
+  <div class="h2"><span class="n">05</span> Корреляции: кто за что отвечает</div>
+
+  <p>«Сложно учитывать корреляции» — распадается на четыре разных вида. У каждого свой естественный владелец, и три из четырёх уже имеют механизм в данных.</p>
+
+  <div class="tw">
+  <table>
+    <tr><th>Корреляция</th><th>Пример</th><th>Владелец</th><th>Есть ли механизм</th></tr>
+    <tr><td><b>Внутри недели, между спортами</b></td><td>лёгкая пятёрка в ВС 30 мин + качественная ПН 51 мин — не слишком ли часто</td><td><b>Сетка</b></td><td>частично: <code>forbidden</code> в constraints</td></tr>
+    <tr><td><b>Между неделями, один спорт</b></td><td>рост объёма ≤ +10 %/нед, deload каждую 4-ю, guard 0.9× за 21 день</td><td><b>План</b></td><td><b>да</b> — <code>volume_progression_rules</code>, <code>quality_history</code></td></tr>
+    <tr><td><b>Между планами, одна цель</b></td><td>бег 60 % / триатлон 40 % — а хватает ли этого</td><td><b>Сезон</b></td><td><b>да</b> — <code>chosen_allocation</code></td></tr>
+    <tr><td><b>Физиология: нагрузка одного спорта бьёт по другому</b></td><td>90 км велоподъёма в W2 убили бег в W3 — это уже случилось</td><td><b>Сезон</b> (нормировка) + <b>план</b> (реакция)</td><td><b>да</b> — <code>adaptation_rates</code>: run 1.0 · bike 0.7 · swim 0.55 · strength 1.5</td></tr>
+  </table>
+  </div>
+
+  <div class="dec">
+    <b>Механизм межспортовой корреляции уже есть</b>
+    <code>adaptation_rates</code> нормализует HR-стоимость разных видов спорта к бегу. Именно он позволяет сложить «90 км велоподъёма» и «0 км бега» в одну картину нагрузки. Это и есть та корреляция, которую ты назвал сложной, — она уже решена, просто живёт в <code>athlete.json</code> без объяснения, кто её применяет.
+  </div>
+
+  <div class="note">
+    <b>Единственная честно нерешённая</b>
+    Последняя строка таблицы — не «суммируем», а «учитываем взаимное влияние»: тяжёлый велоподъём влияет на качество бега сильнее, чем сумма часов показывает. Нормировка по <code>adaptation_rates</code> — это приближение первого порядка. Настоящая связь (накопленная усталость, влияние на HR-дрейф) потребовала бы общей модели восстановления, а не суммы. Это не решается структурой — это отдельная задача. Но важно, чтобы <b>место для неё было</b>: сезонный уровень, где сходятся планы.
+  </div>
+</section>
+
+<section id="verdict">
+  <div class="h2"><span class="n">06</span> Вердикт</div>
+
+  <div class="card">
+    <div class="ct"><span class="n">A</span> Параллельные планы — держать</div>
+    <div class="role"><b>Держать, но не как способ разложить нагрузку, а как способ разделить разные модели построения.</b></div>
+    <ul>
+      <li>Каждый план = один спорт + своя модель. Модели разные ⇒ планы разные по существу, а не по форме.</li>
+      <li>Планы имеют <b>разные длины</b> — это нормально и вытекает из сроков целей.</li>
+      <li>Триатлон = три плана с разными моделями. Это не искусственное разбиение, а отражение того, что Дэниэлса для плавания не существует и появится свой.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="ct"><span class="n">B</span> Последовательные планы — отвергнуть как основную схему</div>
+    <div class="role">Не потому что неправильны, а потому что <b>последовательность не решает ни одну из реальных проблем</b>.</div>
+    <ul>
+      <li>Конкуренция за слоты никуда не денется: внутри триатлонного плана три спорта параллельны по определению.</li>
+      <li>Суммарная нагрузка всё равно считается сезоном, независимо от числа планов.</li>
+      <li>Границы «по цели» искусственны: 10К заканчивается 18.04, но триатлонная подготовка начинается раньше и идёт параллельно с бегом.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="ct"><span class="n">C</span> Что реально надо поменять</div>
+    <div class="role">Не число планов, а <b>место, где решается раскладка</b>.</div>
+    <ul>
+      <li><b>Ввести <code>WeekGrid</code></b> как слой сезона. Слоты, ресурсы, распределение — здесь.</li>
+      <li><b>Сделать связь двусторонней:</b> план публикует требования, сетка отдаёт назначения и список «не влезло».</li>
+      <li><b>Перенести календарь в сезон</b> (из <code>constraints.json</code> — сезонный артефакт) и записать <b>реальную ёмкость 10 ч</b>, а не 11.</li>
+      <li><b>Оставить инвариант:</b> (спорт, season_week) принадлежит не более чем одному плану. Всё остальное — легально, включая пересечение планов.</li>
+    </ul>
+  </div>
+
+  <div class="note">
+    <b>Про «удобно смотреть»</b>
+    Параллельные планы действительно удобно смотреть — но смотреть надо не план, а неделю. Неделя — это сетка, и в ней видно всё сразу: три плана, все виды спорта, все решения. План — это фильтр поверх. Если UI показывает план, ты увидишь «свои» тренировки и не увидишь, куда делся бассейн и почему не влез вел. <b>Параллельность — это не проблема просмотра, а только проблема арифметики. Лечится арифметикой.</b>
+  </div>
+</section>
+
+<section id="delta">
+  <div class="h2"><span class="n">07</span> Дельта к модели v0.2</div>
+
+  <div class="tw">
+  <table>
+    <tr><th>Сущность</th><th>Что меняется</th></tr>
+    <tr><td><b>Season</b></td><td>+ <code>calendar</code> (окна, ёмкость, ресурсы), + <code>allocation</code> (цель → планы → доля усилий), + лимиты, <em>заменяющие</em> <code>constraints.json</code></td></tr>
+    <tr><td><b>Plan</b></td><td>уточнение: <code>sport</code> — обязательное поле (один спорт = одна модель); <code>model_ref</code> обязателен; <code>goal_ids</code> — список; + <code>budget</code> (доля усилий и часов от сезона)</td></tr>
+    <tr><td><b>PlanModel</b></td><td>+ <code>resource_requirements</code> (что модели нужно от мира: бассейн, стадион) — чтобы сетка знала, что резервировать</td></tr>
+    <tr><td><b>Week</b></td><td>остаётся намерением, но <code>intents</code> превращаются в <code>requests</code> с требованиями к ресурсу; появляется ссылка на <code>grid</code></td></tr>
+    <tr><td><b>WeekGrid</b></td><td><b>новая сущность</b>: слоты + назначения + невлезшее + суммарная нагрузка</td></tr>
+    <tr><td><b>Workout / Step</b></td><td>без изменений (v0.2)</td></tr>
+  </table>
+  </div>
+
+  <h3>Как это выглядит на сезоне</h3>
+  <div class="chain">
+    <div class="node l1"><div class="nm">Season · 49 недель · 2 цели</div><div class="ds">calendar (8 окон, 10 ч) · allocation (60/40) · limits · rules</div></div>
+    <div class="gap"></div>
+    <div class="node side"><div class="nm">WeekGrid × 49</div><div class="ds">слоты ← requests от планов → назначения + невлезшее</div></div>
+    <div class="gap"></div>
+    <div class="node l2"><div class="nm">plan_run_10k</div><div class="ds">run · daniels_run_v1 · W1–W28 · цель g_run_spring · 60 %</div></div>
+    <div class="gap"></div>
+    <div class="node l2"><div class="nm">plan_run_tri</div><div class="ds">run · daniels_run_v1 · W29–W49 · цель g_tri_autumn · часть 40 %</div></div>
+    <div class="gap"></div>
+    <div class="node l2"><div class="nm">plan_bike_tri</div><div class="ds">bike · bike_model_v1 · W29–W49 · цель g_tri_autumn · часть 40 %</div></div>
+    <div class="gap"></div>
+    <div class="node l2"><div class="nm">plan_swim_tri</div><div class="ds">swim · swim_model_v1 · W29–W49 · цель g_tri_autumn · часть 40 %</div></div>
+  </div>
+
+  <div class="note">
+    <b>Инвариант (спорт, season_week) уникален</b> — и он автоматически запрещает двойное бронирование бега. Всё остальное пересекается свободно. Это единственное жёсткое правило на эту тему; остальное разруливает сетка.
+  </div>
+</section>
+
+<section id="holes">
+  <div class="h2"><span class="n">08</span> Дыры, добавившиеся от разбора</div>
+
+  <div class="tw">
+  <table>
+    <tr><th>#</th><th>Дыра</th><th>Следствие</th></tr>
+    <tr><td class="n">30</td><td>Календарь живёт в <code>constraints.json</code>, а лимиты — там же; связь с сезоном отсутствует</td><td>ёмкость календаря нигде не участвует в проверке плана</td></tr>
+    <tr><td class="n">31</td><td><b><code>max_total_hours_per_week</code> = 11, а ёмкость календаря = 10</b></td><td>лимит-обманка: проверка проходит, а места нет</td></tr>
+    <tr><td class="n">32</td><td>Три окна записаны как «X or Y» — альтернативы не структурированы</td><td>конфликт за ресурс нельзя ни увидеть, ни разрешить правилом</td></tr>
+    <tr><td class="n">33</td><td>В W3 длинный бег стоит в среду, потому что ВС отдано под велоподъём</td><td>ключевая тренировка недели мигрирует из-за соседнего плана — при параллельности это станет системным</td></tr>
+    <tr><td class="n">34</td><td>Нет «свободного окна» как явления: план либо занимает слот, либо про него не знает</td><td>нельзя донести свободное время до того, кому оно нужнее</td></tr>
+    <tr><td class="n">35</td><td>Нет сущности «намерение с требованиями к ресурсу»</td><td>сетке нечего резервировать: непонятно, нужен бассейн или стадион</td></tr>
+    <tr><td class="n">36</td><td>Нет <code>unplaced</code> — списка того, что не поместилось</td><td>план «молча» не выполняется вместо того, чтобы показать причину</td></tr>
+    <tr><td class="n">37</td><td>Триатлонные фазы требуют 8–10 ч при ёмкости 10 ч</td><td>в финале нет резерва ни на болезнь, ни на поездку</td></tr>
+    <tr><td class="n">38</td><td><code>adaptation_rates</code> нигде не описан как механизм межспортовой корреляции</td><td>работающая идея выглядит как справочные данные; её не используют и не проверяют</td></tr>
+  </table>
+  </div>
+
+  <div class="dec">
+    <b>Что из этого чинить первым</b>
+    Дыры <b>30–33</b> — данные и одно правило: календарь должен стать частью сезона, реальная ёмкость 10 ч должна быть записана вместо 11, а «X or Y» — структурой с вариантами. Это дешевле всего и сразу убирает ощущение «смотрю в другом месте».<br>
+    Дыры <b>34–36</b> — это <code>WeekGrid</code>, то есть основная работа.<br>
+    Дыры <b>37–38</b> — следствия: первое требует решения «триатлон при 100 % занятости», второе требует только описания того, что уже работает.
+  </div>
+</section>
+
+<hr>
+<p class="end">Coach App · владение ресурсами v0.3 · Season → WeekGrid → Plan → Week → Workout → Step · 25.10.2026</p>
+
+</main>
+</body>
+</html>

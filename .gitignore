@@ -1,0 +1,30 @@
+# Данные приложения — локальные, не в git
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Токен и секреты
+token
+.env
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Клиент
+client/node_modules/
+client/.cache/
+
+# OS
+.DS_Store
+*.swp
