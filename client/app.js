@@ -32,34 +32,84 @@ const state = {
 
 /* ------------------------------------------------------------------ рендер */
 
-const app = document.getElementById('app');
+const picker = document.getElementById('picker');
 const nav = document.getElementById('nav');
-const bar = document.getElementById('bar');
+const bar = document.getElementById('appbar');
+const cardWrap = document.getElementById('cardWrap');
+const cardHost = document.getElementById('cardHost');
 
+/* Нижняя навигация: иконка + подпись. Шесть экранов — в две строки нет,
+ * поэтому нижняя навигация показывает пять, а шестой экран («Связывание»)
+ * живёт внутри недели: факт — часть работы с неделей.
+ */
 const SCREENS = [
-  ['week', 'Неделя'],
-  ['season', 'Сезон'],
-  ['fact', 'План vs факт'],
-  ['link', 'Связывание'],
-  ['close', 'Закрытие'],
-  ['athlete', 'Атлет'],
+  ['week', 'Неделя', '📅'],
+  ['fact', 'Факт', '📊'],
+  ['season', 'Сезон', '🏆'],
+  ['close', 'Закрыть', '🔒'],
+  ['athlete', 'Атлет', '👤'],
 ];
 
 function render() {
   nav.innerHTML = SCREENS
-    .map(([id, title]) =>
-      `<button class="tab${state.screen === id ? ' on' : ''}" data-screen="${id}">${title}</button>`)
+    .map(([id, title, ico]) =>
+      `<button class="${state.screen === id ? 'on' : ''}" data-screen="${id}">
+        <span class="ico">${ico}</span><span class="lbl">${title}</span>
+      </button>`)
     .join('');
 
+  bar.innerHTML = appBar();
+  renderScreen();
+}
+
+/* Шапка приложения: заголовок, счётчик версии, кнопка обновить. */
+function appBar() {
+  const stale = state.stale
+    ? `<span class="stale">данные на ${timeOf(state.cachedAt)}</span>`
+    : '';
+  const queued = state.outbox.length
+    ? `<span class="queued">в очереди: ${state.outbox.length}</span>`
+    : '';
+  return `<div class="title">
+        <div>${escapeHtml(screenTitle())}</div>
+        <div class="sub">${escapeHtml(screenSubtitle())}</div>
+      </div>
+      <div class="right">
+        ${stale}${queued}
+        <span class="ver">v${state.version}</span>
+        <button class="refresh" id="refresh">↻</button>
+      </div>`;
+}
+
+function screenTitle() {
+  if (state.screen === 'week') {
+    return state.week ? `Неделя ${state.week.season_week}` : 'Неделя';
+  }
+  const found = SCREENS.find(([id]) => id === state.screen);
+  return found ? found[1] : 'Coach';
+}
+
+function screenSubtitle() {
+  if (state.screen === 'week' && state.week) {
+    return `${state.week.start.slice(5)} — ${state.week.end.slice(5)}`;
+  }
+  if (state.screen === 'fact' && state.week) {
+    return `${state.actual.length} сессий в факте`;
+  }
+  if (state.screen === 'season' && state.season) {
+    return `${state.season.horizon.season_week_count} недель`;
+  }
+  return '';
+}
+
+/* Основной экран — по выбранному разделу. */
+function renderScreen() {
   const body = state.screen === 'week' ? screenWeek()
     : state.screen === 'season' ? screenSeason()
     : state.screen === 'fact' ? screenFact()
-    : state.screen === 'link' ? screenLink()
     : state.screen === 'close' ? screenClose()
     : screenAthlete();
-
-  bar.innerHTML = barInner();
-  app.innerHTML = body;
+  picker.innerHTML = body;
 }
 
 function barInner() {
@@ -101,44 +151,34 @@ const ROLE_RU = {
 /* Порядок дней тренировочной недели: вс→сб. */
 const DAY_ORDER = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ'];
 
-/* Карточка тренировки: иконка · название · теги · шаги. */
-function workoutCard(workout, linked) {
-  const steps = (workout.steps || []).map((step) => {
-    const zone = step.focus_value && step.focus_value.zone;
-    const name = step.notes ? ` — ${escapeHtml(step.notes)}` : '';
-    return `<li><b>${escapeHtml(ROLE_RU[step.role] || step.role)}</b>
-      ${formatDuration(step.duration_min)}${name}
-      ${zone ? `<span class="zone">${escapeHtml(zone)}</span>` : ''}</li>`;
-  }).join('');
+/* Плашка тренировки в списке недели. По нажатию — детали. */
+function slotButton(workout, linked) {
+  const objective = workout.objective || {};
+  const title = objective.name || workout.kind;
+  const day = objective.day || '';
+  const focus = workout.focus && workout.focus !== 'core' ? workout.focus : '';
+  const done = linked ? ' <span class="done-mark">✓</span>' : '';
 
-  const meta = [];
-  if (workout.location) meta.push(`📍 ${escapeHtml(workout.location)}`);
-  if (workout.time) meta.push(`🕐 ${escapeHtml(workout.time)}`);
-  if (workout.focus) meta.push(`🎯 ${escapeHtml(workout.focus)}`);
-
-  const title = (workout.objective && workout.objective.name) || workout.kind;
-  const day = workout.objective && workout.objective.day;
-
-  return `<div class="card">
-      <div class="chead">
-        ${day ? `<span class="day">${escapeHtml(day)}</span>` : ''}
-        <span>${KIND_ICON[workout.sport] || '🎯'}</span>
-        <span class="name">${escapeHtml(title)}</span>
-        ${kindTag(workout.sport)}
-        <span class="dur">${formatDuration(workout.duration_min)}</span>
-        ${linked ? '<span class="zone">✓</span>' : ''}
+  return `<button class="slot${linked ? ' done' : ''}" data-slot="${escapeHtml(workout.id)}">
+      <div class="slot-head">
+        <span class="ico">${KIND_ICON[workout.sport] || '🎯'}</span>
+        <span class="day">${escapeHtml(day)} · ${escapeHtml(workout.time || '')}</span>
+        <span class="dur">${formatDuration(workout.duration_min)}${done}</span>
       </div>
-      ${meta.length ? `<div class="sub">${meta.join(' · ')}</div>` : ''}
-      <ul class="steps">${steps}</ul>
-    </div>`;
+      <div class="name">${escapeHtml(title)}</div>
+      ${focus ? `<div class="focus">🎯 ${escapeHtml(focus)}</div>` : ''}
+    </button>`;
 }
 
-/* Тренировки в порядке дней недели. */
+/* Тренировки в порядке дней недели, внутри дня — по времени. */
 function sortedWorkouts(workouts) {
   return [...workouts].sort((a, b) => {
     const dayA = DAY_ORDER.indexOf((a.objective || {}).day || '');
     const dayB = DAY_ORDER.indexOf((b.objective || {}).day || '');
     if (dayA !== dayB) return (dayA < 0 ? 99 : dayA) - (dayB < 0 ? 99 : dayB);
+    const timeA = String(a.time || '99:99');
+    const timeB = String(b.time || '99:99');
+    if (timeA !== timeB) return timeA.localeCompare(timeB);
     return String((a.objective || {}).name || '').localeCompare(
       String((b.objective || {}).name || ''), 'ru');
   });
@@ -149,18 +189,9 @@ function screenWeek() {
   const week = state.week;
   const target = week.load_target || {};
 
-  const summary = `<div class="card">
-      <div class="chead">Итого недели</div>
-      <div class="metrics">
-        <div class="metric"><div class="v">${formatHours(target.hours * 60)}</div><div class="l">ч · план</div></div>
-        <div class="metric"><div class="v">${target.sessions || 0}</div><div class="l">сессий</div></div>
-        <div class="metric"><div class="v">${(target.distance_m / 1000).toFixed(0)}</div><div class="l">км</div></div>
-      </div>
-    </div>`;
-
-  const workouts = sortedWorkouts(week.workouts || []).map((w) => {
+  const slots = sortedWorkouts(week.workouts || []).map((w) => {
     const linked = state.actual.some((a) => a.id === w.actual_id);
-    return workoutCard(w, linked);
+    return slotButton(w, linked);
   }).join('');
 
   const unplaced = (week.unplaced || []).length
@@ -168,12 +199,40 @@ function screenWeek() {
         <p>Не разложилось по слотам. Решаете вы.</p></div>`
     : '';
 
-  return `${messageBlock()}<h2>Неделя ${week.season_week}</h2>
-    <div class="sub">${week.start} — ${week.end} · ${escapeHtml(week.status)}</div>
+  return `${messageBlock()}
+    <div class="totals-card">
+      <div class="metrics">
+        <div class="metric"><div class="v">${formatHours(target.hours * 60)}</div><div class="l">ч · план</div></div>
+        <div class="metric"><div class="v">${target.sessions || 0}</div><div class="l">сессий</div></div>
+        <div class="metric"><div class="v">${(target.distance_m / 1000).toFixed(0)}</div><div class="l">км</div></div>
+      </div>
+    </div>
     ${week.focus ? `<div class="card goal"><h3>Фокус недели</h3><p class="lead">${escapeHtml(week.focus)}</p></div>` : ''}
-    ${summary}
     ${unplaced}
-    ${workouts || '<p>Тренировок нет.</p>'}`;
+    <h2 class="slots-header">Тренировки · ${(week.workouts || []).length} шт</h2>
+    <div class="slots-sub">тап → детали</div>
+    <div class="slots-list">${slots || '<p>Тренировок нет.</p>'}</div>
+    <button class="action secondary" id="link">Связать факт с тренировкой</button>
+    <div id="link-block">${linkBlock()}</div>`;
+}
+
+/* Блок связывания — раскрывается по кнопке. */
+function linkBlock() {
+  const facts = state.actual.map((a) => {
+    const linked = a.linked_workout_id
+      ? `связан с ${a.linked_workout_id}`
+      : '<span class="free">не связан</span>';
+    return `<div class="card">
+        <div class="chead">
+          <span>${KIND_ICON[a.sport] || '🎯'}</span>
+          <span class="name">${escapeHtml(a.sport)}</span>
+          <span class="dur">${formatDuration(a.duration_min)}</span>
+        </div>
+        <div class="sub">${a.date} · ${((a.distance_m || 0) / 1000).toFixed(1)} км · ${linked}</div>
+      </div>`;
+  }).join('');
+  return `<button class="action" id="pull">Загрузить из Garmin</button>
+    ${facts || '<p>Факта нет.</p>'}`;
 }
 
 function screenSeason() {
@@ -237,26 +296,6 @@ function screenFact() {
     <div class="card"><h3>Вердикты</h3><ul class="plain">${rows || '<li>нет</li>'}</ul></div>`;
 }
 
-function screenLink() {
-  const facts = state.actual.map((a) => {
-    const linked = a.linked_workout_id
-      ? `связан с ${a.linked_workout_id}`
-      : '<span class="free">не связан</span>';
-    return `<div class="card">
-        <div class="chead">
-          <span>${KIND_ICON[a.sport] || '🎯'}</span>
-          <span>${escapeHtml(a.sport)}</span>
-          <span class="dur">${formatDuration(a.duration_min)}</span>
-        </div>
-        <div class="sub">${a.date} · ${((a.distance_m || 0) / 1000).toFixed(1)} км · ${linked}</div>
-      </div>`;
-  }).join('');
-  return `${messageBlock()}<h2>Связывание</h2>
-    <p>Связь ставится вручную. Без загруженного факта связывать нечего.</p>
-    <button class="action" id="pull">Загрузить из Garmin</button>
-    ${facts || '<p>Факта нет.</p>'}`;
-}
-
 function screenClose() {
   return `${messageBlock()}<h2>Закрытие недели</h2>
     <p>Ритуал: вытянуть факт → сопоставить руками → посчитать и записать.</p>
@@ -291,6 +330,210 @@ function screenAthlete() {
 
 function empty(text) {
   return `<p>${escapeHtml(text)}</p>`;
+}
+
+
+/* ------------------------------------------------------------------ детали */
+
+/* Детали тренировки — по эталонному plan-wN.html.
+ * Сеты собираются обратно: шаги с одинаковым group — один блок,
+ * шаги с round — повторы внутри блока.
+ */
+function showWorkout(workoutId) {
+  const workout = (state.week.workouts || []).find((w) => w.id === workoutId);
+  if (!workout) {
+    cardHost.innerHTML = '<div class="card">Тренировка не найдена</div>';
+    return;
+  }
+
+  const objective = workout.objective || {};
+  const title = objective.name || workout.kind;
+  const stepCount = (workout.steps || []).length;
+
+  const meta = [];
+  if (workout.location) meta.push(`📍 ${escapeHtml(workout.location)}`);
+  if (workout.focus) meta.push(`<span class="meta-item focus-pill focus-${escapeHtml(workout.focus)}">🎯 ${escapeHtml(workout.focus)}</span>`);
+  if (objective.subkind) meta.push(`<span class="meta-item">${escapeHtml(objective.subkind)}</span>`);
+
+  const session = objective.session || {};
+  let goalHtml = '';
+  if (session.session_goal) {
+    goalHtml = `<div class="goal-block">
+        <div class="lbl">Цель сессии</div>
+        <div>${escapeHtml(session.session_goal)}</div>
+        ${session.label ? `<div class="goal-row"><span class="meta-item">${escapeHtml(session.label)}</span></div>` : ''}
+      </div>`;
+  }
+
+  let rationaleHtml = '';
+  if (workout.rationale) {
+    rationaleHtml = `<div class="rationale">
+        <div class="lbl">Зачем</div>
+        ${escapeHtml(workout.rationale)}
+      </div>`;
+  }
+
+  const inventory = objective.inventory || [];
+  const invHtml = inventory.length
+    ? `<div class="inventory">
+        <div class="lbl">Что нужно</div>
+        ${inventory.map((i) => `<div class="inv-item"><span class="ico">${escapeHtml(i.icon || '•')}</span><span>${escapeHtml(i.name || '')}</span></div>`).join('')}
+      </div>`
+    : '';
+
+  cardHost.innerHTML = `<div class="card detail">
+      <div class="card-header">
+        <div class="headline">
+          <span class="kind-ico">${KIND_ICON[workout.sport] || '🎯'}</span>
+          <span class="name">${escapeHtml(title)}</span>
+        </div>
+        <span class="tag kind-${escapeHtml(workout.sport)}">${stepCount} шагов</span>
+      </div>
+      <div class="subtitle">${escapeHtml(objective.day || '')} · ${escapeHtml(workout.time || '')} · ${formatDuration(workout.duration_min)}</div>
+      ${meta.length ? `<div class="meta-row">${meta.join('')}</div>` : ''}
+      ${goalHtml}
+      ${rationaleHtml}
+      ${invHtml}
+      <h3>Структура тренировки</h3>
+      ${structureHtml(workout)}
+    </div>`;
+
+  cardWrap.classList.remove('hidden');
+  picker.classList.add('hidden');
+  bar.innerHTML = detailBar(title, objective.day || '');
+
+  const slug = slotSlug(workout);
+  try {
+    if (history.state && history.state.page === 'detail') {
+      history.replaceState({page: 'detail', slot: workoutId}, '', '#' + slug);
+    } else {
+      history.pushState({page: 'detail', slot: workoutId}, '', '#' + slug);
+    }
+  } catch (error) {
+    history.replaceState(null, '', '#' + slug);
+  }
+  window.scrollTo(0, 0);
+}
+
+/* Идентификатор тренировки для адреса — латиницей: кириллица в URL
+ * ломает кодировку и делит ссылку на части.
+ */
+function slotSlug(workout) {
+  const objective = workout.objective || {};
+  const day = objective.day || '';
+  const name = (objective.name || workout.kind || '')
+    .toLowerCase()
+    .replace(/[^a-zа-яё0-9]+/gi, '-')
+    .replace(/^-|-$/g, '');
+  return `w${workout.season_week || state.seasonWeek}-${day}-${name}`;
+}
+
+/* Шапка на экране деталей: кнопка «назад» + название. */
+function detailBar(title, day) {
+  return `<button class="back" id="backBtn">←</button>
+    <div class="title">
+      <div>${escapeHtml(title)}</div>
+      ${day ? `<div class="sub">${escapeHtml(day)}</div>` : ''}
+    </div>`;
+}
+
+/* Обратно к списку. */
+function showPicker() {
+  cardWrap.classList.add('hidden');
+  picker.classList.remove('hidden');
+  if (window.location.hash) {
+    try { history.replaceState(history.state, '', ' '); } catch (error) { /* нет */ }
+  }
+  renderScreen();
+  bar.innerHTML = appBar();
+  window.scrollTo(0, 0);
+}
+
+/* Структура тренировки: сеты собираются обратно из group/round. */
+function structureHtml(workout) {
+  const steps = workout.steps || [];
+  if (!steps.length) return '<div class="empty">Нет структуры</div>';
+
+  const blocks = [];
+  let current = null;
+
+  for (const step of steps) {
+    // Блок начинается, если сменилась группа или тип шага (упражнение / нет).
+    const isExercise = Boolean(step.label && step.focus_value?.reps);
+    if (current && (step.group !== current.group || isExercise !== current.isExercise)) {
+      current = {group: step.group, steps: [], isSet: false, isExercise};
+      blocks.push(current);
+    } else if (!current) {
+      current = {group: step.group, steps: [], isSet: false, isExercise};
+      blocks.push(current);
+    }
+    current.steps.push(step);
+  }
+
+  return `<ol class="structure-list">${blocks.map(renderBlock).join('')}</ol>`;
+}
+
+/* Один блок структуры: одиночный шаг, сет или упражнение. */
+function renderBlock(block) {
+  const steps = block.steps;
+
+  // Упражнения ОФП: у каждого шага есть название и повторы в focus_value.
+  // Проверка именно по обоим полям: у разминки focus_value пустой.
+  if (steps.length > 1 && steps.every((s) => s.label && s.focus_value?.reps)) {
+    return `<li class="step step-ofp">
+        <div class="step-head"><span class="step-phase">${escapeHtml(block.group || 'main')}</span></div>
+        <ol class="ex-list">${steps.map((s, i) => `
+          <li class="ex-item">
+            <div class="ex-num">${i + 1}</div>
+            <div class="ex-content">
+              <div class="ex-name">${escapeHtml(s.label || '')}</div>
+              <div class="ex-reps">${escapeHtml(s.focus_value.reps)}</div>
+              ${s.notes ? `<div class="ex-why">${escapeHtml(s.notes)}</div>` : ''}
+            </div>
+          </li>`).join('')}
+        </ol>
+      </li>`;
+  }
+
+  // Сет интервалов: у шагов есть round — это повторы
+  if (steps.length > 1 && steps.every((s) => s.round !== null && s.round !== undefined)) {
+    // Число повторов — из плана (3×800), а не количество шагов: в шагах
+    // есть и отдых, поэтому шагов вдвое больше.
+    const reps = steps[0].focus_value?.set_reps || steps.length;
+    return `<li class="step step-set">
+        <div class="step-head">
+          <span class="step-phase">${escapeHtml(block.group || 'set')}</span>
+          <span class="step-reps">× ${reps}</span>
+        </div>
+        <ol class="step-sublist">${steps.map(renderSubStep).join('')}</ol>
+      </li>`;
+  }
+
+  // Одиночный шаг
+  return `<li class="step">${renderSubStep(steps[0])}</li>`;
+}
+
+/* Шаг внутри: зона, роль, объём, пульс, темп. */
+function renderSubStep(step) {
+  const fv = step.focus_value || {};
+  const zone = fv.zone ? `<span class="step-zone">${escapeHtml(fv.zone)}</span>` : '';
+  const role = step.label || ROLE_RU[step.role] || step.role;
+
+  let value = '';
+  if (step.target_type === 'distance') {
+    value = `<span class="step-dur">${Math.round(step.target_value)}м</span>`;
+  } else if (step.target_type === 'reps') {
+    value = `<span class="step-reps">× ${step.target_value}</span>`;
+  } else {
+    value = `<span class="step-dur">${Math.round(step.duration_min)}мин</span>`;
+  }
+
+  const hr = fv.hr_target ? ` <span class="step-extra">HR ${fv.hr_target}</span>` : '';
+  const pace = fv.pace_min_per_km ? ` <span class="step-extra">@ ${escapeHtml(fv.pace_min_per_km)}/км</span>` : '';
+
+  return `<div class="step-head">${zone}
+      <span class="step-phase">${escapeHtml(role)}</span> ${value}${hr}${pace}
+    </div>`;
 }
 
 /* ------------------------------------------------------------------ данные */
@@ -408,9 +651,27 @@ async function flushOutbox() {
 
 document.addEventListener('click', async (event) => {
   const target = event.target;
+  const slot = target.closest ? target.closest('[data-slot]') : null;
+
+  // Тап по плашке тренировки — открыть детали
+  if (slot) {
+    showWorkout(slot.dataset.slot);
+    return;
+  }
+
+  // Кнопка «назад» из деталей
+  if (target.id === 'backBtn') {
+    if (history.state && history.state.page === 'detail') {
+      history.back();
+    } else {
+      showPicker();
+    }
+    return;
+  }
 
   if (target.dataset.screen) {
     state.screen = target.dataset.screen;
+    showPicker();
     render();
     return;
   }
@@ -419,6 +680,15 @@ document.addEventListener('click', async (event) => {
     await load();
     await flushOutbox();
     render();
+    return;
+  }
+
+  if (target.id === 'link') {
+    const block = document.getElementById('link-block');
+    if (block) {
+      block.innerHTML = linkBlock();
+      document.getElementById('link')?.remove();
+    }
     return;
   }
 
@@ -449,6 +719,14 @@ document.addEventListener('click', async (event) => {
     });
     await flushOutbox();
     await load();
+  }
+});
+
+/* Кнопка «назад» на телефоне — вернуться к списку. */
+window.addEventListener('popstate', (event) => {
+  const current = event.state;
+  if (!current || current.page !== 'detail') {
+    showPicker();
   }
 });
 
@@ -511,4 +789,14 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-load().then(flushOutbox).then(render);
+load().then(flushOutbox).then(render).then(() => {
+  // Если в адресе есть хэш тренировки — открыть её (ссылка на детали).
+  const hash = window.location.hash.replace('#', '');
+  if (hash && state.week) {
+    const match = (state.week.workouts || []).find((w) => slotSlug(w) === hash);
+    if (match) {
+      history.replaceState({page: 'init'}, '', ' ');
+      showWorkout(match.id);
+    }
+  }
+});

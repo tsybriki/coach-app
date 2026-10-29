@@ -9,9 +9,20 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <div class="bar" id="bar"></div>
-  <nav class="nav" id="nav"></nav>
-  <main class="app" id="app"></main>
+  <!-- Шапка приложения: заголовок экрана или кнопка «назад» -->
+  <header class="appbar" id="appbar"></header>
+
+  <!-- Основной экран -->
+  <main class="app" id="picker"></main>
+
+  <!-- Детали тренировки — перекрывают основной экран -->
+  <main class="app hidden" id="cardWrap">
+    <div id="cardHost"></div>
+  </main>
+
+  <!-- Нижняя навигация -->
+  <nav class="bottomnav" id="nav"></nav>
+
   <script type="module" src="/app.js"></script>
 </body>
 </html>

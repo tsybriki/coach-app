@@ -445,6 +445,8 @@ def _week_dict(week: Week) -> dict[str, Any]:
                         "duration_min": s.duration_min,
                         "label": s.label,
                         "notes": s.notes,
+                        "group": s.group,
+                        "round": s.round,
                     }
                     for s in w.steps
                 ],

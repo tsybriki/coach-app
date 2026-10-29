@@ -94,6 +94,39 @@ LOCATION_RU = {
     "long_ride_or_station": "длинная поездка или станция",
 }
 
+# Что взять на тренировку — из места и вида спорта. Логика пайплайна
+# (render_html._inventory_for), чтобы приложение показывало то же.
+def inventory_for(slot: dict[str, Any]) -> list[dict[str, str]]:
+    """Список того, что нужно взять с собой."""
+    items: list[dict[str, str]] = []
+    kind = slot.get("kind", "")
+    location = slot.get("location", "")
+    subkind = slot.get("subkind", "")
+
+    if "home_stationary_bike" in location:
+        items.append({"icon": "🚴", "name": "Велостанок (Tacx)"})
+    elif location == "stadium":
+        items.append({"icon": "🏟", "name": "Стадион (400м)"})
+    elif location == "stadium_or_pool":
+        items.append({"icon": "🏟", "name": "Стадион 400м (или бассейн)"})
+    elif location == "pool_or_asphalt":
+        if kind == "swim":
+            items.append({"icon": "🏊", "name": "Бассейн"})
+        else:
+            items.append({"icon": "🛣", "name": "Асфальт (коммутер)"})
+    elif "long_ride" in location:
+        items.append({"icon": "🚴", "name": "Вело (улица или станок)"})
+
+    if kind == "ofp":
+        items.append({"icon": "🧘", "name": "Коврик"})
+        items.append({"icon": "🎗", "name": "Резинка (опционально)"})
+
+    if subkind in ("key_intervals", "intervals", "race_pace", "tempo", "quality"):
+        items.append({"icon": "⌚", "name": "Garmin / часы с HR"})
+
+    return items
+
+
 PHASE_ROLES = {
     "warmup": StepRole.WARMUP,
     "work": StepRole.WORK,
@@ -291,7 +324,13 @@ def build_week(plan: dict[str, Any], season_plan: dict[str, Any]) -> Week:
             sport=sport,
             kind=request.kind,
             focus=request.focus,
-            objective={"name": slot.get("name", ""), "day": slot.get("day", "")},
+            objective={
+                "name": slot.get("name", ""),
+                "day": slot.get("day", ""),
+                "subkind": slot.get("subkind", ""),
+                "session": slot.get("session") or {},
+                "inventory": inventory_for(slot),
+            },
             location=LOCATION_RU.get(slot.get("location"), slot.get("location")),
             time=slot.get("time"),
             steps=steps,
@@ -329,7 +368,9 @@ def build_steps(slot: dict[str, Any], sport: Sport) -> list[Step]:
     """Шаги тренировки — плоский список из structure пайплайна.
 
     Вложенные set_repeats разворачиваются в отдельные шаги: домен хранит
-    прогрессию отдельными шагами, а не вложенной структурой.
+    прогрессию отдельными шагами, а не вложенной структурой. Шаги сета
+    помечаются `group` (название сета) и `round` (номер повтора) — по ним
+    клиент собирает сет обратно.
     """
     steps: list[Step] = []
     structure = slot.get("structure") or []
@@ -342,22 +383,71 @@ def build_steps(slot: dict[str, Any], sport: Sport) -> list[Step]:
                     item, repeat, sport,
                     step_id=f"{slot['id']}-s{index}-{position}",
                     duration=share,
-                    label=item.get("label"),
+                    group=item.get("label"),
+                    round_number=position,
+                    reps=item.get("reps"),
+                ))
+            continue
+
+        exercises = (item.get("set") or {}).get("exercises")
+        if exercises:
+            share = float(item.get("duration_min", 0)) / len(exercises)
+            for position, exercise in enumerate(exercises, 1):
+                steps.append(_exercise_step(
+                    slot, item, exercise, sport,
+                    step_id=f"{slot['id']}-s{index}-{position}",
+                    duration=share,
+                    group=item.get("set", {}).get("name") or item.get("phase"),
                     round_number=position,
                 ))
-        else:
-            steps.append(_step(
-                item, item, sport,
-                step_id=f"{slot['id']}-s{index}",
-                duration=float(item.get("duration_min", 0)),
-                label=item.get("label"),
-            ))
+            continue
+
+        steps.append(_step(
+            item, item, sport,
+            step_id=f"{slot['id']}-s{index}",
+            duration=float(item.get("duration_min", 0)),
+            group=item.get("label"),
+        ))
     return steps
 
 
+def _exercise_step(slot: dict[str, Any], item: dict[str, Any],
+                   exercise: dict[str, Any], sport: Sport,
+                   step_id: str, duration: float,
+                   group: str | None, round_number: int) -> Step:
+    """Одно упражнение из сета ОФП."""
+    reps = str(exercise.get("reps", ""))
+    # «3×45с» → повторов 3, «2×12/стор» → 2. Первое число до «×».
+    count = 0
+    head = reps.split("×")[0] if "×" in reps else reps
+    digits = "".join(ch for ch in head if ch.isdigit())
+    if digits:
+        count = int(digits)
+
+    notes = exercise.get("notes")
+    if exercise.get("rest"):
+        notes = f"{notes} Отдых {exercise['rest']}." if notes else f"Отдых {exercise['rest']}."
+
+    return Step(
+        id=step_id,
+        role=StepRole.WORK,
+        sport=sport,
+        target_type=TargetType.REPS,
+        target_value=float(count),
+        focus=FocusType.STRENGTH_PATTERN,
+        focus_value={"reps": reps},
+        group=group,
+        round=round_number,
+        label=exercise.get("name"),
+        notes=notes,
+        duration_min=duration,
+    )
+
+
 def _step(item: dict[str, Any], repeat: dict[str, Any], sport: Sport,
-          step_id: str, duration: float, label: str | None,
-          round_number: int | None = None) -> Step:
+          step_id: str, duration: float, group: str | None = None,
+          round_number: int | None = None,
+          reps: int | None = None) -> Step:
     """Один шаг из элемента structure."""
     phase = repeat.get("phase") or item.get("phase") or "work"
     role = PHASE_ROLES.get(phase, StepRole.WORK)
@@ -369,15 +459,17 @@ def _step(item: dict[str, Any], repeat: dict[str, Any], sport: Sport,
     elif basis == "time":
         target_type = TargetType.TIME
         target_value = duration
-    elif repeat.get("reps") or repeat.get("set"):
+    elif repeat.get("reps") or reps:
         target_type = TargetType.REPS
-        target_value = float(repeat.get("reps") or 0)
+        target_value = float(reps or repeat.get("reps") or 0)
     else:
         target_type = TargetType.OPEN
         target_value = duration
 
     zone = repeat.get("zone") or item.get("zone")
     focus_value: dict[str, Any] = {}
+    if reps:
+        focus_value["set_reps"] = reps
     if zone:
         focus = FocusType.HR
         focus_value["zone"] = zone
@@ -403,9 +495,9 @@ def _step(item: dict[str, Any], repeat: dict[str, Any], sport: Sport,
         target_value=target_value,
         focus=focus,
         focus_value=focus_value,
-        group=item.get("label"),
+        group=group,
         round=round_number,
-        label=label,
+        label=repeat.get("label"),
         notes=notes,
         duration_min=duration,
     )

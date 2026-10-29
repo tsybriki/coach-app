@@ -41,9 +41,21 @@ body {
 }
 
 body {
-  padding: 0 0 84px;
+  padding: 0 0 88px;
   max-width: 780px;
   margin: 0 auto;
+}
+
+@media (min-width: 700px) {
+  /* На широком экране нижняя навигация не нужна — она как в мобильном. */
+  .bottomnav {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: 780px;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
 }
 
 h1 {
@@ -73,38 +85,84 @@ h3 {
 
 /* ------------------------------------------------------------------ шапка */
 
-.bar {
+.appbar {
   position: sticky;
   top: 0;
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 12px;
+  gap: 10px;
+  padding: 12px 14px 10px;
   background: rgba(15, 17, 21, 0.94);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
 }
 
+.appbar .title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appbar .sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+.appbar .back {
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 0;
+  width: 38px;
+  height: 38px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.appbar .back:active {
+  transform: scale(0.97);
+}
+
+.appbar .right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .ver {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--muted);
   background: var(--panel2);
   border: 1px solid var(--border);
-  padding: 2px 7px;
-  border-radius: 6px;
+  padding: 2px 6px;
+  border-radius: 5px;
   font-family: ui-monospace, SFMono-Regular, monospace;
 }
 
 .stale,
 .queued {
-  font-size: 10.5px;
+  font-size: 10px;
   color: var(--warn);
   background: rgba(255, 155, 106, 0.08);
   border: 1px solid rgba(255, 155, 106, 0.3);
-  padding: 2px 7px;
-  border-radius: 6px;
+  padding: 2px 6px;
+  border-radius: 5px;
 }
 
 .queued {
@@ -114,19 +172,18 @@ h3 {
 }
 
 .refresh {
-  margin-left: auto;
   font: inherit;
   font-size: 11.5px;
-  color: var(--text);
-  background: var(--panel2);
+  color: var(--muted);
+  background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 4px 10px;
+  border-radius: 7px;
+  padding: 5px 9px;
   cursor: pointer;
 }
 
 .refresh:active {
-  background: var(--panel);
+  background: var(--panel2);
 }
 
 .msg {
@@ -140,51 +197,183 @@ h3 {
   border-left: 2px solid rgba(240, 180, 87, 0.55);
 }
 
-/* ------------------------------------------------------------------ навигация */
+/* ------------------------------------------------------------------ нижняя навигация */
 
-.nav {
-  position: sticky;
-  top: 41px;
-  z-index: 9;
-  display: flex;
-  gap: 6px;
-  padding: 8px 12px;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  background: rgba(15, 17, 21, 0.94);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--border);
+.bottomnav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  background: rgba(15, 17, 21, 0.96);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
-.nav::-webkit-scrollbar {
-  display: none;
-}
-
-.tab {
-  flex-shrink: 0;
-  scroll-snap-align: start;
+.bottomnav button {
   font: inherit;
-  font-size: 12px;
+  background: none;
+  border: none;
   color: var(--muted);
+  padding: 8px 2px 7px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  transition: color 0.12s;
+}
+
+.bottomnav .ico {
+  font-size: 18px;
+  line-height: 1;
+  filter: grayscale(1) opacity(0.55);
+  transition: filter 0.12s;
+}
+
+.bottomnav .lbl {
+  font-size: 9.5px;
+  letter-spacing: 0.2px;
+}
+
+.bottomnav button.on {
+  color: var(--accent);
+}
+
+.bottomnav button.on .ico {
+  filter: none;
+}
+
+/* ------------------------------------------------------------------ плашка тренировки */
+
+/* В списке недели — компактная плашка, по нажатию открываются детали. */
+.slot {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  min-height: 74px;
+  padding: 12px 15px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 5px 12px;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   cursor: pointer;
+  transition: transform 0.1s;
 }
 
-.tab.on {
+.slot:active {
+  transform: scale(0.985);
+  background: var(--panel2);
+}
+
+.slot-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slot .ico {
+  font-size: 15px;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.slot .day {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.slot .dur {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--muted);
+  background: var(--panel2);
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  flex-shrink: 0;
+}
+
+.slot .name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 5px;
+  line-height: 1.3;
+}
+
+.slot .focus {
+  font-size: 11px;
+  color: var(--accent2);
+  margin-top: 3px;
+  font-weight: 500;
+}
+
+.slot .chev {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 15px;
+  flex-shrink: 0;
+  align-self: flex-end;
+  margin-top: 4px;
+}
+
+.slot.done {
+  border-color: rgba(126, 231, 135, 0.3);
+  background: rgba(126, 231, 135, 0.04);
+}
+
+.slot .done-mark {
+  color: var(--good);
+  font-weight: 700;
+}
+
+.slots-header {
+  font-size: 14px;
+  margin: 16px 0 4px;
   color: var(--accent);
-  background: rgba(122, 162, 255, 0.1);
-  border-color: rgba(122, 162, 255, 0.4);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.slots-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.slots-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.empty {
+  color: var(--muted);
+  font-style: italic;
+  padding: 14px;
+  text-align: center;
 }
 
 /* ------------------------------------------------------------------ карточки */
 
 .app {
-  padding: 14px 12px 0;
+  padding: 14px 12px 24px;
+}
+
+.hidden {
+  display: none !important;
 }
 
 .card {
@@ -468,4 +657,333 @@ p {
 
 p.lead {
   color: var(--text);
+}
+
+
+/* ------------------------------------------------------------------ детали тренировки */
+
+.detail .card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail .headline {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+}
+
+.detail .kind-ico {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.detail .name {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.detail .tag {
+  font-size: 10.5px;
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: var(--panel2);
+  color: var(--muted);
+  letter-spacing: 0.3px;
+  font-weight: 600;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.detail .subtitle {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.meta-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 6px 0 12px;
+}
+
+.meta-item {
+  background: var(--panel2);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.focus-pill {
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.focus-Z1,
+.focus-Z2 {
+  color: var(--accent2);
+  background: rgba(92, 214, 192, 0.08);
+  border-color: rgba(92, 214, 192, 0.3);
+}
+
+.focus-Z3,
+.focus-Z4 {
+  color: var(--warn);
+  background: rgba(255, 155, 106, 0.08);
+  border-color: rgba(255, 155, 106, 0.3);
+}
+
+.focus-Z5,
+.focus-Z6 {
+  color: var(--cp);
+  background: rgba(216, 160, 255, 0.08);
+  border-color: rgba(216, 160, 255, 0.3);
+}
+
+.rationale {
+  background: rgba(122, 162, 255, 0.06);
+  border: 1px solid rgba(122, 162, 255, 0.25);
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.rationale .lbl {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.goal-block {
+  background: rgba(92, 214, 192, 0.07);
+  border: 1px solid rgba(92, 214, 192, 0.3);
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.goal-block .lbl {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent2);
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+
+.inventory {
+  background: rgba(255, 155, 106, 0.05);
+  border: 1px dashed var(--warn);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 12.5px;
+}
+
+.inventory .lbl {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--warn);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.inv-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 2px 0;
+}
+
+.inv-item .ico {
+  color: var(--warn);
+  font-size: 14px;
+  width: 18px;
+  text-align: center;
+}
+
+/* Структура тренировки */
+
+.structure-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  padding: 8px 10px;
+  margin-bottom: 5px;
+  background: var(--panel2);
+  border-radius: 6px;
+  border-left: 2px solid var(--accent2);
+}
+
+.step-set {
+  background: rgba(122, 162, 255, 0.08);
+  border-left-color: var(--accent);
+}
+
+.step-ofp {
+  background: rgba(216, 160, 255, 0.08);
+  border-left-color: var(--cp);
+}
+
+.step-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  flex-wrap: wrap;
+}
+
+.step-phase {
+  color: var(--accent2);
+  font-weight: 600;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Название сета упражнений — обычным регистром: «Core circuit x2 rounds». */
+.step-ofp .step-phase {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11.5px;
+}
+
+.step-dur {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.step-zone {
+  background: var(--bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  color: var(--accent2);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.step-extra {
+  color: var(--muted);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.step-reps {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.step-name {
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.step-notes {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.step-sublist {
+  margin: 6px 0 4px 10px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.step-sub {
+  padding: 4px 6px;
+  margin-bottom: 2px;
+  background: var(--bg);
+  border-radius: 4px;
+  border-left: 2px solid var(--good);
+}
+
+.ex-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ex-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.ex-num {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 700;
+  font-size: 12px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.ex-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.ex-name {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ex-reps {
+  font-size: 11.5px;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+
+.ex-why {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.4;
+  font-style: italic;
 }
