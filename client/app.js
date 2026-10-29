@@ -14,7 +14,7 @@ import {
 
 const state = {
   screen: 'week',
-  seasonWeek: Number(localStorage.getItem('coach-app-week')) || currentSeasonWeek(),
+  seasonWeek: Number(localStorage.getItem('coach-app-week')) || null,
   version: 0,
   week: null,
   season: null,
@@ -28,15 +28,6 @@ const state = {
   message: null,
   base: localStorage.getItem('coach-app-base') || location.origin,
 };
-
-/* Номер недели сезона: считаем от начала сезона, ближайшая к сегодня. */
-function currentSeasonWeek() {
-  const start = new Date('2026-10-11T00:00:00');
-  const now = new Date();
-  const days = Math.floor((now - start) / 86400000);
-  if (days < 0) return 1;
-  return Math.min(49, Math.floor(days / 7) + 1);
-}
 
 /* ------------------------------------------------------------------ рендер */
 
@@ -209,6 +200,13 @@ async function load() {
     state.stale = false;
     state.cachedAt = Date.now();
     await putCache('snapshot', snapshot.data, snapshot.version);
+
+    // Текущая неделя — по дате на сервере: клиент не знает про начало сезона.
+    // Ручной выбор в localStorage перекрывает.
+    if (!state.seasonWeek) {
+      const current = await api.getCurrentWeek();
+      state.seasonWeek = current.data.season_week;
+    }
 
     // недели может не быть — это не ошибка, а пустое состояние
     try {

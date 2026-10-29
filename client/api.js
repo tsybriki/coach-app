@@ -43,6 +43,10 @@ export async function getWeek(seasonWeek) {
   return request(`/api/v1/week/${seasonWeek}`);
 }
 
+export async function getCurrentWeek() {
+  return request('/api/v1/current-week');
+}
+
 export async function getActual(seasonWeek) {
   return request(`/api/v1/actual/${seasonWeek}`);
 }

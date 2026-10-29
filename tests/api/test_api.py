@@ -118,6 +118,51 @@ def test_etag_present(client: TestClient):
     assert response.headers.get("ETag")
 
 
+def test_current_week_counts_from_season_start(client: TestClient, data_root: Path):
+    """Текущая неделя считается от даты старта сезона — не хардкодом.
+
+    Неделя начинается в воскресенье: 11.10.2026 — W1, значит 18.10 — W2,
+    25.10 — W3.
+    """
+    seed_week(data_root)
+    container = client.app.state.container
+
+    from datetime import date
+
+    class FixedClock:
+        def __init__(self, day: date) -> None:
+            self._day = day
+
+        def now(self) -> date:
+            return self._day
+
+    for day, expected in [(date(2026, 10, 11), 1), (date(2026, 10, 17), 1),
+                          (date(2026, 10, 18), 2), (date(2026, 10, 25), 3),
+                          (date(2026, 10, 31), 3), (date(2026, 11, 1), 4)]:
+        container.clock = FixedClock(day)
+        response = client.get("/api/v1/current-week")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["season_week"] == expected, f"{day} → W{expected}"
+        assert data["today"] == day.isoformat()
+
+
+def test_current_week_before_season_start_is_first(client: TestClient, data_root: Path):
+    """До старта сезона — первая неделя."""
+    seed_week(data_root)
+    container = client.app.state.container
+
+    from datetime import date
+
+    class FixedClock:
+        def now(self) -> date:
+            return date(2026, 10, 1)
+
+    container.clock = FixedClock()
+    response = client.get("/api/v1/current-week")
+    assert response.json()["data"]["season_week"] == 1
+
+
 def test_athlete_and_season(client: TestClient):
     """Профиль и скелет сезона отдаются."""
     assert client.get("/api/v1/athlete").status_code == 200

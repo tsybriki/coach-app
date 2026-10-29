@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -153,6 +153,30 @@ def actual(season_week: int, container: AppContainer = Depends(get_container)) -
     """Факт недели."""
     sessions = container.fact_repo.list_for_week(season_week)
     return ok(container, {"sessions": [_session_dict(s) for s in sessions]})
+
+
+@router.get("/current-week")
+def current_week(container: AppContainer = Depends(get_container)) -> JSONResponse:
+    """Текущая неделя сезона.
+
+    Считает сервер: клиенту не знать про дату старта сезона. Неделя
+    определяется по календарной дате — неделя начинается в воскресенье.
+    """
+    season = container.season_repo.load()
+    today = container.clock.now()
+    start = season.horizon_start
+    if today < start:
+        week = 1
+    else:
+        week = ((today - start).days // 7) + 1
+        week = min(week, season.season_week_count)
+    week_start = start + timedelta(days=7 * (week - 1))
+    return ok(container, {
+        "season_week": week,
+        "today": today.isoformat(),
+        "start": week_start.isoformat(),
+        "end": (week_start + timedelta(days=6)).isoformat(),
+    })
 
 
 @router.get("/athlete")

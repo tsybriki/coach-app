@@ -142,6 +142,20 @@ class FileStorage:
         """Глобальная версия состояния."""
         return self._version()
 
+    def _week_of(self, day: date) -> int:
+        """Номер недели сезона для даты — по началу сезона из хранилища.
+
+        Сезона нет — некуда класть факт: неделя определяется горизонтом
+        сезона, и без него номер был бы выдумкой.
+        """
+        if not (self.root / "season.json").exists():
+            raise ValueError(
+                "сезон не задан: неделю факта определить нельзя — "
+                "сначала сохрани сезон"
+            )
+        season = self.load()
+        return _season_week_of(day, season.horizon_start)
+
     # ---------------------------------------------------------- низкий уровень
 
     def load(self) -> Season:
@@ -228,7 +242,7 @@ class FileStorage:
                         f"факт с external_id {session.external_id} уже есть: {existing.id}"
                     )
 
-        path = self.root / "actual" / f"W{_season_week_of(session.date)}.json"
+        path = self.root / "actual" / f"W{self._week_of(session.date)}.json"
         data = self._read_json(path)
         items = data.get("sessions", [])
         items = [item for item in items if item.get("id") != session.id]
@@ -241,7 +255,7 @@ class FileStorage:
         if session is None:
             raise KeyError(f"факт {actual_id} не найден")
         session.linked_workout_id = workout_id
-        path = self.root / "actual" / f"W{_season_week_of(session.date)}.json"
+        path = self.root / "actual" / f"W{self._week_of(session.date)}.json"
         data = self._read_json(path)
         items = [
             _session_to_dict(session) if item.get("id") == actual_id else item
@@ -578,9 +592,14 @@ def _goal_from_dict(data: dict[str, Any]) -> Goal:
     )
 
 
-def _season_week_of(day: date) -> int:
-    """Номер недели сезона от даты. В сезоне неделя начинается 11.10.2026."""
-    season_start = date(2026, 10, 11)
+def _season_week_of(day: date, season_start: date) -> int:
+    """Номер недели сезона от даты.
+
+    Начало сезона берётся из самого хранилища: дата старта — часть сезона,
+    а не константа адаптера. Неделя начинается в воскресенье.
+    """
+    if day < season_start:
+        return 0
     return ((day - season_start).days // 7) + 1
 
 

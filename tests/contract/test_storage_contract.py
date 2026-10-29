@@ -171,6 +171,7 @@ def test_week_preserves_unplaced_and_actual_link(storage: FileStorage):
 
 def test_upsert_and_get(storage: FileStorage):
     """Факт сохраняется и читается."""
+    storage.save(make_season(), expected_version=0)
     session = make_session()
     storage.upsert(session)
 
@@ -183,6 +184,7 @@ def test_upsert_and_get(storage: FileStorage):
 
 def test_upsert_same_id_updates(storage: FileStorage):
     """Повторная запись с тем же id — обновление, не новая запись."""
+    storage.save(make_season(), expected_version=0)
     storage.upsert(make_session())
     updated = make_session()
     updated.duration_min = 90
@@ -196,6 +198,7 @@ def test_upsert_same_id_updates(storage: FileStorage):
 
 def test_upsert_duplicate_external_id_is_rejected(storage: FileStorage):
     """Дубликат external_id → отказ."""
+    storage.save(make_season(), expected_version=0)
     storage.upsert(make_session("a1", "ext-1"))
 
     with pytest.raises(Exception) as error:
@@ -205,6 +208,7 @@ def test_upsert_duplicate_external_id_is_rejected(storage: FileStorage):
 
 def test_link_sets_and_clears(storage: FileStorage):
     """Связь факта с тренировкой ставится и снимается."""
+    storage.save(make_season(), expected_version=0)
     storage.upsert(make_session())
     storage.link("a1", "w1")
 
@@ -220,6 +224,7 @@ def test_link_sets_and_clears(storage: FileStorage):
 
 def test_list_in_range_filters_by_date(storage: FileStorage):
     """Факт за период — только то, что попадает в диапазон."""
+    storage.save(make_season(), expected_version=0)
     inside = make_session("a1", "ext-1")
     outside = make_session("a2", "ext-2")
     outside.date = date(2026, 11, 1)
@@ -233,6 +238,16 @@ def test_list_in_range_filters_by_date(storage: FileStorage):
 def test_missing_fact_returns_none(storage: FileStorage):
     """Нет факта → None."""
     assert storage.get("нет-такого") is None
+
+
+def test_fact_without_season_is_rejected(storage: FileStorage):
+    """Факт без сезона → отказ с понятным сообщением.
+
+    Номер недели определяется горизонтом сезона. Без сезона он был бы
+    выдумкой, поэтому запись не проходит.
+    """
+    with pytest.raises(ValueError, match="сезон"):
+        storage.upsert(make_session())
 
 
 # ------------------------------------------------------------------ атомарность

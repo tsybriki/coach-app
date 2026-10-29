@@ -22,6 +22,7 @@ from app.domain.entities import ActualSession, Goal
 from app.ports.storage import (
     ActivityPort,
     AthleteRepo,
+    Clock,
     CommandLog,
     ExternalSourceError,
     FactRepo,
@@ -59,6 +60,17 @@ class UnavailableActivityPort(ActivityPort):
         raise ExternalSourceError("garmin", "источник активностей не подключён")
 
 
+class SystemClock(Clock):
+    """Календарное время системы.
+
+    В тестах подменяется на фиксированное — иначе «текущая неделя» в тестах
+    плывёт вместе с реальной датой.
+    """
+
+    def now(self) -> date:
+        return date.today()
+
+
 @dataclass
 class AppContainer:
     """Собранное приложение. Передаётся в FastAPI как зависимость."""
@@ -74,6 +86,7 @@ class AppContainer:
     assessor: Assessor
     feasibility: GoalFeasibility
     planner: WeekPlanner
+    clock: Clock
 
 
 def build_container(data_root: Path | None = None) -> AppContainer:
@@ -116,6 +129,7 @@ def build_container(data_root: Path | None = None) -> AppContainer:
         assessor=Assessor(),
         feasibility=feasibility,
         planner=planner,
+        clock=SystemClock(),
     )
 
 
@@ -132,4 +146,4 @@ def _target_vdot_for_metric(goal: Goal) -> float | None:
     return None
 
 
-__all__ = ["AppContainer", "build_container", "StubNarrator"]
+__all__ = ["AppContainer", "build_container", "StubNarrator", "SystemClock"]
