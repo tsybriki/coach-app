@@ -127,6 +127,38 @@ def inventory_for(slot: dict[str, Any]) -> list[dict[str, str]]:
     return items
 
 
+# Вид тренировки на русский — из подвида плана пайплайна.
+SUBKIND_RU = {
+    "easy": "лёгкая",
+    "easy_progression": "лёгкая с прогрессией",
+    "progression": "прогрессия",
+    "quality": "качественная",
+    "key_run": "ключевая",
+    "long_Z2": "длинная Z2",
+    "long_run": "длинная",
+    "stationary_z2": "велотренажёр Z2",
+    "stationary": "велотренажёр",
+    "core": "кор",
+    "mobility": "мобильность",
+    "strength": "силовая",
+    "brick": "брикет",
+}
+
+def _subkind_ru(slot: dict[str, Any]) -> str:
+    """Вид тренировки по-русски. Пусто, если дублирует название.
+
+    «Вел-станок Z1–Z2 45мин» и тег «велотренажёр Z2» говорят одно и то же —
+    лишний тег в шапке только шумит.
+    """
+    name = str(slot.get("name", "")).lower()
+    subkind = SUBKIND_RU.get(slot.get("subkind", ""), slot.get("subkind", ""))
+    if not subkind:
+        return ""
+    if subkind.lower() in name:
+        return ""
+    return subkind
+
+
 PHASE_ROLES = {
     "warmup": StepRole.WARMUP,
     "work": StepRole.WORK,
@@ -327,7 +359,7 @@ def build_week(plan: dict[str, Any], season_plan: dict[str, Any]) -> Week:
             objective={
                 "name": slot.get("name", ""),
                 "day": slot.get("day", ""),
-                "subkind": slot.get("subkind", ""),
+                "subkind": _subkind_ru(slot),
                 "session": slot.get("session") or {},
                 "inventory": inventory_for(slot),
             },

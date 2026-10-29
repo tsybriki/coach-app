@@ -11,6 +11,7 @@ import * as api from './api.js';
 import {
   getCache, putCache, enqueue, pendingCommands, removeCommand, markAttempt,
 } from './store.js';
+import { linkCandidates } from './link.js';
 
 const state = {
   screen: 'week',
@@ -131,6 +132,11 @@ function messageBlock() {
 }
 
 /* Иконка вида спорта — как в эталонном plan-wN.html. */
+const SPORT_NAME = {
+  run: 'Бег', bike: 'Велосипед', swim: 'Плавание',
+  strength: 'Силовая', ofp: 'ОФП', mobility: 'Мобильность',
+};
+
 const KIND_ICON = {
   run: '🏃', bike: '🚴', swim: '🏊', ofp: '💪',
   strength: '🏋️', mobility: '🧘', brick: '🔄',
@@ -214,23 +220,19 @@ function screenWeek() {
 }
 
 /* Список факта недели — для выбора: что связать с этой тренировкой. */
-function factList(workoutId) {
-  const facts = state.actual.map((a) => {
-    const mine = a.linked_workout_id === workoutId;
-    const taken = a.linked_workout_id && !mine;
-    const disabled = taken ? ' disabled' : '';
-    const label = mine ? 'связана' : (taken ? 'занята' : 'связать');
-    return `<button class="fact${mine ? ' linked' : ''}" data-actual="${escapeHtml(a.id)}"
-        data-workout="${escapeHtml(workoutId)}"${disabled}>
+function factList(workout) {
+  const facts = linkCandidates(workout, state.actual).map((a) => {
+    return `<button class="fact" data-actual="${escapeHtml(a.id)}"
+        data-workout="${escapeHtml(workout.id)}">
         <span class="ico">${KIND_ICON[a.sport] || '🎯'}</span>
         <span class="body">
           <span class="date">${a.date}</span>
           <span class="meta">${((a.distance_m || 0) / 1000).toFixed(1)} км · ${formatDuration(a.duration_min)}${a.hr_avg ? ` · HR ${a.hr_avg}` : ''}</span>
         </span>
-        <span class="act">${label}</span>
+        <span class="act">связать</span>
       </button>`;
   }).join('');
-  return facts || '<p>Факта нет.</p>';
+  return facts || `<p>${SPORT_NAME[workout.sport] || workout.sport}: активностей нет</p>`;
 }
 
 function screenSeason() {
@@ -348,8 +350,8 @@ function showWorkout(workoutId) {
   const stepCount = (workout.steps || []).length;
 
   const meta = [];
-  if (workout.location) meta.push(`📍 ${escapeHtml(workout.location)}`);
-  if (workout.focus) meta.push(`<span class="meta-item focus-pill focus-${escapeHtml(workout.focus)}">🎯 ${escapeHtml(workout.focus)}</span>`);
+  if (workout.location) meta.push(`<span class="meta-item">📍 ${escapeHtml(workout.location)}</span>`);
+  if (workout.focus) meta.push(`<span class="meta-item focus-pill focus-${escapeHtml(workout.focus)}">${escapeHtml(workout.focus)}</span>`);
   if (objective.subkind) meta.push(`<span class="meta-item">${escapeHtml(objective.subkind)}</span>`);
 
   const session = objective.session || {};
@@ -394,8 +396,8 @@ function showWorkout(workoutId) {
         <button class="action secondary" data-unlink="${escapeHtml(workout.id)}">Отвязать</button>
       </div>`
     : `<div class="actual-block empty">
-        <div class="lbl">Не выполнено</div>
-        <div class="facts">${factList(workout.id)}</div>
+        <div class="lbl">Факт не привязан</div>
+        <div class="facts">${factList(workout)}</div>
         <button class="action secondary" id="pull">Загрузить факт из Garmin</button>
       </div>`;
 
@@ -414,7 +416,6 @@ function showWorkout(workoutId) {
       ${invHtml}
       <h3>Структура тренировки</h3>
       ${structureHtml(workout)}
-      <h3>Факт</h3>
       ${actualBlock}
     </div>`;
 
