@@ -48,9 +48,12 @@ SOFT_TOKENS = [r"\bopen\(", r"\bPath\(", r"\.json\b", r"\bdata/", r"\btmp\b"]
 # `app/api/dependencies.py` — корневая точка сборки (composition root): здесь
 # зависимости связываются, поэтому путь к данным здесь законен. Исключение
 # узкое — один файл, а не каталог.
-ALLOWED_CODE_DIRS = ("adapters/storage", "adapters/migrations", "tools", "tests",
-                     "migrations")
-ALLOWED_CODE_FILES = ("app/api/dependencies.py",)
+# `adapters/storage` — реализация портов: формат хранилища знает только она.
+# `adapters/garmin` — внешний источник: формат ответа Garmin знает он.
+# Ни то, ни другое — не хранилище приложения.
+ALLOWED_CODE_DIRS = ("adapters/storage", "adapters/migrations",
+                     "tools", "tests", "migrations")
+ALLOWED_CODE_FILES = ("app/api/dependencies.py", "app/adapters/garmin.py")
 
 # --- места в дизайне, где знание о формате — по делу ---
 # (имя файла, регулярка, обязательное пояснение рядом)
@@ -100,9 +103,20 @@ def scan_code(repo: str) -> list[str]:
         # путь относительно app/ — чтобы совпадение с allowlist было точным
         rel_root = os.path.relpath(root, app)
         rel_file_base = f"app/{rel_root}" if rel_root != "." else "app"
-        # корень app/ проверяется — пропускаются только каталоги адаптеров
-        if any(rel_root == d or rel_root.startswith(d + os.sep)
-               for d in ALLOWED_CODE_DIRS):
+        # Каталоги адаптеров пропускаются: там формат знать положено.
+        # `rel_root` — путь вида «adapters/garmin», поэтому проверяем и
+        # равенство, и вхождение в путь.
+        normalized = rel_root.replace(os.sep, "/")
+        parts = normalized.split("/") if normalized != "." else []
+        allowed_here = False
+        for allowed in ALLOWED_CODE_DIRS:
+            allow_parts = allowed.split("/")
+            # Совпадение по компонентам: «adapters/storage» не пропускает
+            # «adapters/garmin» — это разные каталоги.
+            if parts[:len(allow_parts)] == allow_parts:
+                allowed_here = True
+                break
+        if allowed_here:
             continue
         for fn in files:
             if not fn.endswith(".py"):

@@ -62,6 +62,8 @@ DAY_ORDER = ["ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ"]
 
 SPORT_BY_PIPELINE = {
     "running": Sport.RUN,
+    "hiit": Sport.HIIT,
+    "strength_training": Sport.STRENGTH,
     "cycling": Sport.BIKE,
     "road_biking": Sport.BIKE,
     "mountain_biking": Sport.BIKE,
@@ -81,6 +83,16 @@ SPORT_BY_PLAN_KIND = {
     "strength": Sport.STRENGTH,
     "ofp": Sport.OFP,
     "mobility": Sport.MOBILITY,
+}
+
+# Виды факта, совместимые с тренировкой по виду спорта.
+#
+# ОФП и силовая — общая тренировка: их в Garmin записывают как HIIT
+# (Garmin typeKey = «hiit») или как силовую. Поэтому тренировке ofp/strength
+# подходят факты hiit и strength — иначе связать их нечем.
+COMPATIBLE_SPORTS = {
+    Sport.OFP: (Sport.OFP, Sport.HIIT, Sport.STRENGTH),
+    Sport.STRENGTH: (Sport.STRENGTH, Sport.HIIT, Sport.OFP),
 }
 
 # Локации из пайплайна — на английском. Приложение на русском.

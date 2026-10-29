@@ -159,6 +159,16 @@ def link_actual(week: Week, workout_id: str, actual: ActualSession) -> Week:
     return updated
 
 
+def link_actual_session(session: ActualSession, workout_id: str) -> ActualSession:
+    """Обратная ссылка на факте: факт занят этой тренировкой.
+
+    Без неё факт остаётся «свободным» — и снова предлагается к связыванию.
+    Ссылка ставится вручную, как и сама связь (I15).
+    """
+    session.linked_workout_id = workout_id
+    return session
+
+
 def unlink_actual(week: Week, workout_id: str) -> Week:
     """Разрыв связи факта и тренировки."""
     updated = week.copy_with()

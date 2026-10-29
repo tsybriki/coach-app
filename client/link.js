@@ -9,6 +9,27 @@ export function sportRank(sport) {
   return sport === 'run' ? 0 : 1;
 }
 
+/* Виды спорта делятся на группы: внутри группы вид не важен.
+ *
+ * Силовая группа — ОФП, силовая и HIIT: в Garmin всё это записывается как
+ * «hiit» (typeKey) или «strength_training», и в плане может быть помечено
+ * любым из трёх. Связать их между собой — можно, это одна и та же работа.
+ * Бег, вел и плавание — точное совпадение: велосипед с бегом не связать.
+ */
+const GROUP = {
+  ofp: 'strength',
+  strength: 'strength',
+  hiit: 'strength',
+};
+
+/* Подходит ли вид факта к виду тренировки. */
+export function sportCompatible(workoutSport, actualSport) {
+  const groupA = GROUP[workoutSport];
+  const groupB = GROUP[actualSport];
+  if (groupA || groupB) return groupA === groupB;
+  return workoutSport === actualSport;
+}
+
 /* Кандидаты для связывания с тренировкой.
  *
  * Только тот же вид спорта: беговой тренировке — беговые активности,
@@ -16,14 +37,17 @@ export function sportRank(sport) {
  * Порядок: спорт (бег первым), внутри — дата, от самой старой.
  */
 export function linkCandidates(workout, sessions) {
-  const sport = workout.sport;
   return sessions
-    .filter((a) => a.sport === sport && !a.linked_workout_id)
+    .filter((a) => sportCompatible(workout.sport, a.sport) && !a.linked_workout_id)
     .sort((a, b) => {
+      // Сначала вид спорта (бег первым), внутри группы — по дате,
+      // от самой старой. Дата — последний ключ: иначе порядок внутри
+      // группы (hiit/strength/ofp) скачет по датам.
       if (sportRank(a.sport) !== sportRank(b.sport)) {
         return sportRank(a.sport) - sportRank(b.sport);
       }
-      if (a.sport !== b.sport) return a.sport.localeCompare(b.sport);
-      return String(a.date).localeCompare(String(b.date));
+      const byDate = String(a.date).localeCompare(String(b.date));
+      if (byDate !== 0) return byDate;
+      return a.sport.localeCompare(b.sport);
     });
 }

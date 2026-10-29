@@ -1,6 +1,6 @@
 # Модель домена — спецификация
 
-Coach App · v3.6 · 18 сущностей · 43 инвариантов (43 подтверждено) · 6 вопросов
+Coach App · v3.7 · 18 сущностей · 44 инвариантов (44 подтверждено) · 6 вопросов
 
 > **Источник правды:** этот MD-файл. HTML — производная: `python3 tools/render_spec.py`.
 > Правки вносятся здесь, HTML пересобирается.
@@ -74,7 +74,7 @@ Coach App · v3.6 · 18 сущностей · 43 инвариантов (43 по
 
 Что фактически сделано. Одна запись на выполненную тренировку: объём, пульс и intensity minutes. Живёт вне плана; связан с планом через `Workout.actual_id`. Всё не связанное всё равно учитывается в actuals.
 
-- `id` · `date` · `sport` · `duration_min` · `distance_m`
+- `id` · `date` · `sport{run,bike,swim,hiit,strength,ofp,mobility}` · `duration_min` · `distance_m`
 - `hr_avg` · `hr_max` · `hr_zones_min{}` — минуты по зонам атлета
 - `aerobic_te` · `anaerobic_te` · `vo2max`
 - `moderate_min` · `vigorous_min` — intensity minutes тренировки от источника; если источник не делит — всё в moderate
@@ -249,6 +249,7 @@ Coach App · v3.6 · 18 сущностей · 43 инвариантов (43 по
 | I41 | План готовит propose для одной следующей недели ✓ |
 | I42 | `external_id` уникален (id активности Garmin) ✓ |
 | I43 | Единственный `adaptation_rate` — в `LoadModel` ✓ |
+| I44 | Связь факта и тренировки хранится с обеих сторон: `Workout.actual_id` и `ActualSession.linked_workout_id` ✓ |
 
 Отметка `✓` = подтверждено Кириллом. При подтверждении правится эта отметка, не текст правила.
 

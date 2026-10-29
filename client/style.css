@@ -322,6 +322,13 @@ h3 {
   font-weight: 500;
 }
 
+.slot .done-line {
+  font-size: 11px;
+  color: var(--good);
+  margin-top: 4px;
+  font-weight: 500;
+}
+
 .slot .chev {
   margin-left: auto;
   color: var(--muted);

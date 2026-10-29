@@ -133,13 +133,13 @@ function messageBlock() {
 
 /* Иконка вида спорта — как в эталонном plan-wN.html. */
 const SPORT_NAME = {
-  run: 'Бег', bike: 'Велосипед', swim: 'Плавание',
+  run: 'Бег', bike: 'Велосипед', swim: 'Плавание', hiit: 'HIIT',
   strength: 'Силовая', ofp: 'ОФП', mobility: 'Мобильность',
 };
 
 const KIND_ICON = {
   run: '🏃', bike: '🚴', swim: '🏊', ofp: '💪',
-  strength: '🏋️', mobility: '🧘', brick: '🔄',
+  strength: '🏋️', mobility: '🧘', hiit: '⚡', brick: '🔄',
 };
 
 function kindTag(sport) {
@@ -159,14 +159,18 @@ const ROLE_RU = {
 const DAY_ORDER = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ'];
 
 /* Плашка тренировки в списке недели. По нажатию — детали. */
-function slotButton(workout, linked) {
+function slotButton(workout, actual) {
   const objective = workout.objective || {};
   const title = objective.name || workout.kind;
   const day = objective.day || '';
   const focus = workout.focus && workout.focus !== 'core' ? workout.focus : '';
-  const done = linked ? ' <span class="done-mark">✓</span>' : '';
+  const done = actual ? ' <span class="done-mark">✓</span>' : '';
 
-  return `<button class="slot${linked ? ' done' : ''}" data-slot="${escapeHtml(workout.id)}">
+  const actualLine = actual
+    ? `<div class="done-line">${((actual.distance_m || 0) / 1000).toFixed(1)} км · ${formatDuration(actual.duration_min)}${actual.hr_avg ? ` · HR ${actual.hr_avg}` : ''}</div>`
+    : '';
+
+  return `<button class="slot${actual ? ' done' : ''}" data-slot="${escapeHtml(workout.id)}">
       <div class="slot-head">
         <span class="ico">${KIND_ICON[workout.sport] || '🎯'}</span>
         <span class="day">${escapeHtml(day)} · ${escapeHtml(workout.time || '')}</span>
@@ -174,6 +178,7 @@ function slotButton(workout, linked) {
       </div>
       <div class="name">${escapeHtml(title)}</div>
       ${focus ? `<div class="focus">🎯 ${escapeHtml(focus)}</div>` : ''}
+      ${actualLine}
     </button>`;
 }
 
@@ -197,8 +202,8 @@ function screenWeek() {
   const target = week.load_target || {};
 
   const slots = sortedWorkouts(week.workouts || []).map((w) => {
-    const linked = state.actual.some((a) => a.id === w.actual_id);
-    return slotButton(w, linked);
+    const actual = state.actual.find((a) => a.id === w.actual_id);
+    return slotButton(w, actual);
   }).join('');
 
   const unplaced = (week.unplaced || []).length
@@ -227,7 +232,7 @@ function factList(workout) {
         <span class="ico">${KIND_ICON[a.sport] || '🎯'}</span>
         <span class="body">
           <span class="date">${a.date}</span>
-          <span class="meta">${((a.distance_m || 0) / 1000).toFixed(1)} км · ${formatDuration(a.duration_min)}${a.hr_avg ? ` · HR ${a.hr_avg}` : ''}</span>
+          <span class="meta">${SPORT_NAME[a.sport] || a.sport} · ${((a.distance_m || 0) / 1000).toFixed(1)} км · ${formatDuration(a.duration_min)}${a.hr_avg ? ` · HR ${a.hr_avg}` : ''}</span>
         </span>
         <span class="act">связать</span>
       </button>`;
@@ -392,7 +397,7 @@ function showWorkout(workoutId) {
           ${formatDuration(linkedActual.duration_min)}
           ${linkedActual.hr_avg ? ` · HR ${linkedActual.hr_avg}` : ''}
         </div>
-        <div class="when">${linkedActual.date}</div>
+        <div class="when">${linkedActual.date} · ${escapeHtml(SPORT_NAME[linkedActual.sport] || linkedActual.sport)}</div>
         <button class="action secondary" data-unlink="${escapeHtml(workout.id)}">Отвязать</button>
       </div>`
     : `<div class="actual-block empty">
@@ -650,6 +655,15 @@ async function loadFromCache() {
   state.stale = true;
 }
 
+/* Ошибка, из-за которой команда бессмысленна: повтор не поможет.
+ * Такую команду убираем из очереди, иначе она блокирует все следующие.
+ */
+function isPermanentError(error) {
+  return error.code === 'degraded'
+    || error.code === 'invalid_command'
+    || error.code === 'not_found';
+}
+
 async function flushOutbox() {
   const queued = await pendingCommands();
   state.outbox = queued;
@@ -661,8 +675,18 @@ async function flushOutbox() {
       await removeCommand(command.id);
     } catch (error) {
       await markAttempt(command.id, error.message);
+      if (isPermanentError(error)) {
+        // Команда не выполнима — убираем, чтобы не блокировать очередь.
+        await removeCommand(command.id);
+        state.message = error.message;
+        continue;
+      }
       if (error.code === 'version_conflict') {
         state.message = 'Состояние изменилось — посмотрите заново';
+      } else if (!error.code) {
+        state.message = 'Нет связи с сервером — команда ждёт в очереди';
+      } else {
+        state.message = error.message;
       }
       break;
     }

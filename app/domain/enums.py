@@ -26,6 +26,7 @@ class Sport(StrEnum):
     RUN = "run"
     BIKE = "bike"
     SWIM = "swim"
+    HIIT = "hiit"
     STRENGTH = "strength"
     OFP = "ofp"
     MOBILITY = "mobility"

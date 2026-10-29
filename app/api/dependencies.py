@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from app.adapters.garmin import GarminActivityPort
 from app.adapters.storage.files import FileStorage
 from app.adapters.storage.ports import (
     AthleteRepoAdapter,
@@ -52,8 +53,8 @@ class StubNarrator(NarratorPort):
 class UnavailableActivityPort(ActivityPort):
     """Заглушка источника активностей.
 
-    На старте Garmin не подключён: команда `pull_fact` возвращает `degraded`.
-    Подключение — отдельная задача (этап 6).
+    Используется в тестах: Garmin подключён не везде. Основной адаптер —
+    `GarminActivityPort`, он подставляется в контейнер.
     """
 
     def pull(self, start: date, end: date, sport: str | None = None) -> list[ActualSession]:
@@ -124,7 +125,7 @@ def build_container(data_root: Path | None = None) -> AppContainer:
         athlete_repo=AthleteRepoAdapter(storage),
         methodology_repo=methodology,
         command_log=CommandLogAdapter(storage),
-        activity_port=UnavailableActivityPort(),
+        activity_port=GarminActivityPort(),
         narrator_port=StubNarrator(),
         assessor=Assessor(),
         feasibility=feasibility,

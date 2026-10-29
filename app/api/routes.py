@@ -293,6 +293,7 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         activate_week,
         close_week,
         link_actual,
+        link_actual_session,
         propose_week,
         replan_remainder,
         unlink_actual,
@@ -300,8 +301,17 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
 
     # Команды, не требующие недели: загрузка факта и текст
     if command.type is CommandType.PULL_FACT:
+        # Факт тянем за неделю, а не за сегодня: неделя — вс→сб, и
+        # тренировка в понедельник ещё не «сегодняшняя».
+        season = container.season_repo.load()
+        start = season.horizon_start
+        today = container.clock.now()
+        week_start = start + timedelta(days=7 * (int(command.args.get("season_week", 0)) - 1))
+        week_end = week_start + timedelta(days=6)
+        if week_start > today:
+            week_start = today - timedelta(days=6)
         sessions = container.activity_port.pull(
-            date.today(), date.today(), command.args.get("sport"))
+            week_start, week_end, command.args.get("sport"))
         for session in sessions:
             container.fact_repo.upsert(session)
         return {
@@ -340,8 +350,17 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         if actual_session is None:
             raise ValueError(f"факт {actual_id} не найден")
         updated = link_actual(week, workout_id, actual_session)
+        # Обратная ссылка на факте: без неё факт снова предлагается к связыванию.
+        container.fact_repo.upsert(
+            link_actual_session(actual_session, workout_id))
     elif command.type is CommandType.UNLINK_ACTUAL:
-        updated = unlink_actual(week, str(command.args.get("workout_id", "")))
+        workout_id = str(command.args.get("workout_id", ""))
+        updated = unlink_actual(week, workout_id)
+        # Ссылка снимается с факта, иначе он навсегда остаётся занятым.
+        for session in container.fact_repo.list_for_week(season_week):
+            if session.linked_workout_id == workout_id:
+                session.linked_workout_id = None
+                container.fact_repo.upsert(session)
     else:
         raise ValueError(f"команда {command.type} пока не реализована")
 

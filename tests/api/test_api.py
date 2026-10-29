@@ -38,9 +38,20 @@ def data_root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def client(data_root: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """Клиент с чистым хранилищем."""
+    """Клиент с чистым хранилищем и без Garmin.
+
+    Garmin в тестах не нужен: адаптер ходит в сеть. Источник активностей
+    подменяется заглушкой — проверка деградации должна быть быстрой
+    и без внешних зависимостей.
+    """
     monkeypatch.setenv("COACH_APP_DATA", str(data_root))
+
+    # Контейнер собирается в lifespan — подмена класса до старта.
+    from app.api import dependencies
     from app.main import create_app
+
+    monkeypatch.setattr(dependencies, "GarminActivityPort",
+                        dependencies.UnavailableActivityPort)
 
     with TestClient(create_app()) as test_client:
         yield test_client
@@ -292,3 +303,144 @@ def test_no_authorization_header_required(client: TestClient):
     """Авторизации в базе нет: запрос без заголовка проходит."""
     response = client.get("/api/v1/snapshot")
     assert response.status_code == 200
+
+
+# ------------------------------------------------------------------ связывание
+
+
+def test_link_actual_sets_backlink_on_session(client: TestClient, data_root: Path):
+    """Связь сохраняется на обеих сторонах: у тренировки и у факта.
+
+    Без обратной ссылки факт остаётся свободным — и снова предлагается
+    к связыванию, хотя уже занят.
+    """
+    from app.domain.entities import ActualSession
+    from app.domain.enums import FactSource, Sport
+
+    version = seed_week(data_root)
+    storage = FileStorage(data_root)
+    storage.upsert(ActualSession(
+        id="a1", date=date(2026, 10, 14), sport=Sport.RUN, duration_min=60,
+        distance_m=10000.0, source=FactSource.GARMIN, external_id="ext-1",
+    ))
+
+    response = client.post("/api/v1/commands", json={
+        "id": "cmd-link", "type": "link_actual",
+        "args": {"season_week": 1, "actual_id": "a1", "workout_id": "w1"},
+        "reason": "связываю факт с тренировкой",
+        "expected_version": version,
+    })
+    assert response.status_code == 200
+
+    week = client.get("/api/v1/week/1").json()["data"]
+    assert week["workouts"][0]["actual_id"] == "a1"
+
+    actual = client.get("/api/v1/actual/1").json()["data"]["sessions"]
+    assert actual[0]["linked_workout_id"] == "w1", "ссылка на факте должна стоять"
+
+
+def test_unlink_actual_clears_backlink(client: TestClient, data_root: Path):
+    """Разрыв связи снимает ссылку с факта — иначе он навсегда занят."""
+    from app.domain.entities import ActualSession
+    from app.domain.enums import FactSource, Sport
+
+    version = seed_week(data_root)
+    storage = FileStorage(data_root)
+    storage.upsert(ActualSession(
+        id="a1", date=date(2026, 10, 14), sport=Sport.RUN, duration_min=60,
+        source=FactSource.GARMIN, external_id="ext-1",
+    ))
+
+    client.post("/api/v1/commands", json={
+        "id": "cmd-link", "type": "link_actual",
+        "args": {"season_week": 1, "actual_id": "a1", "workout_id": "w1"},
+        "reason": "связываю", "expected_version": version,
+    })
+
+    current = client.get("/api/v1/snapshot").json()["version"]
+    response = client.post("/api/v1/commands", json={
+        "id": "cmd-unlink", "type": "unlink_actual",
+        "args": {"season_week": 1, "workout_id": "w1"},
+        "reason": "разрываю", "expected_version": current,
+    })
+    assert response.status_code == 200
+
+    actual = client.get("/api/v1/actual/1").json()["data"]["sessions"]
+    assert actual[0]["linked_workout_id"] is None
+
+
+def test_link_actual_rejects_binding_to_another_workout(client: TestClient, data_root: Path):
+    """Факт нельзя связать с двумя разными тренировками — связь 1:1.
+
+    Повторная связка с той же тренировкой — не нарушение: это та же операция.
+    """
+    from app.domain.entities import ActualSession
+    from app.domain.enums import FactSource, Sport
+
+    version = seed_week(data_root)
+    storage = FileStorage(data_root)
+    storage.upsert(ActualSession(
+        id="a1", date=date(2026, 10, 14), sport=Sport.RUN, duration_min=60,
+        source=FactSource.GARMIN, external_id="ext-1",
+    ))
+
+    client.post("/api/v1/commands", json={
+        "id": "cmd-link", "type": "link_actual",
+        "args": {"season_week": 1, "actual_id": "a1", "workout_id": "w1"},
+        "reason": "связываю", "expected_version": version,
+    })
+
+    # Вторая тренировка в неделе — факт уже занят первой.
+    week = storage.week(1)
+    week.workouts.append(Workout(
+        id="w2", request_id="r2", sport=Sport.RUN, kind="easy", focus="base",
+        steps=[Step(id="s2", role=StepRole.WORK, sport=Sport.RUN,
+                    target_type=TargetType.TIME, target_value=60.0,
+                    duration_min=60.0)],
+        duration_min=60.0,
+    ))
+    week.requests.append(Request(id="r2", sport=Sport.RUN, kind="easy",
+                                 focus="base", duration_min=60))
+    week.assignments.append(Assignment(request_id="r2", slot_id="s2",
+                                         start="18:45", duration_min=60))
+    week.validate()
+    current = storage.version()
+    storage.put_week(week, expected_version=current)
+
+    response = client.post("/api/v1/commands", json={
+        "id": "cmd-link-2", "type": "link_actual",
+        "args": {"season_week": 1, "actual_id": "a1", "workout_id": "w2"},
+        "reason": "связываю с другой тренировкой",
+        "expected_version": storage.version(),
+    })
+    assert response.status_code == 400
+    assert "1:1" in response.json()["error"]["message"]
+
+
+def test_i44_link_stored_on_both_sides(client: TestClient, data_root: Path):
+    """I44: связь хранится с обеих сторон.
+
+    Тренировка знает факт (`actual_id`), факт знает тренировку
+    (`linked_workout_id`). Без обратной ссылки факт снова предлагается
+    к связыванию.
+    """
+    from app.domain.entities import ActualSession
+    from app.domain.enums import FactSource, Sport
+
+    version = seed_week(data_root)
+    storage = FileStorage(data_root)
+    storage.upsert(ActualSession(
+        id="a1", date=date(2026, 10, 14), sport=Sport.RUN, duration_min=60,
+        source=FactSource.GARMIN, external_id="ext-1",
+    ))
+
+    client.post("/api/v1/commands", json={
+        "id": "cmd-link", "type": "link_actual",
+        "args": {"season_week": 1, "actual_id": "a1", "workout_id": "w1"},
+        "reason": "связываю", "expected_version": version,
+    })
+
+    week = client.get("/api/v1/week/1").json()["data"]
+    actual = client.get("/api/v1/actual/1").json()["data"]["sessions"]
+    assert week["workouts"][0]["actual_id"] == "a1"
+    assert actual[0]["linked_workout_id"] == "w1"

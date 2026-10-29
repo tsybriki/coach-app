@@ -96,7 +96,7 @@
 </head><body>
 <header>
 <h1>Модель домена — спецификация</h1>
-<div class="meta">Coach App · v3.6 · 18 сущностей · 43 инвариантов (43 подтверждено) · 6 вопросов</div>
+<div class="meta">Coach App · v3.7 · 18 сущностей · 44 инвариантов (44 подтверждено) · 6 вопросов</div>
 <div class="meta">состав: диаграмма · сущности · связи · вопросы</div>
 </header>
 <nav>
@@ -292,7 +292,7 @@
 <div class="eh"><span>ActualSession</span><span class="k">value</span></div>
 <div class="role">Что фактически сделано. Одна запись на выполненную тренировку: объём, пульс и intensity minutes. Живёт вне плана; связан с планом через <code>Workout.actual_id</code>. Всё не связанное всё равно учитывается в actuals.</div>
 <ul class="pl">
-<li><code>id</code> · <code>date</code> · <code>sport</code> · <code>duration_min</code> · <code>distance_m</code></li>
+<li><code>id</code> · <code>date</code> · <code>sport{run,bike,swim,hiit,strength,ofp,mobility}</code> · <code>duration_min</code> · <code>distance_m</code></li>
 <li><code>hr_avg</code> · <code>hr_max</code> · <code>hr_zones_min{}</code> — минуты по зонам атлета</li>
 <li><code>aerobic_te</code> · <code>anaerobic_te</code> · <code>vo2max</code></li>
 <li><code>moderate_min</code> · <code>vigorous_min</code> — intensity minutes тренировки от источника; если источник не делит — всё в moderate</li>
@@ -483,6 +483,7 @@
 <tr class="confirmed"><td class="n">I41</td><td class="st"><span class="no">·</span></td><td>План готовит propose для одной следующей недели</td></tr>
 <tr class="confirmed"><td class="n">I42</td><td class="st"><span class="no">·</span></td><td><code>external_id</code> уникален (id активности Garmin)</td></tr>
 <tr class="confirmed"><td class="n">I43</td><td class="st"><span class="no">·</span></td><td>Единственный <code>adaptation_rate</code> — в <code>LoadModel</code></td></tr>
+<tr class="confirmed"><td class="n">I44</td><td class="st"><span class="no">·</span></td><td>Связь факта и тренировки хранится с обеих сторон: <code>Workout.actual_id</code> и <code>ActualSession.linked_workout_id</code></td></tr>
 </table></div>
 <p>Отметка <code>✓</code> = подтверждено Кириллом. При подтверждении правится эта отметка, не текст правила.</p>
 <h3>Решения по вопросам</h3>

@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { linkCandidates, sportRank } from '../../client/link.js';
+import { linkCandidates, sportRank, sportCompatible } from '../../client/link.js';
 
 function session(id, date, sport, linkedWorkoutId = null) {
   return {
@@ -68,4 +68,60 @@ test('нет кандидатов — пустой список, не ошибк
   const sessions = [session('a', '2026-10-26', 'run')];
 
   assert.deepEqual(linkCandidates(workout, sessions), []);
+});
+
+test('ОФП-тренировке подходит факт HIIT и силовая', () => {
+  const workout = { id: 'w1', sport: 'ofp' };
+  const sessions = [
+    session('a', '2026-10-26', 'hiit'),
+    session('b', '2026-10-27', 'strength'),
+    session('c', '2026-10-28', 'run'),
+  ];
+
+  const result = linkCandidates(workout, sessions);
+  assert.deepEqual(result.map((s) => s.id), ['a', 'b']);
+});
+
+test('HIIT-тренировке подходят HIIT, силовая и ОФП — одна группа', () => {
+  const workout = { id: 'w1', sport: 'hiit' };
+  const sessions = [
+    session('a', '2026-10-26', 'hiit'),
+    session('b', '2026-10-27', 'strength'),
+    session('c', '2026-10-28', 'ofp'),
+    session('d', '2026-10-29', 'bike'),
+  ];
+
+  const result = linkCandidates(workout, sessions);
+  // Велосипед не подходит; остальные — по дате.
+  assert.deepEqual(result.map((s) => s.id), ['a', 'b', 'c']);
+});
+
+test('внутри силовой группы порядок — по дате, а не по виду спорта', () => {
+  const workout = { id: 'w1', sport: 'ofp' };
+  const sessions = [
+    session('c', '2026-10-26', 'ofp'),
+    session('a', '2026-10-26', 'hiit'),
+    session('b', '2026-10-27', 'strength'),
+  ];
+
+  const result = linkCandidates(workout, sessions);
+  assert.deepEqual(result.map((s) => s.id), ['a', 'c', 'b']);
+});
+
+test('силовая группа: HIIT, силовая и ОФП взаимозаменяемы', () => {
+  assert.equal(sportCompatible('hiit', 'strength'), true);
+  assert.equal(sportCompatible('hiit', 'ofp'), true);
+  assert.equal(sportCompatible('strength', 'ofp'), true);
+  assert.equal(sportCompatible('ofp', 'hiit'), true);
+});
+
+test('бег не совместим с ОФП и HIIT', () => {
+  assert.equal(sportCompatible('run', 'run'), true);
+  assert.equal(sportCompatible('run', 'hiit'), false);
+  assert.equal(sportCompatible('run', 'ofp'), false);
+});
+
+test('велосипед не совместим с бегом', () => {
+  assert.equal(sportCompatible('bike', 'bike'), true);
+  assert.equal(sportCompatible('bike', 'run'), false);
 });
