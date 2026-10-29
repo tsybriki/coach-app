@@ -26,6 +26,7 @@ const state = {
   cachedAt: null,
   online: navigator.onLine,
   outbox: [],
+  openWorkoutId: null,
   message: null,
   base: localStorage.getItem('coach-app-base') || location.origin,
 };
@@ -195,8 +196,7 @@ function screenWeek() {
   }).join('');
 
   const unplaced = (week.unplaced || []).length
-    ? `<div class="card warn"><div class="chead">Висяки: ${week.unplaced.length}</div>
-        <p>Не разложилось по слотам. Решаете вы.</p></div>`
+    ? `<div class="card warn"><div class="chead">Висяки: ${week.unplaced.length}</div></div>`
     : '';
 
   return `${messageBlock()}
@@ -210,29 +210,27 @@ function screenWeek() {
     </div>
     ${unplaced}
     <h2 class="slots-header">Тренировки · ${(week.workouts || []).length} шт</h2>
-    <div class="slots-sub">тап → детали</div>
-    <div class="slots-list">${slots || '<p>Тренировок нет.</p>'}</div>
-    <button class="action secondary" id="link">Связать факт с тренировкой</button>
-    <div id="link-block" class="hidden">${linkBlock()}</div>`;
+    <div class="slots-list">${slots || '<p>Тренировок нет.</p>'}</div>`;
 }
 
-/* Блок связывания — раскрывается по кнопке. */
-function linkBlock() {
+/* Список факта недели — для выбора: что связать с этой тренировкой. */
+function factList(workoutId) {
   const facts = state.actual.map((a) => {
-    const linked = a.linked_workout_id
-      ? `связан с ${a.linked_workout_id}`
-      : '<span class="free">не связан</span>';
-    return `<div class="card">
-        <div class="chead">
-          <span>${KIND_ICON[a.sport] || '🎯'}</span>
-          <span class="name">${escapeHtml(a.sport)}</span>
-          <span class="dur">${formatDuration(a.duration_min)}</span>
-        </div>
-        <div class="sub">${a.date} · ${((a.distance_m || 0) / 1000).toFixed(1)} км · ${linked}</div>
-      </div>`;
+    const mine = a.linked_workout_id === workoutId;
+    const taken = a.linked_workout_id && !mine;
+    const disabled = taken ? ' disabled' : '';
+    const label = mine ? 'связана' : (taken ? 'занята' : 'связать');
+    return `<button class="fact${mine ? ' linked' : ''}" data-actual="${escapeHtml(a.id)}"
+        data-workout="${escapeHtml(workoutId)}"${disabled}>
+        <span class="ico">${KIND_ICON[a.sport] || '🎯'}</span>
+        <span class="body">
+          <span class="date">${a.date}</span>
+          <span class="meta">${((a.distance_m || 0) / 1000).toFixed(1)} км · ${formatDuration(a.duration_min)}${a.hr_avg ? ` · HR ${a.hr_avg}` : ''}</span>
+        </span>
+        <span class="act">${label}</span>
+      </button>`;
   }).join('');
-  return `<button class="action secondary" id="pull">Загрузить из Garmin</button>
-    ${facts || '<p>Факта нет.</p>'}`;
+  return facts || '<p>Факта нет.</p>';
 }
 
 function screenSeason() {
@@ -298,14 +296,13 @@ function screenFact() {
 
 function screenClose() {
   return `${messageBlock()}<h2>Закрытие недели</h2>
-    <p>Ритуал: вытянуть факт → сопоставить руками → посчитать и записать.</p>
     <div class="card">
-      <h3>Шаги</h3>
-      <ol class="steps-list">
-        <li>Вытянуть остаток факта</li>
-        <li>Сопоставить факт с тренировками</li>
-        <li>Посчитать и записать</li>
-      </ol>
+      <div class="chead">Неделя ${state.week ? state.week.season_week : ''}</div>
+      <div class="metrics">
+        <div class="metric"><div class="v">${state.actual.length}</div><div class="l">сессий в факте</div></div>
+        <div class="metric"><div class="v">${state.week ? (state.week.workouts || []).length : 0}</div><div class="l">в плане</div></div>
+        <div class="metric"><div class="v">${state.week ? (state.week.workouts || []).filter((w) => w.actual_id).length : 0}</div><div class="l">связано</div></div>
+      </div>
     </div>
     <button class="action" id="close">Закрыть неделю</button>`;
 }
@@ -381,6 +378,27 @@ function showWorkout(workoutId) {
       </div>`
     : '';
 
+  const linkedActual = workout.actual_id
+    ? state.actual.find((a) => a.id === workout.actual_id)
+    : null;
+
+  const actualBlock = linkedActual
+    ? `<div class="actual-block">
+        <div class="lbl">Выполнено</div>
+        <div class="line">
+          <b>${((linkedActual.distance_m || 0) / 1000).toFixed(1)} км</b> ·
+          ${formatDuration(linkedActual.duration_min)}
+          ${linkedActual.hr_avg ? ` · HR ${linkedActual.hr_avg}` : ''}
+        </div>
+        <div class="when">${linkedActual.date}</div>
+        <button class="action secondary" data-unlink="${escapeHtml(workout.id)}">Отвязать</button>
+      </div>`
+    : `<div class="actual-block empty">
+        <div class="lbl">Не выполнено</div>
+        <div class="facts">${factList(workout.id)}</div>
+        <button class="action secondary" id="pull">Загрузить факт из Garmin</button>
+      </div>`;
+
   cardHost.innerHTML = `<div class="card detail">
       <div class="card-header">
         <div class="headline">
@@ -396,8 +414,11 @@ function showWorkout(workoutId) {
       ${invHtml}
       <h3>Структура тренировки</h3>
       ${structureHtml(workout)}
+      <h3>Факт</h3>
+      ${actualBlock}
     </div>`;
 
+  state.openWorkoutId = workoutId;
   cardWrap.classList.remove('hidden');
   picker.classList.add('hidden');
   bar.innerHTML = detailBar(title, objective.day || '');
@@ -439,6 +460,7 @@ function detailBar(title, day) {
 
 /* Обратно к списку. */
 function showPicker() {
+  state.openWorkoutId = null;
   cardWrap.classList.add('hidden');
   picker.classList.remove('hidden');
   if (window.location.hash) {
@@ -683,13 +705,17 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
-  if (target.id === 'link') {
-    const block = document.getElementById('link-block');
-    if (block) {
-      block.classList.remove('hidden');
-      block.innerHTML = linkBlock();
-      document.getElementById('link')?.remove();
-    }
+  // Тап по факту — связать с открытой тренировкой
+  const fact = target.closest ? target.closest('[data-actual]') : null;
+  if (fact) {
+    await linkActual(fact.dataset.actual, fact.dataset.workout);
+    return;
+  }
+
+  // Отвязать факт от тренировки
+  const unlink = target.closest ? target.closest('[data-unlink]') : null;
+  if (unlink) {
+    await unlinkActual(unlink.dataset.unlink);
     return;
   }
 
@@ -705,6 +731,10 @@ document.addEventListener('click', async (event) => {
     });
     await flushOutbox();
     await load();
+    state.message = null;
+    render();
+    // Вернуться в детали, если тренировка была открыта.
+    if (state.week && state.openWorkoutId) showWorkout(state.openWorkoutId);
     return;
   }
 
@@ -730,6 +760,43 @@ window.addEventListener('popstate', (event) => {
     showPicker();
   }
 });
+
+/* Связать факт с тренировкой. */
+async function linkActual(actualId, workoutId) {
+  state.message = 'Связываю…';
+  render();
+  await queueCommand({
+    id: `link-${actualId}-${workoutId}-${Date.now()}`,
+    type: 'link_actual',
+    args: { season_week: state.seasonWeek, actual_id: actualId, workout_id: workoutId },
+    reason: 'связь факта с тренировкой',
+    expected_version: state.version,
+  });
+  await flushOutbox();
+  await load();
+  state.message = null;
+  render();
+  // Вернуться в детали тренировки: после загрузки экран сбрасывается.
+  if (state.week && workoutId) showWorkout(workoutId);
+}
+
+/* Отвязать факт от тренировки. */
+async function unlinkActual(workoutId) {
+  state.message = 'Отвязываю…';
+  render();
+  await queueCommand({
+    id: `unlink-${workoutId}-${Date.now()}`,
+    type: 'unlink_actual',
+    args: { season_week: state.seasonWeek, workout_id: workoutId },
+    reason: 'разрыв связи факта с тренировкой',
+    expected_version: state.version,
+  });
+  await flushOutbox();
+  await load();
+  state.message = null;
+  render();
+  if (state.week && workoutId) showWorkout(workoutId);
+}
 
 async function queueCommand(command) {
   await enqueue(command);
