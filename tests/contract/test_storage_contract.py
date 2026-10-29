@@ -311,6 +311,35 @@ def test_athlete_roundtrip(storage: FileStorage):
     assert loaded.weight_kg == 101.7
 
 
+def test_season_with_plan_roundtrip(storage: FileStorage):
+    """Сезон с планом и целью сохраняется и читается.
+
+    Даты в цели разбираются: без этого `race_date` остаётся строкой и
+    форматирование ответа падает.
+    """
+    from app.domain.entities import Goal, Plan
+    from app.domain.enums import PlanStatus
+
+    goal = Goal(
+        id="g1", discipline="run_10k", race_date=date(2027, 4, 18),
+        metric_type="time_sec", metric_target=2400.0, target_friendly="10К за 40:00",
+    )
+    season = Season(
+        id="S1", horizon_start=date(2026, 10, 11), horizon_end=date(2027, 9, 12),
+        season_week_count=49,
+        plans=[Plan(id="p1", status=PlanStatus.ACTIVE, goal=goal,
+                    period_start=date(2026, 10, 11), period_end=date(2027, 9, 12))],
+    )
+    storage.save(season, expected_version=0)
+
+    loaded = storage.load()
+    assert len(loaded.plans) == 1
+    loaded_goal = loaded.plans[0].goal
+    assert isinstance(loaded_goal.race_date, date), "дата цели должна быть датой"
+    assert loaded_goal.race_date == date(2027, 4, 18)
+    assert loaded_goal.target_friendly == "10К за 40:00"
+
+
 def test_missing_athlete_gives_empty_profile(storage: FileStorage):
     """Нет профиля → пустой профиль, не ошибка."""
     loaded = storage.get_athlete()

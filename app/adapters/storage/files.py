@@ -546,13 +546,35 @@ def _plan_from_dict(data: dict[str, Any]) -> Plan:
     return Plan(
         id=data["id"],
         status=PlanStatus(data.get("status", "draft")),
-        goal=Goal(**data["goal"]),
+        goal=_goal_from_dict(data["goal"]),
         period_start=date.fromisoformat(data["period_start"]),
         period_end=date.fromisoformat(data["period_end"]),
         sport_lines=data.get("sport_lines", {}),
         load_budget=data.get("load_budget", {}),
         phase_ids=data.get("phase_ids", []),
         transition=data.get("transition", {}),
+    )
+
+
+def _goal_from_dict(data: dict[str, Any]) -> Goal:
+    """Цель из словаря.
+
+    Даты разбираются явно: `asdict` превращает date в строку, а без разбора
+    `race_date` остаётся строкой и ломает форматирование ответа.
+    """
+    race_date = data["race_date"]
+    return Goal(
+        id=data["id"],
+        discipline=data["discipline"],
+        race_date=(race_date if isinstance(race_date, date)
+                   else date.fromisoformat(race_date)),
+        metric_type=data["metric_type"],
+        metric_target=float(data["metric_target"]),
+        target_friendly=data.get("target_friendly", ""),
+        venue=data.get("venue"),
+        start_time=data.get("start_time"),
+        race_pace_min_per_km=data.get("race_pace_min_per_km"),
+        realistic_fork=data.get("realistic_fork", {}),
     )
 
 

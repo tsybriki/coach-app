@@ -14,7 +14,7 @@ import {
 
 const state = {
   screen: 'week',
-  seasonWeek: 1,
+  seasonWeek: Number(localStorage.getItem('coach-app-week')) || currentSeasonWeek(),
   version: 0,
   week: null,
   season: null,
@@ -28,6 +28,15 @@ const state = {
   message: null,
   base: localStorage.getItem('coach-app-base') || location.origin,
 };
+
+/* Номер недели сезона: считаем от начала сезона, ближайшая к сегодня. */
+function currentSeasonWeek() {
+  const start = new Date('2026-10-11T00:00:00');
+  const now = new Date();
+  const days = Math.floor((now - start) / 86400000);
+  if (days < 0) return 1;
+  return Math.min(49, Math.floor(days / 7) + 1);
+}
 
 /* ------------------------------------------------------------------ рендер */
 

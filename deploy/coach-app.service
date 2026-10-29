@@ -1,0 +1,14 @@
+[Unit]
+Description=Coach App BFF
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/home/tsybriki/projects/coach-app/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080
+WorkingDirectory=/home/tsybriki/projects/coach-app
+Environment=COACH_APP_DATA=/home/tsybriki/.local/share/coach-app
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
