@@ -58,6 +58,7 @@ def main() -> int:
 
     print("== проверки ==")
     for label, script in [("утечки знания о хранилище", "tools/check_storage_leaks.py"),
+                           ("покрытие инвариантов", "tools/check_invariant_coverage.py"),
                            ("счётчики спецификации", "tools/count_spec.py")]:
         print(f"-- {label}")
         if not run([script]):

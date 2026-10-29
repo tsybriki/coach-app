@@ -93,10 +93,14 @@ class Slot:
 
 @dataclass(frozen=True)
 class SlotOverride:
-    """Перекрытие слота. Patch хранит только отличие от уровня выше."""
+    """Перекрытие слота. Patch хранит только отличие от уровня выше.
+
+    `ops` — список операций, каждая со своим payload:
+    `{"op": "set_time", "start": "18:00", "end": "20:00"}`.
+    """
 
     slot_id: str
-    ops: tuple[str, ...]
+    ops: tuple[dict[str, Any], ...]
     reason: str
     scope: str  # season | phase | week
     scope_id: str | None = None
@@ -245,6 +249,44 @@ class Week:
     summary: WeekSummary | None = None
     version: int = 0
 
+    def copy_with(
+        self,
+        *,
+        status: WeekStatus | None = None,
+        focus: str | None = None,
+        load_target: dict[str, Any] | None = None,
+        requests: list[Request] | None = None,
+        assignments: list[Assignment] | None = None,
+        unplaced: list[Request] | None = None,
+        slot_overrides: list[SlotOverride] | None = None,
+        workouts: list[Workout] | None = None,
+        summary: WeekSummary | None = None,
+    ) -> Week:
+        """Копия недели с заменой указанных полей.
+
+        Неизменённые поля переносятся как есть. Списки копируются — иначе
+        мутация результата изменила бы исходную неделю.
+        """
+        return Week(
+            id=self.id,
+            plan_id=self.plan_id,
+            season_week=self.season_week,
+            start=self.start,
+            end=self.end,
+            status=status if status is not None else self.status,
+            focus=focus if focus is not None else self.focus,
+            load_target=dict(load_target) if load_target is not None else dict(self.load_target),
+            requests=list(requests) if requests is not None else list(self.requests),
+            assignments=list(assignments) if assignments is not None else list(self.assignments),
+            unplaced=list(unplaced) if unplaced is not None else list(self.unplaced),
+            slot_overrides=(
+                list(slot_overrides) if slot_overrides is not None else list(self.slot_overrides)
+            ),
+            workouts=list(workouts) if workouts is not None else list(self.workouts),
+            summary=summary if summary is not None else self.summary,
+            version=self.version,
+        )
+
     def validate(self) -> None:
         """Проверить инварианты недели.
 
@@ -259,8 +301,9 @@ class Week:
     def check_unplaced_has_reason(self) -> None:
         """I7: запрос без размещения попадает в unplaced с причиной."""
         placed = {a.request_id for a in self.assignments}
+        unplaced_ids = {r.id for r in self.unplaced}
         for req in self.requests:
-            if req.id not in placed and req not in self.unplaced:
+            if req.id not in placed and req.id not in unplaced_ids:
                 raise InvariantViolationError(
                     "I7", f"неделя {self.id}: запрос {req.id} без размещения не в unplaced"
                 )
