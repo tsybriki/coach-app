@@ -309,6 +309,24 @@ def build_slots(constraints: dict[str, Any]) -> list[Slot]:
     return slots
 
 
+def parse_hr_zones(raw: dict[str, Any]) -> dict[str, tuple[int, int]]:
+    """Границы зон пульса: "100-118" → (100, 118)."""
+    parsed: dict[str, tuple[int, int]] = {}
+    for name, value in raw.items():
+        if isinstance(value, (list, tuple)) and len(value) == 2:
+            parsed[name] = (int(value[0]), int(value[1]))
+            continue
+        text = str(value)
+        if "-" not in text:
+            continue
+        low, high = text.split("-", 1)
+        try:
+            parsed[name] = (int(low), int(high))
+        except ValueError:
+            continue
+    return parsed
+
+
 def build_athlete(athlete_data: dict[str, Any]) -> Athlete:
     """Профиль атлета — из athlete.json пайплайна."""
     zones = athlete_data.get("hr_zones") or {}
@@ -321,7 +339,7 @@ def build_athlete(athlete_data: dict[str, Any]) -> Athlete:
     ]
     return Athlete(
         vdot=float((athlete_data.get("current_form") or {}).get("vo2max", 0.0)),
-        hr_zones={k: v for k, v in zones.get("zones", {}).items()},
+        hr_zones=parse_hr_zones(zones.get("zones", {})),
         hr_max=hr_max,
         rhr=rhr,
         lth=lth,
@@ -547,6 +565,25 @@ def _step(item: dict[str, Any], repeat: dict[str, Any], sport: Sport,
     )
 
 
+def preserve_links(
+    storage: Any,
+    sessions: list[ActualSession],
+) -> list[ActualSession]:
+    """Связь с тренировкой — свойство пользователя, а не выкачки Garmin.
+
+    Импорт её не трогает: иначе повторный импорт стирал бы привязки.
+    """
+    linked = {
+        session.id: session.linked_workout_id
+        for session in storage.list_in_range(date.min, date.max)
+        if session.linked_workout_id
+    }
+    for session in sessions:
+        if session.id in linked:
+            session.linked_workout_id = linked[session.id]
+    return sessions
+
+
 def build_sessions(cache: dict[str, Any], start: date) -> list[ActualSession]:
     """Факт из активностей Garmin: только за сезон."""
     sessions: list[ActualSession] = []
@@ -656,6 +693,7 @@ def main() -> int:
     storage.put_week(week, expected_version=storage.version())
 
     sessions = build_sessions(load_json(STATE / "actual_load_cache.json"), start)
+    sessions = preserve_links(storage, sessions)
     for session in sessions:
         storage.upsert(session)
 

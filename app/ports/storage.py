@@ -17,6 +17,7 @@ from app.domain.entities import (
     PlanModel,
     Season,
     Week,
+    WorkoutDetail,
 )
 
 
@@ -68,6 +69,18 @@ class FactRepo(Protocol):
 
     def link(self, actual_id: str, workout_id: str | None) -> None:
         """Связать факт с тренировкой или разорвать связь (None)."""
+        ...
+
+
+class DetailRepo(Protocol):
+    """Подробный разбор выполненной тренировки."""
+
+    def detail(self, actual_id: str) -> WorkoutDetail | None:
+        """Разбор тренировки по id факта. Нет — None."""
+        ...
+
+    def save_detail(self, detail: WorkoutDetail) -> None:
+        """Сохранить разбор."""
         ...
 
 
@@ -194,6 +207,7 @@ class DuplicateExternalIdError(Exception):
 __all__ = [
     "ActivityPort",
     "AthleteRepo",
+    "DetailRepo",
     "StorageBusyError",
     "CalendarPort",
     "Clock",

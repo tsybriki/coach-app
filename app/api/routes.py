@@ -14,8 +14,16 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.adapters.fit import parse_fit
 from app.api.dependencies import AppContainer, build_container
-from app.domain.entities import ActualSession, Command, Week, WeekSummary
+from app.domain.derivations import week_progress
+from app.domain.entities import (
+    ActualSession,
+    Command,
+    Week,
+    WeekSummary,
+    WorkoutDetail,
+)
 from app.domain.enums import CommandType
 from app.ports.storage import (
     DuplicateExternalIdError,
@@ -145,7 +153,8 @@ def week(season_week: int, container: AppContainer = Depends(get_container)) -> 
     if found is None:
         return fail(container, "not_found", f"неделя W{season_week} не найдена",
                     status=404)
-    return ok(container, _week_dict(found))
+    sessions = container.fact_repo.list_for_week(season_week)
+    return ok(container, _week_dict(found, sessions))
 
 
 @router.get("/actual/{season_week}")
@@ -194,6 +203,17 @@ def current_week(container: AppContainer = Depends(get_container)) -> JSONRespon
         "start": week_start.isoformat(),
         "end": (week_start + timedelta(days=6)).isoformat(),
     })
+
+
+@router.get("/detail/{actual_id}")
+def detail(actual_id: str,
+           container: AppContainer = Depends(get_container)) -> JSONResponse:
+    """Подробный разбор выполненной тренировки: агрегаты, отрезки, ряды."""
+    found = container.detail_repo.detail(actual_id)
+    if found is None:
+        return fail(container, "not_found",
+                    f"разбор тренировки {actual_id} не загружен", status=404)
+    return ok(container, _detail_dict(found))
 
 
 @router.get("/athlete")
@@ -299,7 +319,34 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         unlink_actual,
     )
 
-    # Команды, не требующие недели: загрузка факта и текст
+    # Команды, не требующие недели: загрузка факта, разбор FIT и текст
+    if command.type is CommandType.IMPORT_FIT:
+        # Разбор FIT-файла активности: агрегаты, отрезки, ряды для графика.
+        actual_id = str(command.args.get("actual_id", ""))
+        fact = container.fact_repo.get(actual_id)
+        if fact is None:
+            raise ValueError(f"факт {actual_id} не найден")
+        if not fact.external_id:
+            raise ValueError(f"у факта {actual_id} нет id активности Garmin")
+        fit_path = container.fit_port.fit_path_for(fact.external_id)
+        if fit_path is None:
+            raise ExternalSourceError(
+                "garmin", f"нет FIT-файла для активности {fact.external_id}")
+        athlete = container.athlete_repo.get()
+        detail = parse_fit(
+            fit_path,
+            hr_max=athlete.hr_max or 182,
+            zones=athlete.hr_zones or None,
+        )
+        detail.actual_id = actual_id
+        container.detail_repo.save_detail(detail)
+        return {
+            "status": "applied",
+            "actual_id": actual_id,
+            "splits": len(detail.splits),
+            "new_version": container.season_repo.load().version,
+        }
+
     if command.type is CommandType.PULL_FACT:
         # Факт тянем за неделю, а не за сегодня: неделя — вс→сб, и
         # тренировка в понедельник ещё не «сегодняшняя».
@@ -414,8 +461,11 @@ def events(container: AppContainer = Depends(get_container)) -> StreamingRespons
 # ------------------------------------------------------------------ сериализация
 
 
-def _week_dict(week: Week) -> dict[str, Any]:
-    return {
+def _week_dict(
+    week: Week,
+    sessions: list[ActualSession] | None = None,
+) -> dict[str, Any]:
+    data: dict[str, Any] = {
         "id": week.id,
         "season_week": week.season_week,
         "start": week.start.isoformat(),
@@ -474,6 +524,10 @@ def _week_dict(week: Week) -> dict[str, Any]:
         ],
         "summary": _summary_dict(week.summary) if week.summary else None,
     }
+    # Факт недели против плана: «N из M». Считается по всем активностям
+    # недели — связанным и нет.
+    data["progress"] = week_progress(week, sessions or [])
+    return data
 
 
 def _summary_dict(summary: WeekSummary) -> dict[str, Any]:
@@ -507,10 +561,59 @@ def _session_dict(session: ActualSession) -> dict[str, Any]:
     }
 
 
+def _detail_dict(detail: WorkoutDetail) -> dict[str, Any]:
+    """Разбор тренировки в ответе API."""
+    return {
+        "actual_id": detail.actual_id,
+        "duration_s": detail.duration_s,
+        "elapsed_s": detail.elapsed_s,
+        "distance_m": detail.distance_m,
+        "ascent_m": detail.ascent_m,
+        "descent_m": detail.descent_m,
+        "avg_hr": detail.avg_hr,
+        "max_hr": detail.max_hr,
+        "avg_cadence": detail.avg_cadence,
+        "max_cadence": detail.max_cadence,
+        "avg_power_w": detail.avg_power_w,
+        "max_power_w": detail.max_power_w,
+        "normalized_power_w": detail.normalized_power_w,
+        "calories": detail.calories,
+        "hr_zone_minutes": {
+            zone: round(value, 1)
+            for zone, value in detail.hr_zone_minutes.items()
+        },
+        "cadence_source": detail.cadence_source,
+        "power_source": detail.power_source,
+        "splits": [
+            {
+                "index": s.index,
+                "duration_s": s.duration_s,
+                "distance_m": s.distance_m,
+                "avg_hr": s.avg_hr,
+                "max_hr": s.max_hr,
+                "avg_cadence": s.avg_cadence,
+                "avg_speed_mps": s.avg_speed_mps,
+                "ascent_m": s.ascent_m,
+            }
+            for s in detail.splits
+        ],
+        "series": {
+            "hr": [list(point) for point in detail.series_hr],
+            "cadence": [list(point) for point in detail.series_cadence],
+            "power": [list(point) for point in detail.series_power],
+            "distance": [list(point) for point in detail.series_distance],
+        },
+    }
+
+
 def _athlete_dict(container: AppContainer) -> dict[str, Any]:
     profile = container.athlete_repo.get()
     return {
         "vdot": profile.vdot,
+        "hr_zones": {
+            name: {"low": low, "high": high}
+            for name, (low, high) in profile.hr_zones.items()
+        },
         "hr_max": profile.hr_max,
         "rhr": profile.rhr,
         "lth": profile.lth,

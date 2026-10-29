@@ -32,6 +32,8 @@ addopts = "-q"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# tools/ — скрипты-одноразовки, не часть приложения
+extend-exclude = ["tools"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM"]

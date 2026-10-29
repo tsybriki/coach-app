@@ -394,3 +394,16 @@ def test_slot_equipment_validation(storage: FileStorage):
                           capacity_min=90, equipment_ids=("pool",))]
     with pytest.raises(Exception, match="I3"):
         season.validate()
+
+
+def test_link_sets_and_clears_backlink(storage: FileStorage) -> None:
+    """Связь ставится и снимается через link — единственный способ."""
+    storage.save(make_season(), expected_version=0)
+    session = make_session()
+    storage.upsert(session)
+
+    storage.link(session.id, "w-1")
+    assert storage.get(session.id).linked_workout_id == "w-1"
+
+    storage.link(session.id, None)
+    assert storage.get(session.id).linked_workout_id is None

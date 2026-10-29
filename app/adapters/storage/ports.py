@@ -21,6 +21,7 @@ from app.domain.entities import (
     PlanModel,
     Season,
     Week,
+    WorkoutDetail,
 )
 
 
@@ -81,6 +82,19 @@ class AthleteRepoAdapter:
         self._storage.update_athlete(athlete)
 
 
+class DetailRepoAdapter:
+    """Порт `DetailRepo`: подробный разбор выполненной тренировки."""
+
+    def __init__(self, storage: FileStorage) -> None:
+        self._storage = storage
+
+    def detail(self, actual_id: str) -> WorkoutDetail | None:
+        return self._storage.get_detail(actual_id)
+
+    def save_detail(self, detail: WorkoutDetail) -> None:
+        self._storage.put_detail(detail)
+
+
 class MethodologyRepoAdapter:
     """Порт `MethodologyRepo`: правила методики."""
 
@@ -113,6 +127,7 @@ class CommandLogAdapter:
 __all__ = [
     "AthleteRepoAdapter",
     "CommandLogAdapter",
+    "DetailRepoAdapter",
     "FactRepoAdapter",
     "MethodologyRepoAdapter",
     "SeasonRepoAdapter",

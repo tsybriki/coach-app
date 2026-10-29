@@ -27,6 +27,7 @@ from app.domain.derivations import (
     unplaced_without_fact_is_missed,
     week_contributions,
     week_load_min,
+    week_progress,
     workout_load_min,
 )
 from app.domain.entities import (
@@ -610,3 +611,104 @@ def test_planned_intensity_uses_zone_split():
     result = planned_intensity_min(week, load_model)
     assert result["moderate"] == 30
     assert result["vigorous"] == 20
+
+
+# ---------------------------------------------------------------- прогресс недели
+
+
+def _week_with_target() -> Week:
+    """Неделя с планом макро: 6.24 ч, 7 сессий, 35 км бега."""
+    return Week(
+        id="W3",
+        plan_id="p1",
+        season_week=3,
+        start=date(2026, 10, 25),
+        end=date(2026, 10, 31),
+        load_target={"hours": 6.24, "sessions": 7.0, "distance_m": 35000.0},
+    )
+
+
+def _session(
+    day: date,
+    sport: Sport = Sport.RUN,
+    minutes: int = 60,
+    distance_m: float = 10000.0,
+) -> ActualSession:
+    return ActualSession(
+        id=f"a-{day}-{sport.value}",
+        date=day,
+        sport=sport,
+        duration_min=minutes,
+        distance_m=distance_m,
+        source=FactSource.GARMIN,
+        external_id=f"ext-{day}-{sport.value}",
+    )
+
+
+def test_week_progress_counts_plan_and_actual() -> None:
+    """Факт недели против плана: «N из M» по всем трём величинам."""
+    week = _week_with_target()
+    sessions = [
+        _session(date(2026, 10, 27), Sport.RUN, 60, 10000.0),
+        _session(date(2026, 10, 28), Sport.RUN, 60, 10000.0),
+    ]
+
+    progress = week_progress(week, sessions)
+
+    assert progress["sessions"]["planned"] == 7
+    assert progress["sessions"]["actual"] == 2
+    assert progress["hours"]["actual"] == 2.0
+    assert progress["distance_m"]["actual"] == 20000.0
+
+
+def test_week_progress_distance_is_run_only() -> None:
+    """Километраж плана — бег: велосипед и плавание в него не идут."""
+    week = _week_with_target()
+    sessions = [
+        _session(date(2026, 10, 27), Sport.RUN, 60, 10000.0),
+        _session(date(2026, 10, 28), Sport.BIKE, 60, 20000.0),
+    ]
+
+    progress = week_progress(week, sessions)
+
+    assert progress["distance_m"]["actual"] == 10000.0
+    # велосипед считается в сессиях и часах
+    assert progress["sessions"]["actual"] == 2
+    assert progress["hours"]["actual"] == 2.0
+
+
+def test_week_progress_ignores_facts_outside_week() -> None:
+    """Факт за пределами недели в неё не идёт."""
+    week = _week_with_target()
+    sessions = [_session(date(2026, 10, 24), Sport.RUN, 60, 10000.0)]
+
+    progress = week_progress(week, sessions)
+
+    assert progress["sessions"]["actual"] == 0
+    assert progress["hours"]["actual"] == 0.0
+
+
+def test_week_progress_without_fact_is_zeros() -> None:
+    """Неделя без факта показывается с нулями, а не с ошибкой."""
+    week = _week_with_target()
+
+    progress = week_progress(week, [])
+
+    assert progress["sessions"]["actual"] == 0
+    assert progress["hours"]["actual"] == 0.0
+    assert progress["distance_m"]["actual"] == 0.0
+    # план остаётся — его показываем всегда
+    assert progress["sessions"]["planned"] == 7
+
+
+def test_week_progress_without_target_is_zeros() -> None:
+    """Без плана прогресса нет — но не ошибка."""
+    week = Week(
+        id="W1", plan_id="p1", season_week=1,
+        start=date(2026, 10, 11), end=date(2026, 10, 17),
+    )
+
+    progress = week_progress(week, [_session(date(2026, 10, 12))])
+
+    assert progress["hours"]["planned"] == 0.0
+    assert progress["sessions"]["actual"] == 1

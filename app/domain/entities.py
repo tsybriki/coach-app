@@ -44,7 +44,7 @@ class Athlete:
     """Нормативное состояние атлета. Форма — следствие прошлого, а не план."""
 
     vdot: float
-    hr_zones: dict[str, int]
+    hr_zones: dict[str, tuple[int, int]]
     hr_max: int
     rhr: int
     lth: int
@@ -327,6 +327,59 @@ class Week:
         for req in self.unplaced:
             if hasattr(req, "slot_id") or hasattr(req, "day"):
                 raise InvariantViolationError("I31", f"висяк {req.id} привязан к дню")
+
+
+# ---------------------------------------------------------------- детали тренировки
+
+
+@dataclass
+class Split:
+    """Отрезок тренировки — круг или автосплит."""
+    index: int
+    duration_s: float
+    distance_m: float
+    avg_hr: int | None = None
+    max_hr: int | None = None
+    avg_cadence: int | None = None
+    avg_speed_mps: float | None = None
+    ascent_m: float | None = None
+
+
+@dataclass
+class WorkoutDetail:
+    """Подробный разбор выполненной тренировки.
+
+    Производное от FIT-файла Garmin: агрегаты, отрезки и ряды для графика.
+    Хранится рядом с фактом, чтобы смотреть разбор без повторного разбора FIT.
+    """
+    actual_id: str
+    source: FactSource = FactSource.GARMIN
+    # агрегаты
+    duration_s: float = 0.0
+    elapsed_s: float = 0.0
+    distance_m: float = 0.0
+    ascent_m: float = 0.0
+    descent_m: float = 0.0
+    avg_hr: int | None = None
+    max_hr: int | None = None
+    avg_cadence: int | None = None
+    max_cadence: int | None = None
+    avg_power_w: int | None = None
+    max_power_w: int | None = None
+    normalized_power_w: int | None = None
+    calories: int | None = None
+    # зоны пульса атлета, минуты
+    hr_zone_minutes: dict[str, float] = field(default_factory=dict)
+    # отрезки
+    splits: list[Split] = field(default_factory=list)
+    # ряды для графика: [секунда, пульс, каденция, мощность]
+    series_hr: list[tuple[int, int]] = field(default_factory=list)
+    series_cadence: list[tuple[int, int]] = field(default_factory=list)
+    series_power: list[tuple[int, int]] = field(default_factory=list)
+    series_distance: list[tuple[int, float]] = field(default_factory=list)
+    # откуда данные
+    cadence_source: str | None = None
+    power_source: str | None = None
 
 
 # ---------------------------------------------------------------- факт

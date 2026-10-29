@@ -12,6 +12,7 @@ import {
   getCache, putCache, enqueue, pendingCommands, removeCommand, markAttempt,
 } from './store.js';
 import { linkCandidates } from './link.js';
+import { axisLabels, polyline, timeLabels, toPoints, zoneBands } from './chart.js';
 
 const state = {
   screen: 'week',
@@ -21,6 +22,7 @@ const state = {
   season: null,
   athlete: null,
   actual: [],
+  detail: null,
   weeks: [],
   summary: null,
   stale: false,
@@ -218,10 +220,56 @@ function screenWeek() {
         <div class="metric"><div class="v">${target.sessions || 0}</div><div class="l">сессий</div></div>
         <div class="metric"><div class="v">${(target.distance_m / 1000).toFixed(0)}</div><div class="l">км</div></div>
       </div>
+      ${progressBlock(week.progress)}
     </div>
     ${unplaced}
     <h2 class="slots-header">Тренировки · ${(week.workouts || []).length} шт</h2>
     <div class="slots-list">${slots || '<p>Тренировок нет.</p>'}</div>`;
+}
+
+/* Факт недели против плана: «N из M».
+ *
+ * Показывается по всем трём величинам: часы, сессии, километраж бега.
+ * План сверху, факт снизу — так виден разрыв.
+ */
+function progressBlock(progress) {
+  if (!progress) return '';
+  const rows = [];
+
+  const hours = progress.hours || {};
+  if (hours.planned) {
+    rows.push(progressRow('ч', formatHours(hours.actual * 60),
+      formatHours(hours.planned * 60), hours.actual / hours.planned));
+  }
+
+  const sessions = progress.sessions || {};
+  if (sessions.planned) {
+    rows.push(progressRow('сессий', String(sessions.actual), String(sessions.planned),
+      sessions.actual / sessions.planned));
+  }
+
+  const distance = progress.distance_m || {};
+  if (distance.planned) {
+    rows.push(progressRow('км', (distance.actual / 1000).toFixed(1),
+      (distance.planned / 1000).toFixed(0),
+      distance.actual / distance.planned));
+  }
+
+  if (!rows.length) return '';
+  return `<div class="progress">${rows.join('')}</div>`;
+}
+
+/* Одна строка прогресса: факт, план и доля выполнения. */
+function progressRow(label, actual, planned, share) {
+  const pct = Math.round(Math.min(share, 1.5) * 100);
+  const over = share > 1.02;
+  const width = Math.min(100, pct);
+  return `<div class="prog-row">
+      <span class="prog-label">${escapeHtml(label)}</span>
+      <span class="prog-value ${over ? 'over' : ''}">${escapeHtml(actual)}</span>
+      <span class="prog-plan">из ${escapeHtml(planned)}</span>
+      <span class="prog-bar"><i style="width:${width}%"${over ? ' class="over"' : ''}></i></span>
+    </div>`;
 }
 
 /* Список факта недели — для выбора: что связать с этой тренировкой. */
@@ -337,6 +385,185 @@ function empty(text) {
 }
 
 
+
+/* ------------------------------------------------------------------ разбор */
+
+/* Цвета зон пульса — по порядку, от Z1 к Z7. */
+const ZONE_COLORS = [
+  'rgba(92,214,192,.10)',
+  'rgba(92,214,192,.16)',
+  'rgba(240,198,116,.14)',
+  'rgba(255,155,106,.14)',
+  'rgba(216,160,255,.16)',
+  'rgba(216,160,255,.22)',
+  'rgba(255,107,90,.22)',
+];
+
+/* Зоны пульса атлета из профиля. */
+function hrZones() {
+  const zones = state.athlete && state.athlete.hr_zones;
+  if (!zones) return [];
+  return Object.entries(zones).map(([name, bounds], index) => ({
+    name,
+    low: bounds.low,
+    high: bounds.high,
+    color: ZONE_COLORS[index % ZONE_COLORS.length],
+  }));
+}
+
+/* Блок разбора тренировки: цифры, зоны, отрезки, графики. */
+function detailBlock(linkedActual) {
+  if (!linkedActual) return '';
+  const detail = state.detail;
+  if (!detail || detail.actual_id !== linkedActual.id) {
+    return `<div class="card"><p class="lead">Разбор не загружен</p>
+      <button class="action secondary" data-detail="${escapeHtml(linkedActual.id)}">Загрузить разбор</button></div>`;
+  }
+  return detailContent(detail);
+}
+
+/* Содержимое разбора. */
+function detailContent(detail) {
+  const distance = (detail.distance_m || 0) / 1000;
+  const moving = formatDuration((detail.duration_s || 0) / 60);
+
+  const stats = `<div class="card">
+      <div class="chead">Итоги</div>
+      <div class="metrics">
+        <div class="metric"><div class="v">${distance.toFixed(1)}</div><div class="l">км</div></div>
+        <div class="metric"><div class="v">${moving}</div><div class="l">время</div></div>
+        <div class="metric"><div class="v">${detail.avg_hr ?? '—'}</div><div class="l">HR средний</div></div>
+        <div class="metric"><div class="v">${detail.max_hr ?? '—'}</div><div class="l">HR макс</div></div>
+        <div class="metric"><div class="v">${detail.avg_cadence ?? '—'}</div><div class="l">кад. ср</div></div>
+        <div class="metric"><div class="v">${detail.max_cadence ?? '—'}</div><div class="l">кад. макс</div></div>
+        <div class="metric"><div class="v">${Math.round(detail.ascent_m || 0)}</div><div class="l">м набор</div></div>
+        <div class="metric"><div class="v">${detail.calories ?? '—'}</div><div class="l">ккал</div></div>
+      </div>
+      ${detail.cadence_source ? `<div class="sub">Каденция: ${detail.cadence_source === 'stryd' ? 'нагрудный ремень (Stryd)' : 'часы'}</div>` : ''}
+    </div>`;
+
+  return stats + zoneContent(detail) + chartContent(detail) + splitsContent(detail);
+}
+
+/* Время в зонах пульса атлета. */
+function zoneContent(detail) {
+  const minutes = detail.hr_zone_minutes || {};
+  const total = Object.values(minutes).reduce((sum, value) => sum + value, 0);
+  if (!total) return '';
+
+  const rows = Object.entries(minutes).map(([zone, value]) => {
+    const share = (value / total) * 100;
+    return `<div class="zone-row">
+        <span class="zone-name">${escapeHtml(zone)}</span>
+        <span class="zone-bar"><i style="width:${share.toFixed(1)}%"></i></span>
+        <span class="zone-value">${value.toFixed(0)} мин · ${share.toFixed(0)}%</span>
+      </div>`;
+  }).join('');
+
+  return `<div class="card">
+      <h3>Время в зонах пульса</h3>
+      <div class="zones">${rows}</div>
+    </div>`;
+}
+
+/* Графики: пульс, каденция, мощность. */
+function chartContent(detail) {
+  const series = detail.series || {};
+  const blocks = [];
+  if (series.hr && series.hr.length > 1) {
+    blocks.push(chartCard('Пульс', series.hr, 'bpm', '#7aa2ff', true));
+  }
+  if (series.cadence && series.cadence.length > 1) {
+    blocks.push(chartCard('Каденция', series.cadence, 'spm', '#5cd6c0', false));
+  }
+  if (series.power && series.power.length > 1) {
+    blocks.push(chartCard('Мощность', series.power, 'Вт', '#ff9b6a', false));
+  }
+  return blocks.join('');
+}
+
+/* Один график: SVG с линией, подписями осей и зонами пульса. */
+function chartCard(title, series, unit, color, withZones) {
+  const plotWidth = 300;
+  const height = 110;
+  const gutter = 26;          // слева — подписи значений
+  const bottom = 14;          // снизу — подписи времени
+  const values = series.map((point) => point[1]);
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+
+  const points = toPoints(series, plotWidth, height, minValue, maxValue);
+  const bands = withZones
+    ? zoneBands(hrZones(), values, plotWidth, height, minValue, maxValue)
+    : [];
+  const yLabels = axisLabels(minValue, maxValue, 4);
+  const xLabels = timeLabels(series, 4);
+
+  const bandHtml = bands.map((band) =>
+    `<rect x="${gutter}" y="${band.y.toFixed(1)}" width="${plotWidth}" height="${band.height.toFixed(1)}" fill="${band.color}"/>`).join('');
+
+  const yHtml = yLabels.map((label, index) => {
+    const y = (index / Math.max(1, yLabels.length - 1)) * height;
+    return `<line x1="${gutter}" y1="${y.toFixed(1)}" x2="${gutter + plotWidth}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,.05)"/>
+      <text x="${gutter - 4}" y="${(y + 3).toFixed(1)}" class="c-label c-right">${label}</text>`;
+  }).join('');
+
+  const xHtml = xLabels.map((label) => {
+    const x = gutter + (label.x / 100) * plotWidth;
+    const anchor = label.x <= 0 ? 'start' : label.x >= 100 ? 'end' : 'middle';
+    return `<text x="${x.toFixed(1)}" y="${height + bottom - 2}" class="c-label c-mid" text-anchor="${anchor}">${label.text}</text>`;
+  }).join('');
+
+  return `<div class="card">
+      <h3>${escapeHtml(title)} <span class="c-unit">${escapeHtml(unit)}</span></h3>
+      <svg class="chart" viewBox="0 0 ${gutter + plotWidth} ${height + bottom}">
+        ${bandHtml}
+        ${yHtml}
+        <polyline points="${polyline(points)}" fill="none" stroke="${color}" stroke-width="1.6"
+          stroke-linejoin="round" stroke-linecap="round"
+          transform="translate(${gutter} 0)"/>
+        ${xHtml}
+      </svg>
+      <div class="c-foot">мин</div>
+    </div>`;
+}
+
+/* Отрезки тренировки. */
+function splitsContent(detail) {
+  const splits = detail.splits || [];
+  if (!splits.length) return '';
+
+  const rows = splits.map((split) => {
+    const speed = split.avg_speed_mps ? `${formatPace(split.avg_speed_mps)}/км` : '—';
+    return `<li>
+        <div class="row">
+          <span>${split.index}</span>
+          <span class="num">${((split.distance_m || 0) / 1000).toFixed(2)} км · ${speed}</span>
+        </div>
+        <div class="sub">
+          ${formatDuration(split.duration_s / 60)}
+          ${split.avg_hr ? ` · HR ${split.avg_hr}` : ''}
+          ${split.avg_cadence ? ` · ${split.avg_cadence} spm` : ''}
+          ${split.ascent_m ? ` · +${Math.round(split.ascent_m)} м` : ''}
+        </div>
+      </li>`;
+  }).join('');
+
+  return `<div class="card">
+      <h3>Отрезки · ${splits.length}</h3>
+      <ul class="plain">${rows}</ul>
+    </div>`;
+}
+
+/* Темп из скорости: м/с → мин/км. */
+function formatPace(mps) {
+  if (!mps) return '—';
+  const secPerKm = 1000 / mps;
+  const minutes = Math.floor(secPerKm / 60);
+  const seconds = Math.round(secPerKm % 60);
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
 /* ------------------------------------------------------------------ детали */
 
 /* Детали тренировки — по эталонному plan-wN.html.
@@ -398,6 +625,7 @@ function showWorkout(workoutId) {
           ${linkedActual.hr_avg ? ` · HR ${linkedActual.hr_avg}` : ''}
         </div>
         <div class="when">${linkedActual.date} · ${escapeHtml(SPORT_NAME[linkedActual.sport] || linkedActual.sport)}</div>
+        <button class="action secondary" data-detail="${escapeHtml(linkedActual.id)}">Разбор тренировки</button>
         <button class="action secondary" data-unlink="${escapeHtml(workout.id)}">Отвязать</button>
       </div>`
     : `<div class="actual-block empty">
@@ -422,7 +650,8 @@ function showWorkout(workoutId) {
       <h3>Структура тренировки</h3>
       ${structureHtml(workout)}
       ${actualBlock}
-    </div>`;
+    </div>
+    <div id="detail-block">${detailBlock(linkedActual)}</div>`;
 
   state.openWorkoutId = workoutId;
   cardWrap.classList.remove('hidden');
@@ -744,6 +973,13 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
+  // Разбор тренировки: загрузить детали или разобрать FIT
+  const detail = target.closest ? target.closest('[data-detail]') : null;
+  if (detail) {
+    await loadDetail(detail.dataset.detail);
+    return;
+  }
+
   if (target.id === 'pull') {
     state.message = 'Загружаю факт из Garmin…';
     render();
@@ -785,6 +1021,49 @@ window.addEventListener('popstate', (event) => {
     showPicker();
   }
 });
+
+/* Разбор тренировки: сначала пробуем готовый, иначе разбираем FIT. */
+async function loadDetail(actualId) {
+  state.message = 'Загружаю разбор…';
+  render();
+  try {
+    const detail = await api.getDetail(actualId);
+    state.detail = detail.data;
+    state.message = null;
+    render();
+    if (state.openWorkoutId) showWorkout(state.openWorkoutId);
+    return;
+  } catch (error) {
+    if (error.code !== 'not_found') {
+      state.message = error.message;
+      render();
+      return;
+    }
+  }
+
+  // Разбора нет — разбираем FIT через Garmin
+  state.message = 'Разбираю FIT-файл…';
+  render();
+  await queueCommand({
+    id: `fit-${actualId}-${Date.now()}`,
+    type: 'import_fit',
+    args: { actual_id: actualId },
+    reason: 'разбор тренировки из Garmin',
+    expected_version: state.version,
+  });
+  await flushOutbox();
+  await load();
+  state.message = null;
+  render();
+  try {
+    const detail = await api.getDetail(actualId);
+    state.detail = detail.data;
+  } catch (error) {
+    state.message = 'Разбор не удался';
+  }
+  render();
+  if (state.openWorkoutId) showWorkout(state.openWorkoutId);
+}
 
 /* Связать факт с тренировкой. */
 async function linkActual(actualId, workoutId) {

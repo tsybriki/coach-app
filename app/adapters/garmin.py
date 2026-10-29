@@ -49,6 +49,35 @@ SPORT_BY_TYPE = {
 }
 
 
+class GarminFitPort:
+    """Разбор FIT-файла активности Garmin.
+
+    Файл лежит там, куда его положила выкачка: путь известен из `fit_path`
+    в индексе активностей. Если файла нет — детали не разобрать, и это
+    понятная ошибка, а не пустой разбор.
+    """
+
+    def fit_path_for(self, external_id: str) -> Path | None:
+        """Путь к FIT-файлу активности по её id."""
+        root = Path(os.environ.get(
+            "COACH_APP_GARMIN_TMP", "/tmp/coach_app_garmin"))
+        for index in root.glob("*/index.json"):
+            try:
+                activities = json.loads(index.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            for activity in activities:
+                if str(activity.get("activity_id")) == str(external_id):
+                    fit_path = activity.get("fit_path")
+                    if fit_path and Path(fit_path).exists():
+                        return Path(fit_path)
+                    # путь мог измениться — ищем по имени
+                    candidate = index.parent / "fit" / f"{external_id}.fit"
+                    if candidate.exists():
+                        return candidate
+        return None
+
+
 class GarminActivityPort:
     """Факт из Garmin Connect.
 
@@ -123,4 +152,4 @@ class GarminActivityPort:
         )
 
 
-__all__ = ["GarminActivityPort", "SPORT_BY_TYPE"]
+__all__ = ["GarminActivityPort", "GarminFitPort", "SPORT_BY_TYPE"]

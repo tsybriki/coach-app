@@ -224,6 +224,43 @@ def actual_week_totals(sessions: list[ActualSession]) -> dict[str, float]:
     }
 
 
+
+def week_progress(week: Week, sessions: list[ActualSession]) -> dict[str, Any]:
+    """Факт недели против плана: «N из M».
+
+    План — из `load_target` макро-недели (часы, сессии, километраж бега).
+    Факт — из сессий недели. Считается по всем активностям недели, а не по
+    связанным: выполненная тренировка вкладывается в объём независимо от
+    того, связал её пользователь или нет.
+
+    `distance_m` плана — это бег (макро считает `run_km`). Факт бега —
+    сумма сессий со спортом `run`. Километраж велосипеда и плавания в беговый
+    объём не идёт.
+    """
+    target = week.load_target or {}
+    planned_hours = float(target.get("hours") or 0.0)
+    planned_sessions = int(target.get("sessions") or 0)
+    planned_distance_m = float(target.get("distance_m") or 0.0)
+
+    in_week = facts_in_week_range(week, sessions)
+    actual_minutes = sum(s.duration_min for s in in_week)
+    actual_distance_m = sum(s.distance_m for s in in_week if s.sport is Sport.RUN)
+
+    return {
+        "hours": {
+            "planned": planned_hours,
+            "actual": actual_minutes / 60.0,
+        },
+        "sessions": {
+            "planned": planned_sessions,
+            "actual": len(in_week),
+        },
+        "distance_m": {
+            "planned": planned_distance_m,
+            "actual": actual_distance_m,
+        },
+    }
+
 def race_week_of(plan_id: str, goal_race_date: date, plan_period: tuple[date, date]) -> int | None:
     """I33: неделя гонки принадлежит плану.
 

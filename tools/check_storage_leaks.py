@@ -31,13 +31,21 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 STORAGE_TOKENS = [
     r"\bsqlite3?\b", r"\bSQL\b", r"\bSELECT\b.*\bFROM\b", r"\bINSERT\b",
     r"\bCREATE TABLE\b",
-    r"\bjson\.dump\b", r"\bjson\.load\b", r"\bread_text\b", r"\bwrite_text\b",
+    r"\bjson\.dump\b", r"\bjson\.load\b", r"\bjson\.loads\b",
+    r"\bread_text\b", r"\bwrite_text\b",
     r"\bos\.replace\b", r"\bflock\b", r"\bos\.path\b",
     r"\bstate\.json\b", r"\bseason\.json\b", r"\bweeks/W", r"\bactual/W",
 ]
 
 # Маркеры, которые говорят о корне проекта или клиенте — не о хранилище.
 NOT_STORAGE = [r"CLIENT_DIR", r"client_path", r"\bclient/", r"\.venv", r"__file__"]
+
+# JSON в ответе API — не формат хранения. Хранилище — это файлы с
+# состоянием, а не сериализация ответа.
+JSON_RESPONSE = [
+    r"json\.loads\(bytes\(", r"json\.loads\(response", r"json\.dumps\(",
+    r"JSONResponse", r"\.json\(\)\b",
+]
 
 # Мягкие: слова, которые сами по себе не утечка, но в сочетании с путём — да.
 # Проверяются отдельно, только если в строке есть путь к данным.
@@ -49,11 +57,13 @@ SOFT_TOKENS = [r"\bopen\(", r"\bPath\(", r"\.json\b", r"\bdata/", r"\btmp\b"]
 # зависимости связываются, поэтому путь к данным здесь законен. Исключение
 # узкое — один файл, а не каталог.
 # `adapters/storage` — реализация портов: формат хранилища знает только она.
-# `adapters/garmin` — внешний источник: формат ответа Garmin знает он.
-# Ни то, ни другое — не хранилище приложения.
+# `adapters/garmin`, `adapters/fit` — внешние источники: формат ответа
+# Garmin и путь к FIT-файлу знают они. Ни то, ни другое — не хранилище
+# приложения.
 ALLOWED_CODE_DIRS = ("adapters/storage", "adapters/migrations",
                      "tools", "tests", "migrations")
-ALLOWED_CODE_FILES = ("app/api/dependencies.py", "app/adapters/garmin.py")
+ALLOWED_CODE_FILES = ("app/api/dependencies.py", "app/adapters/garmin.py",
+                      "app/adapters/fit.py")
 
 # --- места в дизайне, где знание о формате — по делу ---
 # (имя файла, регулярка, обязательное пояснение рядом)
@@ -134,6 +144,8 @@ def scan_code(repo: str) -> list[str]:
                 if i in seen:
                     continue
                 if any(re.search(p, line) for p in NOT_STORAGE):
+                    continue
+                if any(re.search(p, line) for p in JSON_RESPONSE):
                     continue
                 hit = None
                 for pat in STORAGE_TOKENS:

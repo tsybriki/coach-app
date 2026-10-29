@@ -96,7 +96,7 @@
 </head><body>
 <header>
 <h1>Модель домена — спецификация</h1>
-<div class="meta">Coach App · v3.7 · 18 сущностей · 44 инвариантов (44 подтверждено) · 6 вопросов</div>
+<div class="meta">Coach App · v3.7 · 20 сущностей · 44 инвариантов (44 подтверждено) · 6 вопросов</div>
 <div class="meta">состав: диаграмма · сущности · связи · вопросы</div>
 </header>
 <nav>
@@ -299,6 +299,43 @@
 <li><code>source{garmin,manual}</code> · <code>external_id</code> — id активности Garmin, уникален</li>
 <li><code>fetched_at</code> — когда вытянуто из источника</li>
 <li><code>linked_workout_id</code> — обратная ссылка, ставится вручную; null = факт без плана, но он всё равно в actuals</li>
+</ul></div>
+<div class="tw"><table>
+<tr><th>поле</th><th>тип</th><th>смысл</th></tr>
+<tr><td><code>actual_id</code></td><td>str</td><td>факт, к которому относится разбор</td></tr>
+<tr><td><code>source</code></td><td>FactSource</td><td>GARMIN</td></tr>
+<tr><td><code>duration_s</code> / <code>elapsed_s</code></td><td>float</td><td>время в движении / общее</td></tr>
+<tr><td><code>distance_m</code></td><td>float</td><td>дистанция</td></tr>
+<tr><td><code>ascent_m</code> / <code>descent_m</code></td><td>float</td><td>набор и сброс высоты</td></tr>
+<tr><td><code>avg_hr</code> / <code>max_hr</code></td><td>int?</td><td>пульс средний и максимальный</td></tr>
+<tr><td><code>avg_cadence</code> / <code>max_cadence</code></td><td>int?</td><td>каденция средняя и максимальная</td></tr>
+<tr><td><code>avg_power_w</code> / <code>max_power_w</code> / <code>normalized_power_w</code></td><td>int?</td><td>мощность</td></tr>
+<tr><td><code>calories</code></td><td>int?</td><td>калории</td></tr>
+<tr><td><code>hr_zone_minutes</code></td><td>dict[str, float]</td><td>минуты в зонах пульса атлета</td></tr>
+<tr><td><code>cadence_source</code></td><td>str?</td><td><code>stryd</code> (ремень) или <code>watch</code> (часы)</td></tr>
+<tr><td><code>power_source</code></td><td>str?</td><td><code>stryd</code> или <code>garmin</code></td></tr>
+<tr><td><code>splits</code></td><td>list[Split]</td><td>отрезки (лапсы Garmin)</td></tr>
+<tr><td><code>series_hr</code> / <code>series_cadence</code> / <code>series_power</code> / <code>series_distance</code></td><td>list[tuple[int, float]]</td><td>ряды для графика: (секунда, значение)</td></tr>
+</table></div>
+<div class="ent">
+<div class="eh"><span>WorkoutDetail</span><span class="k">value</span></div>
+<div class="role">Разбор выполненной тренировки: агрегаты, отрезки, зоны пульса и ряды для графика. Источник — FIT-файл Garmin, парсится адаптером. Факт ссылается на разбор, а не наоборот: разбор — производная от факта.</div>
+<ul class="pl">
+</ul></div>
+<div class="tw"><table>
+<tr><th>поле</th><th>тип</th><th>смысл</th></tr>
+<tr><td><code>index</code></td><td>int</td><td>номер отрезка</td></tr>
+<tr><td><code>duration_s</code></td><td>float</td><td>длительность</td></tr>
+<tr><td><code>distance_m</code></td><td>float</td><td>дистанция</td></tr>
+<tr><td><code>avg_hr</code> / <code>max_hr</code></td><td>int?</td><td>пульс</td></tr>
+<tr><td><code>avg_cadence</code></td><td>int?</td><td>каденция</td></tr>
+<tr><td><code>avg_speed_mps</code></td><td>float?</td><td>средняя скорость</td></tr>
+<tr><td><code>ascent_m</code></td><td>float?</td><td>набор высоты</td></tr>
+</table></div>
+<div class="ent">
+<div class="eh"><span>Split</span><span class="k">value</span></div>
+<div class="role">Отрезок тренировки: лапс Garmin.</div>
+<ul class="pl">
 </ul></div>
 <div class="ent">
 <div class="eh"><span>Command</span><span class="k">command</span></div>
@@ -526,6 +563,7 @@
 <tr><td>Длительность / дистанция тренировки</td><td>Σ по шагам</td></tr>
 <tr><td>Норма недели</td><td>Phase недели</td></tr>
 <tr><td>Итог недели (WeekSummary)</td><td>план (requests + load_target) против факта (ActualSession)</td></tr>
+<tr><td>Прогресс недели («N из M»)</td><td><code>week.load_target</code> против факта недели: часы, сессии, километраж <b>бега</b> (<code>Sport.RUN</code>); считается по всем активностям недели, связанным и нет</td></tr>
 <tr><td>Verdict по сессии</td><td>по факту связанной <code>ActualSession</code>: полное совпадение, частичное, замена</td></tr>
 <tr><td>Отклонение недели</td><td>факт − план по каждой метрике, с причиной</td></tr>
 <tr><td>Verdict факта без плана</td><td><code>extra</code> — попадает в нагрузку недели, но не в выполнение плана</td></tr>
@@ -611,7 +649,7 @@
 <li>Где и как храним? Формат и объём: JSON-файлы или БД; правило атомарной записи и миграции схемы.</li>
 </ol>
 <p>---</p>
-<p>Coach App · модель домена v3.6</p>
+<p>Coach App · модель домена v3.7</p>
 </section>
 <hr>
 <p class="end">Coach App · модель домена</p>

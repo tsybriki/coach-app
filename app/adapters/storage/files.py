@@ -35,10 +35,12 @@ from app.domain.entities import (
     Request,
     Season,
     Slot,
+    Split,
     Step,
     Week,
     WeekSummary,
     Workout,
+    WorkoutDetail,
 )
 from app.domain.enums import (
     CommandStatus,
@@ -271,6 +273,22 @@ class FileStorage:
         self._write_json(path, {"sessions": items})
 
     # ---------------------------------------------------------- низкий уровень: профиль
+
+    # ---------------------------------------------------------- низкий уровень: детали
+
+    def get_detail(self, actual_id: str) -> WorkoutDetail | None:
+        """Разбор тренировки по id факта. Нет — None."""
+        path = self.root / "details" / f"{actual_id}.json"
+        if not path.exists():
+            return None
+        return _detail_from_dict(self._read_json(path))
+
+    def put_detail(self, detail: WorkoutDetail) -> None:
+        """Сохранить разбор тренировки."""
+        self._write_json(
+            self.root / "details" / f"{detail.actual_id}.json",
+            _detail_to_dict(detail),
+        )
 
     def get_athlete(self) -> Athlete:
         data = self._read_json(self.root / "athlete.json")
@@ -546,6 +564,78 @@ def _workout_from_dict(data: dict[str, Any]) -> Workout:
         priority=int(data.get("priority", 0)),
         status=WorkoutStatus(data.get("status", "planned")),
         rationale=data.get("rationale"), actual_id=data.get("actual_id"),
+    )
+
+
+def _detail_to_dict(detail: WorkoutDetail) -> dict[str, Any]:
+    return {
+        "actual_id": detail.actual_id,
+        "source": detail.source.value,
+        "duration_s": detail.duration_s,
+        "elapsed_s": detail.elapsed_s,
+        "distance_m": detail.distance_m,
+        "ascent_m": detail.ascent_m,
+        "descent_m": detail.descent_m,
+        "avg_hr": detail.avg_hr,
+        "max_hr": detail.max_hr,
+        "avg_cadence": detail.avg_cadence,
+        "max_cadence": detail.max_cadence,
+        "avg_power_w": detail.avg_power_w,
+        "max_power_w": detail.max_power_w,
+        "normalized_power_w": detail.normalized_power_w,
+        "calories": detail.calories,
+        "hr_zone_minutes": detail.hr_zone_minutes,
+        "splits": [
+            {
+                "index": s.index, "duration_s": s.duration_s, "distance_m": s.distance_m,
+                "avg_hr": s.avg_hr, "max_hr": s.max_hr,
+                "avg_cadence": s.avg_cadence, "avg_speed_mps": s.avg_speed_mps,
+                "ascent_m": s.ascent_m,
+            }
+            for s in detail.splits
+        ],
+        "series_hr": [list(point) for point in detail.series_hr],
+        "series_cadence": [list(point) for point in detail.series_cadence],
+        "series_power": [list(point) for point in detail.series_power],
+        "series_distance": [list(point) for point in detail.series_distance],
+        "cadence_source": detail.cadence_source,
+        "power_source": detail.power_source,
+    }
+
+
+def _detail_from_dict(data: dict[str, Any]) -> WorkoutDetail:
+    return WorkoutDetail(
+        actual_id=data["actual_id"],
+        source=FactSource(data.get("source", "garmin")),
+        duration_s=float(data.get("duration_s", 0.0)),
+        elapsed_s=float(data.get("elapsed_s", 0.0)),
+        distance_m=float(data.get("distance_m", 0.0)),
+        ascent_m=float(data.get("ascent_m", 0.0)),
+        descent_m=float(data.get("descent_m", 0.0)),
+        avg_hr=data.get("avg_hr"),
+        max_hr=data.get("max_hr"),
+        avg_cadence=data.get("avg_cadence"),
+        max_cadence=data.get("max_cadence"),
+        avg_power_w=data.get("avg_power_w"),
+        max_power_w=data.get("max_power_w"),
+        normalized_power_w=data.get("normalized_power_w"),
+        calories=data.get("calories"),
+        hr_zone_minutes=data.get("hr_zone_minutes", {}),
+        splits=[
+            Split(
+                index=int(s["index"]), duration_s=float(s["duration_s"]),
+                distance_m=float(s["distance_m"]), avg_hr=s.get("avg_hr"),
+                max_hr=s.get("max_hr"), avg_cadence=s.get("avg_cadence"),
+                avg_speed_mps=s.get("avg_speed_mps"), ascent_m=s.get("ascent_m"),
+            )
+            for s in data.get("splits", [])
+        ],
+        series_hr=[(int(a), int(b)) for a, b in data.get("series_hr", [])],
+        series_cadence=[(int(a), int(b)) for a, b in data.get("series_cadence", [])],
+        series_power=[(int(a), int(b)) for a, b in data.get("series_power", [])],
+        series_distance=[(int(a), float(b)) for a, b in data.get("series_distance", [])],
+        cadence_source=data.get("cadence_source"),
+        power_source=data.get("power_source"),
     )
 
 

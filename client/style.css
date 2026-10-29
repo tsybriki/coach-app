@@ -1140,3 +1140,157 @@ p.lead {
 .detail h3:not(:first-child) {
   margin-top: 18px;
 }
+
+
+/* ------------------------------------------------------------------ разбор */
+
+.c-unit {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+.chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-top: 8px;
+  overflow: visible;
+}
+
+.chart .c-label {
+  fill: var(--muted);
+  font-size: 8px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.chart .c-right {
+  text-anchor: end;
+}
+
+.chart .c-mid {
+  text-anchor: middle;
+}
+
+.c-foot {
+  font-size: 9px;
+  color: var(--muted);
+  text-align: right;
+  margin-top: -2px;
+}
+
+/* Время в зонах пульса */
+.zones {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.zone-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zone-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  min-width: 22px;
+}
+
+.zone-bar {
+  flex: 1;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--panel2);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.zone-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent2);
+  border-radius: 4px;
+}
+
+.zone-value {
+  font-size: 10.5px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  min-width: 92px;
+  text-align: right;
+}
+
+
+/* ------------------------------------------------- факт против плана: «N из M» */
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.prog-row {
+  display: grid;
+  grid-template-columns: 52px auto 1fr;
+  grid-template-areas:
+    "label value plan"
+    "bar   bar   bar";
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 3px;
+}
+
+.prog-label {
+  grid-area: label;
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+
+.prog-value {
+  grid-area: value;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent2);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.prog-value.over {
+  color: var(--good);
+}
+
+.prog-plan {
+  grid-area: plan;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.prog-bar {
+  grid-area: bar;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--panel2);
+  overflow: hidden;
+}
+
+.prog-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.prog-bar i.over {
+  background: var(--good);
+}

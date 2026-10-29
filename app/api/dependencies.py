@@ -10,11 +10,12 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from app.adapters.garmin import GarminActivityPort
+from app.adapters.garmin import GarminActivityPort, GarminFitPort
 from app.adapters.storage.files import FileStorage
 from app.adapters.storage.ports import (
     AthleteRepoAdapter,
     CommandLogAdapter,
+    DetailRepoAdapter,
     FactRepoAdapter,
     MethodologyRepoAdapter,
     SeasonRepoAdapter,
@@ -25,6 +26,7 @@ from app.ports.storage import (
     AthleteRepo,
     Clock,
     CommandLog,
+    DetailRepo,
     ExternalSourceError,
     FactRepo,
     MethodologyRepo,
@@ -81,8 +83,10 @@ class AppContainer:
     fact_repo: FactRepo
     athlete_repo: AthleteRepo
     methodology_repo: MethodologyRepo
+    detail_repo: DetailRepo
     command_log: CommandLog
     activity_port: ActivityPort
+    fit_port: GarminFitPort
     narrator_port: NarratorPort
     assessor: Assessor
     feasibility: GoalFeasibility
@@ -124,8 +128,10 @@ def build_container(data_root: Path | None = None) -> AppContainer:
         fact_repo=FactRepoAdapter(storage),
         athlete_repo=AthleteRepoAdapter(storage),
         methodology_repo=methodology,
+        detail_repo=DetailRepoAdapter(storage),
         command_log=CommandLogAdapter(storage),
         activity_port=GarminActivityPort(),
+        fit_port=GarminFitPort(),
         narrator_port=StubNarrator(),
         assessor=Assessor(),
         feasibility=feasibility,
