@@ -1,0 +1,13 @@
+{
+  "name": "Coach App",
+  "short_name": "Coach",
+  "description": "Приложение-тренер: неделя, сезон, план против факта",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fdf6ed",
+  "theme_color": "#fdf6ed",
+  "lang": "ru",
+  "icons": []
+}

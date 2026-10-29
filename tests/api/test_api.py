@@ -224,6 +224,18 @@ def test_batch_commands(client: TestClient, data_root: Path):
     assert len(results) == 2
 
 
+def test_pull_fact_does_not_require_week(client: TestClient):
+    """pull_fact не требует существующей недели — факт грузится всегда."""
+    response = client.post("/api/v1/commands", json={
+        "id": "cmd-1", "type": "pull_fact",
+        "args": {}, "reason": "загрузить факт", "expected_version": 0,
+    })
+    # Garmin не подключён → degraded, но НЕ «неделя не найдена»
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "degraded"
+    assert "неделя" not in response.json()["error"]["message"]
+
+
 def test_narrate_returns_text(client: TestClient):
     """Нарратор возвращает текст, не считает."""
     response = client.post("/api/v1/narrate", json={"about": "почему такая нагрузка"})

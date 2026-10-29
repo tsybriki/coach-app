@@ -257,6 +257,24 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         unlink_actual,
     )
 
+    # Команды, не требующие недели: загрузка факта и текст
+    if command.type is CommandType.PULL_FACT:
+        sessions = container.activity_port.pull(
+            date.today(), date.today(), command.args.get("sport"))
+        for session in sessions:
+            container.fact_repo.upsert(session)
+        return {
+            "status": "applied",
+            "pulled": [s.id for s in sessions],
+            "skipped": [],
+            "new_version": container.season_repo.load().version,
+        }
+
+    if command.type is CommandType.NARRATE:
+        text = container.narrator_port.explain(str(command.args.get("about", "")))
+        return {"status": "applied", "text": text,
+                "new_version": container.season_repo.load().version}
+
     season_week = int(command.args.get("season_week", 0))
     week = container.season_repo.week(season_week)
     if week is None:
@@ -283,21 +301,6 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         updated = link_actual(week, workout_id, actual_session)
     elif command.type is CommandType.UNLINK_ACTUAL:
         updated = unlink_actual(week, str(command.args.get("workout_id", "")))
-    elif command.type is CommandType.PULL_FACT:
-        sessions = container.activity_port.pull(
-            date.today(), date.today(), command.args.get("sport"))
-        for session in sessions:
-            container.fact_repo.upsert(session)
-        return {
-            "status": "applied",
-            "pulled": [s.id for s in sessions],
-            "skipped": [],
-            "new_version": container.season_repo.load().version,
-        }
-    elif command.type is CommandType.NARRATE:
-        text = container.narrator_port.explain(str(command.args.get("about", "")))
-        return {"status": "applied", "text": text,
-                "new_version": container.season_repo.load().version}
     else:
         raise ValueError(f"команда {command.type} пока не реализована")
 
