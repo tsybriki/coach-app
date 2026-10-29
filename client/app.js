@@ -200,6 +200,7 @@ function screenWeek() {
     : '';
 
   return `${messageBlock()}
+    ${week.focus ? `<div class="card goal"><h3>Фокус недели</h3><p class="lead">${escapeHtml(week.focus)}</p></div>` : ''}
     <div class="totals-card">
       <div class="metrics">
         <div class="metric"><div class="v">${formatHours(target.hours * 60)}</div><div class="l">ч · план</div></div>
@@ -207,13 +208,12 @@ function screenWeek() {
         <div class="metric"><div class="v">${(target.distance_m / 1000).toFixed(0)}</div><div class="l">км</div></div>
       </div>
     </div>
-    ${week.focus ? `<div class="card goal"><h3>Фокус недели</h3><p class="lead">${escapeHtml(week.focus)}</p></div>` : ''}
     ${unplaced}
     <h2 class="slots-header">Тренировки · ${(week.workouts || []).length} шт</h2>
     <div class="slots-sub">тап → детали</div>
     <div class="slots-list">${slots || '<p>Тренировок нет.</p>'}</div>
     <button class="action secondary" id="link">Связать факт с тренировкой</button>
-    <div id="link-block">${linkBlock()}</div>`;
+    <div id="link-block" class="hidden">${linkBlock()}</div>`;
 }
 
 /* Блок связывания — раскрывается по кнопке. */
@@ -231,7 +231,7 @@ function linkBlock() {
         <div class="sub">${a.date} · ${((a.distance_m || 0) / 1000).toFixed(1)} км · ${linked}</div>
       </div>`;
   }).join('');
-  return `<button class="action" id="pull">Загрузить из Garmin</button>
+  return `<button class="action secondary" id="pull">Загрузить из Garmin</button>
     ${facts || '<p>Факта нет.</p>'}`;
 }
 
@@ -686,6 +686,7 @@ document.addEventListener('click', async (event) => {
   if (target.id === 'link') {
     const block = document.getElementById('link-block');
     if (block) {
+      block.classList.remove('hidden');
       block.innerHTML = linkBlock();
       document.getElementById('link')?.remove();
     }
