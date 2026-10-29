@@ -83,6 +83,17 @@ SPORT_BY_PLAN_KIND = {
     "mobility": Sport.MOBILITY,
 }
 
+# Локации из пайплайна — на английском. Приложение на русском.
+LOCATION_RU = {
+    "asphalt_commuter": "асфальт · дорога",
+    "stadium": "стадион",
+    "stadium_or_pool": "стадион или бассейн",
+    "home_stationary_bike": "дома · велотренажёр",
+    "pool_or_asphalt": "бассейн или асфальт",
+    "home": "дома",
+    "long_ride_or_station": "длинная поездка или станция",
+}
+
 PHASE_ROLES = {
     "warmup": StepRole.WARMUP,
     "work": StepRole.WORK,
@@ -280,7 +291,8 @@ def build_week(plan: dict[str, Any], season_plan: dict[str, Any]) -> Week:
             sport=sport,
             kind=request.kind,
             focus=request.focus,
-            location=slot.get("location"),
+            objective={"name": slot.get("name", ""), "day": slot.get("day", "")},
+            location=LOCATION_RU.get(slot.get("location"), slot.get("location")),
             time=slot.get("time"),
             steps=steps,
             duration_min=round(sum(s.duration_min for s in steps), 2),

@@ -155,6 +155,23 @@ def actual(season_week: int, container: AppContainer = Depends(get_container)) -
     return ok(container, {"sessions": [_session_dict(s) for s in sessions]})
 
 
+@router.get("/weeks")
+def weeks(container: AppContainer = Depends(get_container)) -> JSONResponse:
+    """Список сохранённых недель — скелет без шагов."""
+    return ok(container, {
+        "weeks": [
+            {
+                "id": w.id,
+                "season_week": w.season_week,
+                "start": w.start.isoformat(),
+                "end": w.end.isoformat(),
+                "status": w.status.value,
+            }
+            for w in container.season_repo.weeks()
+        ]
+    })
+
+
 @router.get("/current-week")
 def current_week(container: AppContainer = Depends(get_container)) -> JSONResponse:
     """Текущая неделя сезона.
@@ -409,6 +426,10 @@ def _week_dict(week: Week) -> dict[str, Any]:
                 "sport": w.sport.value,
                 "kind": w.kind,
                 "focus": w.focus,
+                "objective": w.objective,
+                "location": w.location,
+                "time": w.time,
+                "rationale": w.rationale,
                 "duration_min": w.duration_min,
                 "status": w.status.value,
                 "actual_id": w.actual_id,
@@ -423,6 +444,7 @@ def _week_dict(week: Week) -> dict[str, Any]:
                         "focus_value": s.focus_value,
                         "duration_min": s.duration_min,
                         "label": s.label,
+                        "notes": s.notes,
                     }
                     for s in w.steps
                 ],

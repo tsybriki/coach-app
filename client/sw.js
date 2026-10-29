@@ -7,7 +7,7 @@
  * Ответы команд и ошибки не кэшируются никогда.
  */
 
-const CACHE = 'coach-app-shell-v1';
+const CACHE = 'coach-app-shell-v2';
 const SHELL = ['/', '/index.html', '/app.js', '/api.js', '/store.js', '/style.css',
                '/manifest.json'];
 

@@ -38,6 +38,10 @@ class SeasonRepo(Protocol):
         """Одна неделя по номеру. Нет — None, не исключение."""
         ...
 
+    def weeks(self) -> list[Week]:
+        """Все сохранённые недели сезона — по номеру, по возрастанию."""
+        ...
+
     def put_week(self, week: Week, expected_version: int) -> int:
         """Сохранить неделю. Возвращает новую версию."""
         ...

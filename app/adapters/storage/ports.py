@@ -42,6 +42,9 @@ class SeasonRepoAdapter:
     def put_week(self, week: Week, expected_version: int) -> int:
         return self._storage.put_week(week, expected_version)
 
+    def weeks(self) -> list[Week]:
+        return self._storage.weeks()
+
 
 class FactRepoAdapter:
     """Порт `FactRepo`: выполненные тренировки."""

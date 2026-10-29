@@ -191,6 +191,13 @@ class FileStorage:
             return None
         return _week_from_dict(self._read_json(path))
 
+    def weeks(self) -> list[Week]:
+        """Все сохранённые недели — по номеру, по возрастанию."""
+        found: list[Week] = []
+        for path in (self.root / "weeks").glob("W*.json"):
+            found.append(_week_from_dict(self._read_json(path)))
+        return sorted(found, key=lambda w: w.season_week)
+
     def put_week(self, week: Week, expected_version: int) -> int:
         actual = self._version()
         if actual != expected_version:
@@ -311,6 +318,22 @@ class FileStorage:
         data = self._read_json(self.root / "methodology" / "workout_templates.json")
         templates: dict[str, Any] = data.get("templates", {})
         return templates
+
+    def save_workout_templates(self, templates: dict[str, Any]) -> None:
+        """Шаблоны тренировок в хранилище."""
+        self._write_json(
+            self.root / "methodology" / "workout_templates.json",
+            {"templates": templates},
+        )
+
+    def save_load_model(self, model: LoadModel) -> None:
+        """Правило нагрузки в хранилище."""
+        self._write_json(self.root / "methodology" / "load_model.json", {
+            "intensity_factor": model.intensity_factor,
+            "adaptation_rate": model.adaptation_rate,
+            "formula": model.formula,
+            "budget": model.budget,
+        })
 
     # ---------------------------------------------------------- низкий уровень: журнал
 
