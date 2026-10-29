@@ -104,22 +104,19 @@ class LoadModelProtocol(Protocol):
 
 
 class CommandLog(Protocol):
-    """Журнал команд: идемпотентность."""
+    """Журнал команд: идемпотентность.
 
-    def get(self, command_id: str) -> CommandResultProtocol | None:
+    Результат хранится словарём — формат ответа команды формируется в API,
+    журналу нужен только факт «эта команда уже выполнена» и её итог.
+    """
+
+    def get(self, command_id: str) -> dict[str, object] | None:
         """Результат ранее выполненной команды. Нет — None."""
         ...
 
-    def append(self, command: Command, result: CommandResultProtocol) -> None:
+    def append(self, command: Command, result: dict[str, object]) -> None:
         """Записать команду и её результат."""
         ...
-
-
-class CommandResultProtocol(Protocol):
-    """Минимальный контракт результата команды для журнала."""
-
-    status: str
-    new_version: int
 
 
 class ActivityPort(Protocol):
@@ -197,7 +194,6 @@ __all__ = [
     "CalendarPort",
     "Clock",
     "CommandLog",
-    "CommandResultProtocol",
     "DuplicateExternalIdError",
     "ExternalSourceError",
     "FactRepo",

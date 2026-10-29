@@ -35,6 +35,8 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM"]
+# B008: FastAPI требует Depends() прямо в аргументе — это норма для него
+ignore = ["B008"]
 
 [tool.mypy]
 python_version = "3.11"

@@ -114,6 +114,22 @@ def test_save_with_stale_version_is_rejected(storage: FileStorage):
     assert storage.load().version == 1
 
 
+def test_version_is_global_across_season_and_week(storage: FileStorage):
+    """Версия одна на всё состояние: изменение недели двигает её тоже.
+
+    Раньше версия недели и версия сезона были разными счётчиками — команда
+    сравнивала одно с другим и получался ложные конфликты.
+    """
+    storage.save(make_season(), expected_version=0)
+    assert storage.version() == 1
+
+    storage.put_week(make_week(), expected_version=1)
+    assert storage.version() == 2, "запись недели двигает глобальную версию"
+
+    with pytest.raises(Exception, match="версия"):
+        storage.put_week(make_week(2), expected_version=1)
+
+
 def test_week_roundtrip(storage: FileStorage):
     """Неделя сохраняется и читается."""
     storage.save(make_season(), expected_version=0)

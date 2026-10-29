@@ -30,6 +30,7 @@ from app.domain.entities import (
     Command,
     Equipment,
     Goal,
+    LoadModel,
     Plan,
     Request,
     Season,
@@ -76,11 +77,20 @@ class FileStorage:
     # ---------------------------------------------------------- служебное
 
     def _version(self) -> int:
-        """Текущая версия состояния. Читается из season.json."""
-        path = self.root / "season.json"
-        if not path.exists():
-            return 0
-        return int(self._read_json(path).get("version", 0))
+        """Глобальная версия состояния.
+
+        Один счётчик на всё состояние: изменение недели тоже двигает его.
+        Раньше версия недели и версия сезона были разными числами, и команда
+        сравнивала одно с другим — получался ложный конфликт.
+        """
+        data = self._read_json(self.root / "state.json")
+        return int(data.get("version", 0))
+
+    def _bump_version(self) -> int:
+        """Увеличить глобальную версию на 1. Вернуть новую."""
+        new_version = self._version() + 1
+        self._write_json(self.root / "state.json", {"version": new_version})
+        return new_version
 
     @staticmethod
     def _read_json(path: Path) -> dict[str, Any]:
@@ -128,7 +138,11 @@ class FileStorage:
             raise StorageBusyError("хранилище занято другой записью") from error
         return handle
 
-    # ---------------------------------------------------------- SeasonRepo
+    def version(self) -> int:
+        """Глобальная версия состояния."""
+        return self._version()
+
+    # ---------------------------------------------------------- низкий уровень
 
     def load(self) -> Season:
         data = self._read_json(self.root / "season.json")
@@ -153,7 +167,7 @@ class FileStorage:
                 raise VersionConflictError(expected_version, actual)
             season.version = actual + 1
             self._write_json(self.root / "season.json", _season_to_dict(season))
-            return season.version
+            return self._bump_version()
         finally:
             handle.close()
 
@@ -176,11 +190,11 @@ class FileStorage:
             week.version = actual + 1
             self._write_json(self.root / "weeks" / f"W{week.season_week}.json",
                              _week_to_dict(week))
-            return week.version
+            return self._bump_version()
         finally:
             handle.close()
 
-    # ---------------------------------------------------------- FactRepo
+    # ---------------------------------------------------------- низкий уровень: факт
 
     def list_for_week(self, season_week: int) -> list[ActualSession]:
         path = self.root / "actual" / f"W{season_week}.json"
@@ -235,7 +249,7 @@ class FileStorage:
         ]
         self._write_json(path, {"sessions": items})
 
-    # ---------------------------------------------------------- AthleteRepo
+    # ---------------------------------------------------------- низкий уровень: профиль
 
     def get_athlete(self) -> Athlete:
         data = self._read_json(self.root / "athlete.json")
@@ -264,7 +278,27 @@ class FileStorage:
             "form": athlete.form,
         })
 
-    # ---------------------------------------------------------- CommandLog
+    # ---------------------------------------------------------- низкий уровень: правила
+
+    def load_methodology_model(self) -> LoadModel:
+        """Правило нагрузки из хранилища. Нет — пустое правило."""
+        data = self._read_json(self.root / "methodology" / "load_model.json")
+        if not data:
+            return LoadModel()
+        return LoadModel(
+            intensity_factor=data.get("intensity_factor", {}),
+            adaptation_rate=data.get("adaptation_rate", {}),
+            formula=data.get("formula", ""),
+            budget=data.get("budget", {}),
+        )
+
+    def load_workout_templates(self) -> dict[str, Any]:
+        """Шаблоны тренировок из хранилища. Нет — пусто."""
+        data = self._read_json(self.root / "methodology" / "workout_templates.json")
+        templates: dict[str, Any] = data.get("templates", {})
+        return templates
+
+    # ---------------------------------------------------------- низкий уровень: журнал
 
     def get_command(self, command_id: str) -> dict[str, Any] | None:
         data = self._read_json(self.root / "commands.json")

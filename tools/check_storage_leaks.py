@@ -27,15 +27,30 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # --- маркеры физического хранилища ---
+# Точечные: знание о том, КАК и ГДЕ хранится.
 STORAGE_TOKENS = [
-    r"\bsqlite3?\b", r"\bSQL\b", r"\bSELECT\b.*\bFROM\b", r"\bINSERT\b", r"\bCREATE TABLE\b",
-    r"\bjson\.dump", r"\bjson\.load\b", r"\bread_text\b", r"\bwrite_text\b",
-    r"\bos\.replace\b", r"\bflock\b", r"\bopen\(", r"\bPath\(", r"\bos\.path\b",
-    r"\.json\b", r"\bdata/", r"\bstate/", r"\btmp\b",
+    r"\bsqlite3?\b", r"\bSQL\b", r"\bSELECT\b.*\bFROM\b", r"\bINSERT\b",
+    r"\bCREATE TABLE\b",
+    r"\bjson\.dump\b", r"\bjson\.load\b", r"\bread_text\b", r"\bwrite_text\b",
+    r"\bos\.replace\b", r"\bflock\b", r"\bos\.path\b",
+    r"\bstate\.json\b", r"\bseason\.json\b", r"\bweeks/W", r"\bactual/W",
 ]
 
+# Маркеры, которые говорят о корне проекта или клиенте — не о хранилище.
+NOT_STORAGE = [r"CLIENT_DIR", r"client_path", r"\bclient/", r"\.venv", r"__file__"]
+
+# Мягкие: слова, которые сами по себе не утечка, но в сочетании с путём — да.
+# Проверяются отдельно, только если в строке есть путь к данным.
+SOFT_TOKENS = [r"\bopen\(", r"\bPath\(", r"\.json\b", r"\bdata/", r"\btmp\b"]
+
 # --- директории, которым знать положено ---
-ALLOWED_CODE_DIRS = ("adapters/storage", "adapters/migrations", "tools", "tests", "migrations")
+# `adapters/storage` — реализация портов: формат знает только она.
+# `app/api/dependencies.py` — корневая точка сборки (composition root): здесь
+# зависимости связываются, поэтому путь к данным здесь законен. Исключение
+# узкое — один файл, а не каталог.
+ALLOWED_CODE_DIRS = ("adapters/storage", "adapters/migrations", "tools", "tests",
+                     "migrations")
+ALLOWED_CODE_FILES = ("app/api/dependencies.py",)
 
 # --- места в дизайне, где знание о формате — по делу ---
 # (имя файла, регулярка, обязательное пояснение рядом)
@@ -84,11 +99,16 @@ def scan_code(repo: str) -> list[str]:
         dirs[:] = [d for d in dirs if d not in ("__pycache__", ".git")]
         # путь относительно app/ — чтобы совпадение с allowlist было точным
         rel_root = os.path.relpath(root, app)
-        if rel_root == "." or any(rel_root == d or rel_root.startswith(d + os.sep)
-                                  for d in ALLOWED_CODE_DIRS):
+        rel_file_base = f"app/{rel_root}" if rel_root != "." else "app"
+        # корень app/ проверяется — пропускаются только каталоги адаптеров
+        if any(rel_root == d or rel_root.startswith(d + os.sep)
+               for d in ALLOWED_CODE_DIRS):
             continue
         for fn in files:
             if not fn.endswith(".py"):
+                continue
+            rel_file = f"{rel_file_base}/{fn}".replace(os.sep, "/")
+            if rel_file in ALLOWED_CODE_FILES:
                 continue
             path = os.path.join(root, fn)
             with open(path, encoding="utf-8") as f:
@@ -99,11 +119,24 @@ def scan_code(repo: str) -> list[str]:
                     continue
                 if i in seen:
                     continue
+                if any(re.search(p, line) for p in NOT_STORAGE):
+                    continue
+                hit = None
                 for pat in STORAGE_TOKENS:
                     if re.search(pat, line):
-                        seen.add(i)
-                        leaks.append(f"app/{rel_root}/{fn}:{i}: {line.strip()[:100]}")
+                        hit = pat
                         break
+                if hit is None:
+                    # мягкие маркеры — только если в строке есть и путь, и операция
+                    has_path = any(re.search(p, line) for p in SOFT_TOKENS)
+                    has_op = any(re.search(p, line) for p in
+                                 (r"\bopen\(", r"\bPath\(", r"\bread_text\b",
+                                  r"\bwrite_text\b", r"\bos\.replace\b"))
+                    if has_path and has_op:
+                        hit = "path+operation"
+                if hit:
+                    seen.add(i)
+                    leaks.append(f"app/{rel_root}/{fn}:{i}: {line.strip()[:100]}")
     return leaks
 
 
