@@ -444,3 +444,57 @@ def test_i44_link_stored_on_both_sides(client: TestClient, data_root: Path):
     actual = client.get("/api/v1/actual/1").json()["data"]["sessions"]
     assert week["workouts"][0]["actual_id"] == "a1"
     assert actual[0]["linked_workout_id"] == "w1"
+
+
+def test_pull_fact_keeps_user_links(client: TestClient, data_root: Path):
+    """Выкачка факта не стирает связи, поставленные пользователем.
+
+    Garmin приходит без `linked_workout_id` — связь ставит человек.
+    Если её терять при перезаписи факта, после любой выкачки все
+    привязки исчезают.
+    """
+    from app.domain.entities import ActualSession
+    from app.domain.enums import FactSource, Sport
+
+    version = seed_week(data_root)
+    storage = FileStorage(data_root)
+    storage.upsert(ActualSession(
+        id="a1", date=date(2026, 10, 14), sport=Sport.RUN, duration_min=60,
+        source=FactSource.GARMIN, external_id="ext-1",
+    ))
+
+    # связываем факт с тренировкой
+    client.post("/api/v1/commands", json={
+        "id": "cmd-link", "type": "link_actual",
+        "args": {"season_week": 1, "actual_id": "a1", "workout_id": "w1"},
+        "reason": "связываю", "expected_version": version,
+    })
+    assert storage.get("a1").linked_workout_id == "w1"
+
+    # источник отдаёт тот же факт, но уже без связи
+    pulled = ActualSession(
+        id="a1", date=date(2026, 10, 14), sport=Sport.RUN, duration_min=61,
+        source=FactSource.GARMIN, external_id="ext-1",
+    )
+    container = client.app.state.container
+    container.activity_port = _StubActivityPort(pulled)
+
+    current = client.get("/api/v1/snapshot").json()["version"]
+    response = client.post("/api/v1/commands", json={
+        "id": "cmd-pull", "type": "pull_fact",
+        "args": {"season_week": 1}, "reason": "выкачка",
+        "expected_version": current,
+    })
+    assert response.status_code == 200
+
+    assert storage.get("a1").linked_workout_id == "w1"
+
+
+class _StubActivityPort:
+    """Источник активностей для теста: отдаёт заранее заданные факты."""
+
+    def __init__(self, *sessions):
+        self._sessions = sessions
+
+    def pull(self, start, end, sport=None):
+        return list(self._sessions)

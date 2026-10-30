@@ -225,6 +225,30 @@ def actual_week_totals(sessions: list[ActualSession]) -> dict[str, float]:
 
 
 
+
+def preserve_fact_links(
+    existing: list[ActualSession],
+    incoming: list[ActualSession],
+) -> list[ActualSession]:
+    """Факт из внешнего источника не теряет связь, поставленную пользователем.
+
+    Выкачка Garmin приходит без `linked_workout_id`: связь ставит человек,
+    а не источник. Если при перезаписи факта её терять, то после любой
+    выкачки все привязки исчезают, а факты снова предлагаются к связыванию.
+
+    Разрыв связи — осознанное действие пользователя, поэтому он делается
+    только через `link(actual_id, None)`.
+    """
+    linked = {
+        session.id: session.linked_workout_id
+        for session in existing
+        if session.linked_workout_id
+    }
+    for session in incoming:
+        if session.id in linked:
+            session.linked_workout_id = linked[session.id]
+    return incoming
+
 def week_progress(week: Week, sessions: list[ActualSession]) -> dict[str, Any]:
     """Факт недели против плана: «N из M».
 

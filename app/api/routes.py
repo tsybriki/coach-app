@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from app.adapters.fit import parse_fit
 from app.api.dependencies import AppContainer, build_container
-from app.domain.derivations import week_progress
+from app.domain.derivations import preserve_fact_links, week_progress
 from app.domain.entities import (
     ActualSession,
     Command,
@@ -359,6 +359,11 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
             week_start = today - timedelta(days=6)
         sessions = container.activity_port.pull(
             week_start, week_end, command.args.get("sport"))
+        # Выкачка не должна стирать связи, поставленные пользователем:
+        # факт из Garmin приходит без `linked_workout_id`.
+        sessions = preserve_fact_links(
+            container.fact_repo.list_for_week(
+                int(command.args.get("season_week", 0))), sessions)
         for session in sessions:
             container.fact_repo.upsert(session)
         return {

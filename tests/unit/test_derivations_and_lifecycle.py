@@ -20,6 +20,7 @@ from app.domain.derivations import (
     plan_week_totals,
     planned_intensity_min,
     plans_overlap,
+    preserve_fact_links,
     race_week_of,
     request_is_placed,
     round_duration_to_minutes,
@@ -712,3 +713,48 @@ def test_week_progress_without_target_is_zeros() -> None:
 
     assert progress["hours"]["planned"] == 0.0
     assert progress["sessions"]["actual"] == 1
+
+
+# ------------------------------------------- выкачка факта и связи
+
+
+def test_preserve_fact_links_keeps_user_link() -> None:
+    """Выкачка Garmin не стирает связь, поставленную пользователем."""
+    existing = [
+        ActualSession(
+            id="a-1", date=date(2026, 10, 26), sport=Sport.RUN, duration_min=60,
+            source=FactSource.GARMIN, external_id="ext-1",
+            linked_workout_id="w-1",
+        ),
+    ]
+    incoming = [
+        ActualSession(
+            id="a-1", date=date(2026, 10, 26), sport=Sport.RUN, duration_min=61,
+            source=FactSource.GARMIN, external_id="ext-1",
+        ),
+    ]
+
+    result = preserve_fact_links(existing, incoming)
+
+    assert result[0].linked_workout_id == "w-1"
+
+
+def test_preserve_fact_links_new_fact_stays_unlinked() -> None:
+    """Новый факт без связи остаётся без связи."""
+    existing = [
+        ActualSession(
+            id="a-1", date=date(2026, 10, 26), sport=Sport.RUN, duration_min=60,
+            source=FactSource.GARMIN, external_id="ext-1",
+            linked_workout_id="w-1",
+        ),
+    ]
+    incoming = [
+        ActualSession(
+            id="a-2", date=date(2026, 10, 27), sport=Sport.RUN, duration_min=45,
+            source=FactSource.GARMIN, external_id="ext-2",
+        ),
+    ]
+
+    result = preserve_fact_links(existing, incoming)
+
+    assert result[0].linked_workout_id is None
