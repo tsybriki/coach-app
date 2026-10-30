@@ -125,6 +125,7 @@ function setupDom() {
     <header class="appbar" id="appbar"></header>
     <main class="app" id="picker"></main>
     <main class="app hidden" id="cardWrap"><div id="cardHost"></div></main>
+    <main class="app hidden" id="detailWrap"><div id="detailHost"></div></main>
     <nav class="bottomnav" id="nav"></nav>
   </body></html>`, {url: 'http://localhost:8080/', pretendToBeVisual: true});
 
@@ -164,7 +165,7 @@ async function loadApp(overrides = {}) {
     week: WEEK,
     actual: ACTUAL,
     weeks: [],
-    details: {},
+    details: overrides.details || {},
     onCommand: overrides.onCommand,
   };
 
@@ -358,4 +359,112 @@ test('плашку можно закрыть тапом', async () => {
 
   click(document.getElementById('msg'));
   assert.equal(document.querySelector('.msg'), null, 'тап по плашке не закрыл её');
+});
+
+/* ------------------------------------------- разбор: третий уровень */
+
+const DETAIL = {
+  actual_id: 'a-1',
+  duration_s: 3780,
+  elapsed_s: 3780,
+  distance_m: 10300,
+  ascent_m: 19,
+  descent_m: 17,
+  avg_hr: 133,
+  max_hr: 178,
+  avg_cadence: 77,
+  max_cadence: 119,
+  avg_power_w: null,
+  max_power_w: null,
+  normalized_power_w: null,
+  calories: 844,
+  hr_zone_minutes: {Z1: 7, Z2: 33, Z3: 8},
+  cadence_source: 'stryd',
+  power_source: 'stryd',
+  splits: [
+    {index: 1, duration_s: 600, distance_m: 1000, avg_hr: 140, max_hr: 150,
+      avg_cadence: 80, avg_speed_mps: 1.667, ascent_m: 5},
+  ],
+  series: {
+    hr: [[0, 100], [15, 130], [30, 140]],
+    cadence: [[0, 80], [15, 84], [30, 82]],
+    power: [],
+    distance: [],
+  },
+};
+
+test('разбор — отдельный экран третьего уровня', async () => {
+  await loadApp({details: {'a-1': DETAIL}});
+  openWeek();
+  click(document.querySelectorAll('.slot')[0]);
+  await waitFor(() => document.getElementById('backBtn'));
+
+  click(document.querySelector('[data-detail]'));
+  await waitFor(() => !document.getElementById('detailWrap').classList.contains('hidden'));
+
+  assert.ok(!document.getElementById('detailWrap').classList.contains('hidden'),
+    'экран разбора не открылся');
+  assert.ok(document.getElementById('cardWrap').classList.contains('hidden'),
+    'карточка тренировки осталась видна');
+  assert.ok(document.getElementById('picker').classList.contains('hidden'),
+    'список недели остался виден');
+  // содержимое — в третьем хосте, а не внизу карточки
+  assert.equal(document.querySelectorAll('#detailHost .metric').length, 8);
+  assert.equal(document.querySelectorAll('#detailHost svg.chart').length, 2);
+  assert.equal(document.querySelector('#detail-block').innerHTML, '',
+    'разбор остался в карточке тренировки');
+});
+
+test('из разбора «назад» возвращает к тренировке', async () => {
+  await loadApp({details: {'a-1': DETAIL}});
+  openWeek();
+  click(document.querySelectorAll('.slot')[0]);
+  await waitFor(() => document.getElementById('backBtn'));
+  click(document.querySelector('[data-detail]'));
+  await waitFor(() => !document.getElementById('detailWrap').classList.contains('hidden'));
+
+  click(document.getElementById('backBtn'));
+  await waitFor(() => document.getElementById('cardWrap').classList.contains('hidden') === false);
+
+  assert.ok(!document.getElementById('cardWrap').classList.contains('hidden'),
+    'не вернулись к тренировке');
+  assert.ok(document.getElementById('detailWrap').classList.contains('hidden'),
+    'экран разбора не закрылся');
+  assert.match(document.getElementById('appbar').textContent, /Качественная/);
+});
+
+test('шапка разбора показывает факт, а не неделю', async () => {
+  await loadApp({details: {'a-1': DETAIL}});
+  openWeek();
+  click(document.querySelectorAll('.slot')[0]);
+  await waitFor(() => document.getElementById('backBtn'));
+  click(document.querySelector('[data-detail]'));
+  await waitFor(() => !document.getElementById('detailWrap').classList.contains('hidden'));
+
+  const bar = document.getElementById('appbar').textContent;
+  assert.match(bar, /10.3 км/);
+  assert.match(bar, /Бег/);
+  assert.ok(!bar.includes('Неделя 3'), 'в шапке разбора остался заголовок недели');
+});
+
+test('история: свайп назад убирает уровень за уровнем', async () => {
+  await loadApp({details: {'a-1': DETAIL}});
+  openWeek();
+  click(document.querySelectorAll('.slot')[0]);
+  await waitFor(() => document.getElementById('backBtn'));
+  click(document.querySelector('[data-detail]'));
+  await waitFor(() => !document.getElementById('detailWrap').classList.contains('hidden'));
+
+  // назад → тренировка
+  history.back();
+  await waitFor(() => document.getElementById('detailWrap').classList.contains('hidden'));
+  assert.ok(!document.getElementById('cardWrap').classList.contains('hidden'),
+    'после свайпа назад ждём тренировку, а не список');
+
+  // назад → список недели
+  history.back();
+  await waitFor(() => document.getElementById('picker').classList.contains('hidden') === false);
+  assert.ok(!document.getElementById('picker').classList.contains('hidden'),
+    'после второго свайпа назад ждём список недели');
+  assert.ok(document.getElementById('cardWrap').classList.contains('hidden'));
 });

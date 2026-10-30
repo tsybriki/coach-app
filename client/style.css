@@ -1081,6 +1081,13 @@ p.lead {
   margin-top: 8px;
 }
 
+.actual-actions .action {
+  flex: 1;
+  margin: 0;
+  padding: 9px 10px;
+  font-size: 12.5px;
+}
+
 /* Список факта: строки-кнопки для выбора */
 .facts {
   display: flex;
@@ -1316,4 +1323,28 @@ p.lead {
 
 .prog-bar i.over {
   background: var(--good);
+}
+
+
+/* --------------------------------------------- разбор: третий уровень */
+
+.detail-screen {
+  padding-bottom: 12px;
+}
+
+/* Заголовок экрана разбора: вид спорта и дата. */
+.detail-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.detail-head .kind-ico {
+  font-size: 22px;
+}
+
+.detail-head .name {
+  font-size: 15px;
+  font-weight: 600;
 }

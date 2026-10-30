@@ -31,6 +31,7 @@ const state = {
   athlete: null,
   actual: [],
   detail: null,
+  detailId: null,        // разбор какой факта открыт
   weeks: [],
   summary: null,
   stale: false,
@@ -51,6 +52,8 @@ const nav = document.getElementById('nav');
 const bar = document.getElementById('appbar');
 const cardWrap = document.getElementById('cardWrap');
 const cardHost = document.getElementById('cardHost');
+const detailWrap = document.getElementById('detailWrap');
+const detailHost = document.getElementById('detailHost');
 
 /* Нижняя навигация: иконка + подпись. Шесть экранов — в две строки нет,
  * поэтому нижняя навигация показывает пять, а шестой экран («Связывание»)
@@ -72,8 +75,32 @@ function render() {
       </button>`)
     .join('');
 
-  bar.innerHTML = appBar();
+  bar.innerHTML = chromeBar();
   renderScreen();
+}
+
+/* Шапка зависит от уровня вложенности:
+ *   разбор  → «←» + название разбора
+ *   тренировка → «←» + название тренировки
+ *   раздел  → заголовок раздела
+ */
+function chromeBar() {
+  if (state.detailId) {
+    const fact = state.actual.find((a) => a.id === state.detailId);
+    const title = fact
+      ? `${((fact.distance_m || 0) / 1000).toFixed(1)} км · ${SPORT_NAME[fact.sport] || fact.sport}`
+      : 'Разбор тренировки';
+    return detailBar(title, fact ? fact.date : '');
+  }
+  if (state.openWorkoutId && state.week) {
+    const workout = (state.week.workouts || [])
+      .find((w) => w.id === state.openWorkoutId);
+    if (workout) {
+      const objective = workout.objective || {};
+      return detailBar(objective.name || workout.kind, objective.day || '');
+    }
+  }
+  return appBar();
 }
 
 /* Шапка приложения: заголовок, счётчик версии, кнопка обновить. */
@@ -442,15 +469,39 @@ function hrZones() {
   }));
 }
 
-/* Блок разбора тренировки: цифры, зоны, отрезки, графики. */
-function detailBlock(linkedActual) {
-  if (!linkedActual) return '';
+/* Экран разбора выполненной тренировки — третий уровень.
+ *
+ * Отдельный экран, а не блок внизу карточки: разбор — это данные другой
+ * сущности (факт), а не продолжение описания тренировки.
+ */
+function screenDetail() {
   const detail = state.detail;
-  if (!detail || detail.actual_id !== linkedActual.id) {
-    return `<div class="card"><p class="lead">Разбор не загружен</p>
-      <button class="action secondary" data-detail="${escapeHtml(linkedActual.id)}">Загрузить разбор</button></div>`;
+  if (!detail) {
+    return `<div class="card"><p class="lead">Разбор не загружен</p></div>`;
   }
   return detailContent(detail);
+}
+
+/* Открыть разбор: свой экран, свой заголовок, своя кнопка «назад». */
+function showDetail(actualId) {
+  const fact = state.actual.find((a) => a.id === actualId);
+  const title = fact
+    ? `${((fact.distance_m || 0) / 1000).toFixed(1)} км · ${escapeHtml(SPORT_NAME[fact.sport] || fact.sport)}`
+    : 'Разбор тренировки';
+
+  state.detailId = actualId;
+  detailHost.innerHTML = `<div class="card detail-screen">${screenDetail()}</div>`;
+  detailWrap.classList.remove('hidden');
+  cardWrap.classList.add('hidden');
+  picker.classList.add('hidden');
+
+  try {
+    history.pushState({page: 'detail', actual: actualId}, '', `#d${actualId}`);
+  } catch (error) {
+    history.replaceState(null, '', `#d${actualId}`);
+  }
+  render();
+  window.scrollTo(0, 0);
 }
 
 /* Содержимое разбора. */
@@ -657,7 +708,7 @@ function showWorkout(workoutId) {
         </div>
         <div class="when">${linkedActual.date} · ${escapeHtml(SPORT_NAME[linkedActual.sport] || linkedActual.sport)}</div>
         <div class="actual-actions">
-          <button class="action secondary" data-detail="${escapeHtml(linkedActual.id)}">Разбор тренировки</button>
+          <button class="action" data-detail="${escapeHtml(linkedActual.id)}">Разбор тренировки →</button>
           <button class="action secondary" data-unlink="${escapeHtml(workout.id)}">Отвязать</button>
         </div>
       </div>`
@@ -684,15 +735,19 @@ function showWorkout(workoutId) {
       ${structureHtml(workout)}
       ${actualBlock}
     </div>
-    <div id="detail-block">${detailBlock(linkedActual)}</div>`;
+    <div id="detail-block"></div>`;
 
   state.openWorkoutId = workoutId;
+  state.detailId = null;
   cardWrap.classList.remove('hidden');
+  detailWrap.classList.add('hidden');
   picker.classList.add('hidden');
-  bar.innerHTML = detailBar(title, objective.day || '');
 
   const slug = slotSlug(workout);
   try {
+    // Если уже на уровне тренировки (в том числе вернулись с разбора) —
+    // заменяем текущую запись. Иначе `pushState` добавил бы лишнюю
+    // запись в историю, и второй «назад» не вернул бы к списку.
     if (history.state && history.state.page === 'detail') {
       history.replaceState({page: 'detail', slot: workoutId}, '', '#' + slug);
     } else {
@@ -701,6 +756,7 @@ function showWorkout(workoutId) {
   } catch (error) {
     history.replaceState(null, '', '#' + slug);
   }
+  render();
   window.scrollTo(0, 0);
 }
 
@@ -729,14 +785,31 @@ function detailBar(title, day) {
 /* Обратно к списку. */
 function showPicker() {
   state.openWorkoutId = null;
+  state.detailId = null;
   cardWrap.classList.add('hidden');
+  detailWrap.classList.add('hidden');
   picker.classList.remove('hidden');
   if (window.location.hash) {
     try { history.replaceState(history.state, '', ' '); } catch (error) { /* нет */ }
   }
   renderScreen();
-  bar.innerHTML = appBar();
+  bar.innerHTML = chromeBar();
   window.scrollTo(0, 0);
+}
+
+/* Назад с экрана разбора — к тренировке, из которой пришли.
+ *
+ * Уровни вложенности: неделя → тренировка → разбор. Назад убирает
+ * верхний уровень, а не сбрасывает всё сразу.
+ */
+function showDetailBack() {
+  state.detailId = null;
+  detailWrap.classList.add('hidden');
+  if (state.openWorkoutId) {
+    showWorkout(state.openWorkoutId);
+    return;
+  }
+  showPicker();
 }
 
 /* Структура тренировки: сеты собираются обратно из group/round. */
@@ -974,9 +1047,12 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
-  // Кнопка «назад» из деталей
+  // Кнопка «назад»: убираем верхний уровень вложенности
   if (target.id === 'backBtn') {
-    if (history.state && history.state.page === 'detail') {
+    if (state.detailId) {
+      // с разбора — к тренировке
+      showDetailBack();
+    } else if (history.state && history.state.page === 'detail') {
       history.back();
     } else {
       showPicker();
@@ -1053,24 +1129,43 @@ document.addEventListener('click', async (event) => {
   }
 });
 
-/* Кнопка «назад» на телефоне — вернуться к списку. */
+/* Кнопка «назад» на телефоне — убрать верхний уровень вложенности.
+ *
+ * Уровни: неделя → тренировка → разбор. Свайп назад из разбора
+ * возвращает к тренировке, из тренировки — к списку.
+ */
 window.addEventListener('popstate', (event) => {
   const current = event.state;
-  if (!current || current.page !== 'detail') {
-    showPicker();
+  if (current && current.page === 'detail' && current.actual) {
+    state.detailId = current.actual;
+    detailWrap.classList.remove('hidden');
+    cardWrap.classList.add('hidden');
+    picker.classList.add('hidden');
+    detailHost.innerHTML = `<div class="card detail-screen">${screenDetail()}</div>`;
+    render();
+    return;
   }
+  if (current && current.page === 'detail') {
+    state.detailId = null;
+    detailWrap.classList.add('hidden');
+    showWorkout(current.slot);
+    return;
+  }
+  showPicker();
 });
 
 /* Разбор тренировки: сначала пробуем готовый, иначе разбираем FIT. */
 async function loadDetail(actualId) {
+  // Экран разбора открываем сразу — пока грузится, он пустой.
+  showDetail(actualId);
   showMessage('Загружаю разбор…');
   render();
   try {
     const detail = await api.getDetail(actualId);
     state.detail = detail.data;
     state.message = null;
+    detailHost.innerHTML = `<div class="card detail-screen">${screenDetail()}</div>`;
     render();
-    if (state.openWorkoutId) showWorkout(state.openWorkoutId);
     return;
   } catch (error) {
     if (error.code !== 'not_found') {
@@ -1100,10 +1195,9 @@ async function loadDetail(actualId) {
   } catch (error) {
     showMessage('Разбор не удался', 'error');
   }
+  detailHost.innerHTML = `<div class="card detail-screen">${screenDetail()}</div>`;
   render();
-  if (state.openWorkoutId) showWorkout(state.openWorkoutId);
 }
-
 /* Связать факт с тренировкой. */
 async function linkActual(actualId, workoutId) {
   showMessage('Связываю…');
