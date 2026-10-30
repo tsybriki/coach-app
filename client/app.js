@@ -68,13 +68,7 @@ const SCREENS = [
 ];
 
 function render() {
-  nav.innerHTML = SCREENS
-    .map(([id, title, ico]) =>
-      `<button class="${state.screen === id ? 'on' : ''}" data-screen="${id}">
-        <span class="ico">${ico}</span><span class="lbl">${title}</span>
-      </button>`)
-    .join('');
-
+  renderNav();
   bar.innerHTML = chromeBar();
   renderScreen();
 }
@@ -797,9 +791,23 @@ function showPicker() {
   }
   renderScreen();
   bar.innerHTML = chromeBar();
+  // Меню перерисовываем отдельно: в нём подсветка активного раздела,
+  // а сам экран её не трогает. Полный render() тут лишний — он
+  // перерисовывает ещё и меню целиком.
+  renderNav();
   // Прокрутка вверх — только если мы не наверху: лишний scrollTo
   // вызывает пересчёт раскладки и задерживает кадр.
   if (window.scrollY > 0) window.scrollTo(0, 0);
+}
+
+/* Нижнее меню: пять разделов, активный подсвечен. */
+function renderNav() {
+  nav.innerHTML = SCREENS
+    .map(([id, title, ico]) =>
+      `<button class="${state.screen === id ? 'on' : ''}" data-screen="${id}">
+        <span class="ico">${ico}</span><span class="lbl">${title}</span>
+      </button>`)
+    .join('');
 }
 
 /* Назад с экрана разбора — к тренировке, из которой пришли.

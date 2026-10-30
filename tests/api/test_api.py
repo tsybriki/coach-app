@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import json
 import shutil
 from datetime import date
 from pathlib import Path
@@ -498,3 +499,52 @@ class _StubActivityPort:
 
     def pull(self, start, end, sport=None):
         return list(self._sessions)
+
+
+# ------------------------------------------------------- поток изменений (SSE)
+
+
+def test_events_version_matches_snapshot(client: TestClient, data_root: Path):
+    """SSE отдаёт ту же версию, что и снапшот.
+
+    Если они разойдутся, клиент будет считать, что состояние изменилось,
+    и перезагружать все данные при каждом событии — отсюда «долгое
+    переключение меню».
+    """
+    version = seed_week(data_root)
+
+    with client.stream("GET", "/api/v1/events") as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        # Сжатие потока ломает его: буферизация съедает heartbeat.
+        assert response.headers.get("content-encoding", "identity") == "identity"
+
+        # первое событие приходит сразу
+        for line in response.iter_lines():
+            if line.startswith("data:"):
+                break
+
+    payload = json.loads(line[len("data:"):].strip())
+    assert payload["version"] == version
+
+
+def test_events_version_equals_snapshot_body(client: TestClient, data_root: Path):
+    """Версия в потоке и в снапшоте — одно и то же число."""
+    seed_week(data_root)
+
+    with client.stream("GET", "/api/v1/events") as response:
+        for line in response.iter_lines():
+            if line.startswith("data:"):
+                break
+
+    from_events = json.loads(line[len("data:"):].strip())["version"]
+    from_snapshot = client.get("/api/v1/snapshot").json()["version"]
+
+    assert from_events == from_snapshot
+
+
+def test_static_is_compressed(client: TestClient):
+    """Статика сжимается: без gzip клиент тянет 53 КБ JS открытым текстом."""
+    response = client.get("/app.js", headers={"Accept-Encoding": "gzip"})
+    assert response.status_code == 200
+    assert response.headers.get("content-encoding") == "gzip"

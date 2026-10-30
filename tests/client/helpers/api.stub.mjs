@@ -10,7 +10,14 @@ const fixture = () => globalThis.__fixture || {};
 export function getSnapshot() {
   const f = fixture();
   f.snapshotCalls = (f.snapshotCalls || 0) + 1;
-  return Promise.resolve({version: f.version ?? 42, data: f.snapshot});
+  const delay = f.delayMs || 0;
+  if (!delay) {
+    return Promise.resolve({version: f.version ?? 42, data: f.snapshot});
+  }
+  // Ответ с задержкой — как будто сервер думает.
+  return new Promise((resolve) => setTimeout(
+    () => resolve({version: f.version ?? 42, data: f.snapshot}), delay,
+  ));
 }
 
 export function getWeeks() {

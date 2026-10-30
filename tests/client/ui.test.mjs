@@ -552,3 +552,135 @@ test('событие с той же версией не перезагружае
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(document.getElementById('appbar').textContent, before);
 });
+
+/* ------------------------------------------------- скорость переключения */
+
+/* Главные экраны приложения — по порядку нижнего меню. */
+const MAIN_SCREENS = ['week', 'fact', 'season', 'close', 'athlete'];
+
+/* Допустимое время переключения экрана.
+ *
+ * Замер идёт от клика до отрисованного кадра: `requestAnimationFrame`
+ * после обработчика. Это то, что человек видит как «переключилось».
+ *
+ * Порог generous: 400 мс — это уже заметно глазом, но на медленном
+ * телефоне с троттлингом проходит. Проверка не должна ломаться от
+ * чужого шума, но должна ловить настоящее «несколько секунд».
+ */
+const SCREEN_SWITCH_BUDGET_MS = 400;
+
+/* Замер переключения: клик → кадр нарисован.
+ *
+ * Замер идёт внутри страницы (`window.eval`), а не в Node: иначе в
+ * результат попадёт время на передачу команды, а не время отрисовки.
+ */
+function measureSwitch(screen) {
+  // `requestAnimationFrame` в jsdom есть не везде — ждём следующий
+  // такт через setTimeout(0): это ближе всего к «кадр готов».
+  const script = `(function () {
+    var button = document.querySelector('#nav [data-screen="${screen}"]');
+    if (!button) return Promise.resolve(-1);
+    var started = performance.now();
+    button.click();
+    return new Promise(function (resolve) {
+      setTimeout(function () {
+        resolve(performance.now() - started);
+      }, 0);
+    });
+  })()`;
+
+  return window.eval(script);
+}
+
+/* Прокликивание всех главных экранов с замером каждого перехода.
+ *
+ * Проверяем не «стало ли быстрее», а «не тормозит ли»: каждый переход
+ * должен уложиться в бюджет. Если снова появится перезагрузка данных
+ * при переключении (как было с расхождением версий SSE), переход
+ * выйдет за пределы.
+ */
+test('прокликивание главных экранов: каждый переход в пределах бюджета', async () => {
+  await loadApp();
+  openWeek();
+
+  const timings = [];
+  for (const screen of MAIN_SCREENS) {
+    const elapsed = await measureSwitch(screen);
+    timings.push({screen, elapsed});
+
+    // подсветка активного раздела — сразу после перехода
+    const button = document.querySelector(`#nav [data-screen="${screen}"]`);
+    assert.ok(button, `кнопки ${screen} нет в меню`);
+    assert.ok(button.classList.contains('on'),
+      `экран ${screen} не отмечен как текущий`
+      + ` (отмечен: ${document.querySelector('#nav .on')?.dataset.screen})`);
+  }
+
+  // ни один переход не превысил бюджет
+  const slow = timings.filter((t) => t.elapsed > SCREEN_SWITCH_BUDGET_MS);
+  assert.equal(slow.length, 0,
+    `медленные переходы: ${slow.map((t) => `${t.screen} ${t.elapsed}мс`).join(', ')}`
+    + ` (бюджет ${SCREEN_SWITCH_BUDGET_MS}мс)`);
+});
+
+test('переключение туда-обратно тоже быстрое', async () => {
+  await loadApp();
+  openWeek();
+
+  const order = ['fact', 'season', 'close', 'athlete', 'week'];
+  const timings = [];
+  for (let i = 0; i < 2; i += 1) {
+    for (const screen of order) {
+      timings.push({screen, elapsed: await measureSwitch(screen)});
+    }
+  }
+
+  const worst = timings.reduce((a, b) => (b.elapsed > a.elapsed ? b : a));
+  assert.ok(worst.elapsed <= SCREEN_SWITCH_BUDGET_MS,
+    `самый медленный переход: ${worst.screen} ${worst.elapsed}мс`);
+});
+
+test('переключение не накапливает задержку', async () => {
+  await loadApp();
+  openWeek();
+
+  // measureSwitch возвращает число миллисекунд.
+  const first = await measureSwitch('season');
+  for (let i = 0; i < 10; i += 1) {
+    await measureSwitch('fact');
+    await measureSwitch('season');
+  }
+  const last = await measureSwitch('season');
+
+  // Замер в jsdom — единицы миллисекунд, шум огромный. Поэтому
+  // сравниваем не точные числа, а бюджет: накопление задержки (утечка
+  // подписок, растущий кэш) вывело бы переход за пределы.
+  assert.ok(first >= 0, `замер не получился: ${first}`);
+  assert.ok(first <= SCREEN_SWITCH_BUDGET_MS,
+    `первый переход: ${first}мс`);
+  assert.ok(last <= SCREEN_SWITCH_BUDGET_MS,
+    `после двадцати переходов: ${last}мс — задержка накапливается`);
+});
+
+/* Медленный сервер не должен задерживать переключение экрана.
+ *
+ * Проверяем две вещи: переход укладывается в бюджет и НЕ ходит на
+ * сервер. Второе важнее: экран строится из уже загруженных данных,
+ * поэтому переключение не должно начинать перезагрузку. Если начнёт —
+ * «несколько секунд» вернутся, когда сервер думает.
+ */
+test('медленный сервер не задерживает переключение экрана', async () => {
+  await loadApp();
+  // дальше сервер отвечает медленно
+  globalThis.__fixture.delayMs = 600;
+  openWeek();
+
+  const callsBefore = globalThis.__fixture.snapshotCalls || 0;
+  const elapsed = await measureSwitch('season');
+
+  assert.ok(elapsed <= SCREEN_SWITCH_BUDGET_MS,
+    `переключение ждало сервер: ${elapsed}мс (бюджет ${SCREEN_SWITCH_BUDGET_MS}мс)`);
+  assert.match(document.getElementById('appbar').textContent, /Сезон/);
+  assert.equal(globalThis.__fixture.snapshotCalls || 0, callsBefore,
+    'переключение экрана пошло на сервер — на медленном канале это секунды');
+});
