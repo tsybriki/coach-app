@@ -7,9 +7,9 @@
  * Ответы команд и ошибки не кэшируются никогда.
  */
 
-const CACHE = 'coach-app-shell-v8';
+const CACHE = 'coach-app-shell-v9';
 const SHELL = ['/', '/index.html', '/app.js', '/api.js', '/store.js', '/link.js',
-               '/chart.js', '/style.css', '/manifest.json'];
+               '/chart.js', '/structure.js', '/style.css', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

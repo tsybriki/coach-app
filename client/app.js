@@ -13,6 +13,14 @@ import {
 } from './store.js';
 import { linkCandidates } from './link.js';
 import { axisLabels, polyline, timeLabels, toPoints, zoneBands } from './chart.js';
+import {
+  groupBlocks,
+  isExerciseBlock,
+  isSetBlock,
+  nameHasReps,
+  repsLabel,
+  setReps,
+} from './structure.js';
 
 const state = {
   screen: 'week',
@@ -31,6 +39,8 @@ const state = {
   outbox: [],
   openWorkoutId: null,
   message: null,
+  messageKind: 'info',   // 'info' — гаснет само, 'error' — ждёт действия
+  messageTimer: null,
   base: localStorage.getItem('coach-app-base') || location.origin,
 };
 
@@ -130,7 +140,28 @@ function barInner() {
 
 /* Сообщение — под шапкой, отдельным блоком. */
 function messageBlock() {
-  return state.message ? `<div class="msg">${escapeHtml(state.message)}</div>` : '';
+  return state.message
+    ? `<div class="msg ${escapeHtml(state.messageKind)}" id="msg">${escapeHtml(state.message)}</div>`
+    : '';
+}
+
+/* Показать сообщение. Информационное гаснет само через несколько секунд —
+ * иначе плашка висит и закрывает половину экрана. Ошибка ждёт действия:
+ * её закрывают вручную. */
+function showMessage(text, kind = 'info') {
+  state.message = text;
+  state.messageKind = kind;
+  if (state.messageTimer) {
+    clearTimeout(state.messageTimer);
+    state.messageTimer = null;
+  }
+  if (kind === 'info') {
+    state.messageTimer = setTimeout(() => {
+      state.message = null;
+      state.messageTimer = null;
+      render();
+    }, 4000);
+  }
 }
 
 /* Иконка вида спорта — как в эталонном plan-wN.html. */
@@ -617,7 +648,7 @@ function showWorkout(workoutId) {
     : null;
 
   const actualBlock = linkedActual
-    ? `<div class="actual-block">
+    ? `<div class="actual-block linked" data-detail="${escapeHtml(linkedActual.id)}">
         <div class="lbl">Выполнено</div>
         <div class="line">
           <b>${((linkedActual.distance_m || 0) / 1000).toFixed(1)} км</b> ·
@@ -625,8 +656,10 @@ function showWorkout(workoutId) {
           ${linkedActual.hr_avg ? ` · HR ${linkedActual.hr_avg}` : ''}
         </div>
         <div class="when">${linkedActual.date} · ${escapeHtml(SPORT_NAME[linkedActual.sport] || linkedActual.sport)}</div>
-        <button class="action secondary" data-detail="${escapeHtml(linkedActual.id)}">Разбор тренировки</button>
-        <button class="action secondary" data-unlink="${escapeHtml(workout.id)}">Отвязать</button>
+        <div class="actual-actions">
+          <button class="action secondary" data-detail="${escapeHtml(linkedActual.id)}">Разбор тренировки</button>
+          <button class="action secondary" data-unlink="${escapeHtml(workout.id)}">Отвязать</button>
+        </div>
       </div>`
     : `<div class="actual-block empty">
         <div class="lbl">Факт не привязан</div>
@@ -711,22 +744,7 @@ function structureHtml(workout) {
   const steps = workout.steps || [];
   if (!steps.length) return '<div class="empty">Нет структуры</div>';
 
-  const blocks = [];
-  let current = null;
-
-  for (const step of steps) {
-    // Блок начинается, если сменилась группа или тип шага (упражнение / нет).
-    const isExercise = Boolean(step.label && step.focus_value?.reps);
-    if (current && (step.group !== current.group || isExercise !== current.isExercise)) {
-      current = {group: step.group, steps: [], isSet: false, isExercise};
-      blocks.push(current);
-    } else if (!current) {
-      current = {group: step.group, steps: [], isSet: false, isExercise};
-      blocks.push(current);
-    }
-    current.steps.push(step);
-  }
-
+  const blocks = groupBlocks(steps);
   return `<ol class="structure-list">${blocks.map(renderBlock).join('')}</ol>`;
 }
 
@@ -736,7 +754,7 @@ function renderBlock(block) {
 
   // Упражнения ОФП: у каждого шага есть название и повторы в focus_value.
   // Проверка именно по обоим полям: у разминки focus_value пустой.
-  if (steps.length > 1 && steps.every((s) => s.label && s.focus_value?.reps)) {
+  if (isExerciseBlock(steps)) {
     return `<li class="step step-ofp">
         <div class="step-head"><span class="step-phase">${escapeHtml(block.group || 'main')}</span></div>
         <ol class="ex-list">${steps.map((s, i) => `
@@ -753,14 +771,17 @@ function renderBlock(block) {
   }
 
   // Сет интервалов: у шагов есть round — это повторы
-  if (steps.length > 1 && steps.every((s) => s.round !== null && s.round !== undefined)) {
-    // Число повторов — из плана (3×800), а не количество шагов: в шагах
-    // есть и отдых, поэтому шагов вдвое больше.
-    const reps = steps[0].focus_value?.set_reps || steps.length;
+  if (isSetBlock(steps)) {
+    const reps = setReps(steps);
+    // Название сета часто уже содержит число повторов («3×800м»).
+    // Повторять его рядом — значит сказать одно и то же дважды.
+    const repsTag = nameHasReps(block.group)
+      ? ''
+      : `<span class="step-reps">${repsLabel(reps)}</span>`;
     return `<li class="step step-set">
         <div class="step-head">
-          <span class="step-phase">${escapeHtml(block.group || 'set')}</span>
-          <span class="step-reps">× ${reps}</span>
+          <span class="step-phase">${escapeHtml(block.group || 'сет')}</span>
+          ${repsTag}
         </div>
         <ol class="step-sublist">${steps.map(renderSubStep).join('')}</ol>
       </li>`;
@@ -845,7 +866,7 @@ async function load() {
     state.message = null;
   } catch (error) {
     await loadFromCache();
-    state.message = 'Сервер недоступен — показан последний известный снимок';
+    showMessage('Сервер недоступен — показан последний известный снимок', 'error');
   }
   render();
 }
@@ -907,15 +928,23 @@ async function flushOutbox() {
       if (isPermanentError(error)) {
         // Команда не выполнима — убираем, чтобы не блокировать очередь.
         await removeCommand(command.id);
-        state.message = error.message;
+        showMessage(error.message, 'error');
         continue;
       }
       if (error.code === 'version_conflict') {
-        state.message = 'Состояние изменилось — посмотрите заново';
-      } else if (!error.code) {
-        state.message = 'Нет связи с сервером — команда ждёт в очереди';
+        // Состояние изменилось на сервере: перечитываем и повторяем
+        // команду с новой версией. Плашка тут не помогала — она висела
+        // и ничего не делала.
+        await load();
+        command.expected_version = state.version;
+        await api.sendCommand(command);
+        await removeCommand(command.id);
+        continue;
+      }
+      if (!error.code) {
+        showMessage('Нет связи с сервером — команда ждёт в очереди', 'error');
       } else {
-        state.message = error.message;
+        showMessage(error.message, 'error');
       }
       break;
     }
@@ -927,6 +956,16 @@ async function flushOutbox() {
 
 document.addEventListener('click', async (event) => {
   const target = event.target;
+
+  // Тап по плашке сообщения — закрыть её
+  if (target.id === 'msg') {
+    state.message = null;
+    if (state.messageTimer) clearTimeout(state.messageTimer);
+    state.messageTimer = null;
+    render();
+    return;
+  }
+
   const slot = target.closest ? target.closest('[data-slot]') : null;
 
   // Тап по плашке тренировки — открыть детали
@@ -981,7 +1020,7 @@ document.addEventListener('click', async (event) => {
   }
 
   if (target.id === 'pull') {
-    state.message = 'Загружаю факт из Garmin…';
+    showMessage('Загружаю факт из Garmin…');
     render();
     await queueCommand({
       id: `pull-${Date.now()}`,
@@ -1000,7 +1039,7 @@ document.addEventListener('click', async (event) => {
   }
 
   if (target.id === 'close') {
-    state.message = 'Закрываю неделю…';
+    showMessage('Закрываю неделю…');
     render();
     await queueCommand({
       id: `close-${Date.now()}`,
@@ -1024,7 +1063,7 @@ window.addEventListener('popstate', (event) => {
 
 /* Разбор тренировки: сначала пробуем готовый, иначе разбираем FIT. */
 async function loadDetail(actualId) {
-  state.message = 'Загружаю разбор…';
+  showMessage('Загружаю разбор…');
   render();
   try {
     const detail = await api.getDetail(actualId);
@@ -1035,14 +1074,14 @@ async function loadDetail(actualId) {
     return;
   } catch (error) {
     if (error.code !== 'not_found') {
-      state.message = error.message;
+      showMessage(error.message, 'error');
       render();
       return;
     }
   }
 
   // Разбора нет — разбираем FIT через Garmin
-  state.message = 'Разбираю FIT-файл…';
+  showMessage('Разбираю FIT-файл…');
   render();
   await queueCommand({
     id: `fit-${actualId}-${Date.now()}`,
@@ -1059,7 +1098,7 @@ async function loadDetail(actualId) {
     const detail = await api.getDetail(actualId);
     state.detail = detail.data;
   } catch (error) {
-    state.message = 'Разбор не удался';
+    showMessage('Разбор не удался', 'error');
   }
   render();
   if (state.openWorkoutId) showWorkout(state.openWorkoutId);
@@ -1067,7 +1106,7 @@ async function loadDetail(actualId) {
 
 /* Связать факт с тренировкой. */
 async function linkActual(actualId, workoutId) {
-  state.message = 'Связываю…';
+  showMessage('Связываю…');
   render();
   await queueCommand({
     id: `link-${actualId}-${workoutId}-${Date.now()}`,
@@ -1086,7 +1125,7 @@ async function linkActual(actualId, workoutId) {
 
 /* Отвязать факт от тренировки. */
 async function unlinkActual(workoutId) {
-  state.message = 'Отвязываю…';
+  showMessage('Отвязываю…');
   render();
   await queueCommand({
     id: `unlink-${workoutId}-${Date.now()}`,

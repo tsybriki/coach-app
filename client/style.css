@@ -195,6 +195,14 @@ h3 {
   color: #e8d5b0;
   background: rgba(240, 180, 87, 0.09);
   border-left: 2px solid rgba(240, 180, 87, 0.55);
+  cursor: pointer;
+}
+
+/* Ошибка ждёт действия: её видно, пока пользователь не разберётся. */
+.msg.error {
+  color: #ffc4b0;
+  background: rgba(255, 107, 90, 0.09);
+  border-left-color: rgba(255, 107, 90, 0.6);
 }
 
 /* ------------------------------------------------------------------ нижняя навигация */
@@ -1056,6 +1064,21 @@ p.lead {
   margin-top: 3px;
   font-size: 11.5px;
   color: var(--muted);
+}
+
+/* Связанный факт — кликабельный: тап открывает разбор тренировки. */
+.actual-block.linked {
+  cursor: pointer;
+}
+
+.actual-block.linked:active {
+  background: rgba(126, 231, 135, 0.1);
+}
+
+.actual-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 /* Список факта: строки-кнопки для выбора */

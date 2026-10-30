@@ -1,0 +1,15 @@
+{
+  "name": "coach-app-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Клиент Coach App (PWA) и его тесты",
+  "scripts": {
+    "test": "node --import ./tests/client/helpers/register.mjs --test tests/client/",
+    "test:ui": "node --import ./tests/client/helpers/register.mjs --test tests/client/ui.test.mjs",
+    "test:unit": "node --test tests/client/chart.test.mjs tests/client/link_candidates.test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^26.0.0"
+  }
+}
