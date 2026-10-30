@@ -491,3 +491,32 @@ test('кнопка «назад» убирает уровень за уровн�
     'после второго «назад» ждём список недели');
   assert.ok(document.getElementById('cardWrap').classList.contains('hidden'));
 });
+
+test('переход в раздел работает по тапу на кнопку, иконку и подпись', async () => {
+  await loadApp();
+  openWeek();
+
+  // тап по самой кнопке
+  click(document.querySelector('#nav [data-screen="fact"]'));
+  assert.match(document.getElementById('appbar').textContent, /Факт/);
+
+  // тап по иконке внутри кнопки
+  click(document.querySelector('#nav [data-screen="season"] .ico'));
+  assert.match(document.getElementById('appbar').textContent, /Сезон/);
+
+  // тап по подписи внутри кнопки
+  click(document.querySelector('#nav [data-screen="athlete"] .lbl'));
+  assert.match(document.getElementById('appbar').textContent, /Атлет/);
+});
+
+test('тап по иконке раздела не остаётся на прежнем экране', async () => {
+  await loadApp();
+  openWeek();
+  const before = document.getElementById('appbar').textContent;
+
+  click(document.querySelector('#nav [data-screen="fact"] .ico'));
+
+  const after = document.getElementById('appbar').textContent;
+  assert.notEqual(before, after, 'экран не сменился');
+  assert.match(after, /Факт/);
+});

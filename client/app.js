@@ -1042,9 +1042,12 @@ async function flushOutbox() {
 
 document.addEventListener('click', async (event) => {
   const target = event.target;
+  // Ищем ближайшего предка с признаком: тап может прийти по иконке или
+  // подписи внутри кнопки — тогда target не сама кнопка.
+  const closest = (selector) => (target.closest ? target.closest(selector) : null);
 
   // Тап по плашке сообщения — закрыть её
-  if (target.id === 'msg') {
+  if (closest('#msg')) {
     state.message = null;
     if (state.messageTimer) clearTimeout(state.messageTimer);
     state.messageTimer = null;
@@ -1052,7 +1055,7 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
-  const slot = target.closest ? target.closest('[data-slot]') : null;
+  const slot = closest('[data-slot]');
 
   // Тап по плашке тренировки — открыть детали
   if (slot) {
@@ -1061,7 +1064,7 @@ document.addEventListener('click', async (event) => {
   }
 
   // Кнопка «назад»: убираем верхний уровень вложенности
-  if (target.id === 'backBtn') {
+  if (closest('#backBtn')) {
     if (state.detailId) {
       // с разбора — к тренировке
       showDetailBack();
@@ -1073,14 +1076,16 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
-  if (target.dataset.screen) {
-    state.screen = target.dataset.screen;
+  // Переход в раздел: тап по кнопке, её иконке или подписи.
+  const screen = closest('[data-screen]');
+  if (screen) {
+    state.screen = screen.dataset.screen;
     showPicker();
     render();
     return;
   }
 
-  if (target.id === 'refresh') {
+  if (closest('#refresh')) {
     await load();
     await flushOutbox();
     render();
@@ -1088,27 +1093,27 @@ document.addEventListener('click', async (event) => {
   }
 
   // Тап по факту — связать с открытой тренировкой
-  const fact = target.closest ? target.closest('[data-actual]') : null;
+  const fact = closest('[data-actual]');
   if (fact) {
     await linkActual(fact.dataset.actual, fact.dataset.workout);
     return;
   }
 
   // Отвязать факт от тренировки
-  const unlink = target.closest ? target.closest('[data-unlink]') : null;
+  const unlink = closest('[data-unlink]');
   if (unlink) {
     await unlinkActual(unlink.dataset.unlink);
     return;
   }
 
   // Разбор тренировки: загрузить детали или разобрать FIT
-  const detail = target.closest ? target.closest('[data-detail]') : null;
+  const detail = closest('[data-detail]');
   if (detail) {
     await loadDetail(detail.dataset.detail);
     return;
   }
 
-  if (target.id === 'pull') {
+  if (closest('#pull')) {
     showMessage('Загружаю факт из Garmin…');
     render();
     await queueCommand({
@@ -1127,7 +1132,7 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
-  if (target.id === 'close') {
+  if (closest('#close')) {
     showMessage('Закрываю неделю…');
     render();
     await queueCommand({
