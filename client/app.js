@@ -745,10 +745,13 @@ function showWorkout(workoutId) {
 
   const slug = slotSlug(workout);
   try {
-    // Если уже на уровне тренировки (в том числе вернулись с разбора) —
-    // заменяем текущую запись. Иначе `pushState` добавил бы лишнюю
-    // запись в историю, и второй «назад» не вернул бы к списку.
-    if (history.state && history.state.page === 'detail') {
+    // Запись в историю: если мы уже на уровне тренировки — заменяем
+    // текущую (переходим между тренировками), иначе добавляем новую.
+    // Разбор поверх тренировки — отдельная запись, см. showDetail.
+    const onWorkoutLevel = history.state
+      && history.state.page === 'detail'
+      && !history.state.actual;
+    if (onWorkoutLevel) {
       history.replaceState({page: 'detail', slot: workoutId}, '', '#' + slug);
     } else {
       history.pushState({page: 'detail', slot: workoutId}, '', '#' + slug);
@@ -803,7 +806,17 @@ function showPicker() {
  * верхний уровень, а не сбрасывает всё сразу.
  */
 function showDetailBack() {
+  const cameFromDetail = history.state && history.state.actual;
   state.detailId = null;
+
+  if (cameFromDetail) {
+    // Возврат — шаг назад по истории. Запись с разбором должна из
+    // истории уйти, а не перезаписаться: иначе второй «назад» не
+    // дойдёт до списка. Экраном займётся popstate.
+    history.back();
+    return;
+  }
+
   detailWrap.classList.add('hidden');
   if (state.openWorkoutId) {
     showWorkout(state.openWorkoutId);
@@ -1137,6 +1150,7 @@ document.addEventListener('click', async (event) => {
 window.addEventListener('popstate', (event) => {
   const current = event.state;
   if (current && current.page === 'detail' && current.actual) {
+    // Вперёд: открыт разбор.
     state.detailId = current.actual;
     detailWrap.classList.remove('hidden');
     cardWrap.classList.add('hidden');
@@ -1146,6 +1160,7 @@ window.addEventListener('popstate', (event) => {
     return;
   }
   if (current && current.page === 'detail') {
+    // Назад с разбора: мы на уровне тренировки.
     state.detailId = null;
     detailWrap.classList.add('hidden');
     showWorkout(current.slot);

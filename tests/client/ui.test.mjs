@@ -468,3 +468,26 @@ test('история: свайп назад убирает уровень за �
     'после второго свайпа назад ждём список недели');
   assert.ok(document.getElementById('cardWrap').classList.contains('hidden'));
 });
+
+test('кнопка «назад» убирает уровень за уровнем', async () => {
+  await loadApp({details: {'a-1': DETAIL}});
+  openWeek();
+  click(document.querySelectorAll('.slot')[0]);
+  await waitFor(() => document.getElementById('backBtn'));
+
+  click(document.querySelector('[data-detail]'));
+  await waitFor(() => !document.getElementById('detailWrap').classList.contains('hidden'));
+
+  // назад: разбор → тренировка
+  click(document.getElementById('backBtn'));
+  await waitFor(() => document.getElementById('detailWrap').classList.contains('hidden'));
+  assert.ok(!document.getElementById('cardWrap').classList.contains('hidden'),
+    'после первого «назад» ждём тренировку');
+
+  // назад: тренировка → список
+  click(document.getElementById('backBtn'));
+  await waitFor(() => document.getElementById('picker').classList.contains('hidden') === false);
+  assert.ok(!document.getElementById('picker').classList.contains('hidden'),
+    'после второго «назад» ждём список недели');
+  assert.ok(document.getElementById('cardWrap').classList.contains('hidden'));
+});
