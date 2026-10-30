@@ -9,6 +9,7 @@ const fixture = () => globalThis.__fixture || {};
 
 export function getSnapshot() {
   const f = fixture();
+  f.snapshotCalls = (f.snapshotCalls || 0) + 1;
   return Promise.resolve({version: f.version ?? 42, data: f.snapshot});
 }
 

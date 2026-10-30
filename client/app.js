@@ -797,7 +797,9 @@ function showPicker() {
   }
   renderScreen();
   bar.innerHTML = chromeBar();
-  window.scrollTo(0, 0);
+  // Прокрутка вверх — только если мы не наверху: лишний scrollTo
+  // вызывает пересчёт раскладки и задерживает кадр.
+  if (window.scrollY > 0) window.scrollTo(0, 0);
 }
 
 /* Назад с экрана разбора — к тренировке, из которой пришли.
@@ -903,49 +905,61 @@ function renderSubStep(step) {
 /* ------------------------------------------------------------------ данные */
 
 async function load() {
+  // Записи в кэш — в фоне: экран не должен ждать IndexedDB.
+  const cacheWrites = [];
   try {
-    const snapshot = await api.getSnapshot();
+    // Запросы идут параллельно, а не по очереди: пять последовательных
+    // round-trip'ов на телефоне — это и есть «несколько секунд».
+    const [snapshot, weeks, current] = await Promise.all([
+      api.getSnapshot(),
+      api.getWeeks().catch(() => null),
+      api.getCurrentWeek().catch(() => null),
+    ]);
+
     state.version = snapshot.version;
     state.season = snapshot.data.season;
     state.athlete = snapshot.data.athlete;
     state.stale = false;
     state.cachedAt = Date.now();
-    await putCache('snapshot', snapshot.data, snapshot.version);
+    // Кэш пишем после отрисовки: IndexedDB на телефоне медленный, и
+    // ждать его перед показом экрана незачем.
+    cacheWrites.push(putCache('snapshot', snapshot.data, snapshot.version));
 
-    try {
-      const weeks = await api.getWeeks();
+    if (weeks) {
       state.weeks = weeks.data.weeks || [];
-      await putCache('weeks', state.weeks, snapshot.version);
-    } catch (error) {
+      cacheWrites.push(putCache('weeks', state.weeks, snapshot.version));
+    } else {
       state.weeks = state.weeks || [];
     }
 
     // Текущая неделя — по дате на сервере: клиент не знает про начало сезона.
     // Ручной выбор в localStorage перекрывает.
-    if (!state.seasonWeek) {
-      const current = await api.getCurrentWeek();
+    if (!state.seasonWeek && current) {
       state.seasonWeek = current.data.season_week;
     }
+    const seasonWeek = state.seasonWeek;
 
     // недели может не быть — это не ошибка, а пустое состояние
-    try {
-      const week = await api.getWeek(state.seasonWeek);
-      state.week = week.data;
-      await putCache(`week:${state.seasonWeek}`, week.data, snapshot.version);
-    } catch (error) {
-      if (error.code === 'not_found') {
-        state.week = null;
-      } else {
+    const [week, actual] = await Promise.all([
+      api.getWeek(seasonWeek).catch((error) => {
+        if (error.code === 'not_found') return null;
         throw error;
-      }
+      }),
+      api.getActual(seasonWeek).catch(() => null),
+    ]);
+
+    if (week) {
+      state.week = week.data;
+      cacheWrites.push(putCache(`week:${seasonWeek}`, week.data, snapshot.version));
+    } else {
+      state.week = null;
     }
 
-    try {
-      const actual = await api.getActual(state.seasonWeek);
+    if (actual) {
       state.actual = actual.data.sessions || [];
-      await putCache(`actual:${state.seasonWeek}`, state.actual, snapshot.version);
-    } catch (error) {
-      state.actual = (await getCache(`actual:${state.seasonWeek}`))?.value || [];
+      cacheWrites.push(putCache(`actual:${seasonWeek}`, state.actual, snapshot.version));
+    } else {
+      state.actual = (await getCache(`actual:${seasonWeek}`))?.value || [];
     }
 
     state.summary = state.week ? state.week.summary : null;
@@ -955,6 +969,8 @@ async function load() {
     showMessage('Сервер недоступен — показан последний известный снимок', 'error');
   }
   render();
+  // Кэш дописываем после отрисовки, ошибки в нём ничего не ломают.
+  await Promise.allSettled(cacheWrites);
 }
 
 async function loadFromCache() {
@@ -1080,8 +1096,9 @@ document.addEventListener('click', async (event) => {
   const screen = closest('[data-screen]');
   if (screen) {
     state.screen = screen.dataset.screen;
+    // showPicker() уже перерисовывает экран и шапку — второй render()
+    // делал ту же работу дважды.
     showPicker();
-    render();
     return;
   }
 
@@ -1302,9 +1319,11 @@ window.addEventListener('offline', () => {
 });
 
 api.subscribe((event) => {
-  if (event.version !== state.version) {
-    load();
-  }
+  // Событие с той же версией — перезагрузка не нужна. Раньше сравнение
+  // шло с версией сезона, а клиент держит глобальную: расхождение было
+  // постоянным, и каждое событие перезагружало данные целиком.
+  if (event.version === state.version) return;
+  load();
 });
 
 /* Service worker: оболочка кэшируется, приложение открывается без сети. */

@@ -520,3 +520,35 @@ test('тап по иконке раздела не остаётся на пре�
   assert.notEqual(before, after, 'экран не сменился');
   assert.match(after, /Факт/);
 });
+
+test('переключение раздела не вызывает перезагрузку данных', async () => {
+  await loadApp();
+  openWeek();
+
+  const callsBefore = globalThis.__fixture.snapshotCalls || 0;
+
+  const started = Date.now();
+  click(document.querySelector('#nav [data-screen="season"] .ico'));
+  const elapsed = Date.now() - started;
+
+  assert.match(document.getElementById('appbar').textContent, /Сезон/);
+  assert.ok(elapsed < 500, `переключение заняло ${elapsed} мс — слишком долго`);
+  assert.equal(globalThis.__fixture.snapshotCalls || 0, callsBefore,
+    'переключение раздела перезагрузило данные — это и есть задержка');
+});
+
+test('событие с той же версией не перезагружает данные', async () => {
+  await loadApp();
+  const before = document.getElementById('appbar').textContent;
+
+  // SSE событие с актуальной версией — перезагрузки быть не должно
+  const subscribers = globalThis.__subscribers || [];
+  assert.ok(subscribers.length, 'подписчика SSE нет');
+  for (const subscriber of subscribers) {
+    subscriber({version: globalThis.__fixture.version, changed: []});
+  }
+
+  // экран не должен измениться и не должен сброситься
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(document.getElementById('appbar').textContent, before);
+});

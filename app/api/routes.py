@@ -443,13 +443,16 @@ def events(container: AppContainer = Depends(get_container)) -> StreamingRespons
     чтобы прокси не рвал соединение.
     """
     async def stream() -> AsyncIterator[str]:
-        last = container.season_repo.load().version
+        # Версия — та же глобальная, что в снапшоте и в ETag. Если SSE
+        # отдаёт версию сезона, клиент видит расхождение и перезагружает
+        # данные при каждом событии.
+        last = _version(container)
         yield f"data: {json.dumps({'version': last, 'changed': []})}\n\n"
         while True:
             import asyncio
 
             await asyncio.sleep(25)
-            current = container.season_repo.load().version
+            current = _version(container)
             if current != last:
                 last = current
                 yield f"data: {json.dumps({'version': current, 'changed': []})}\n\n"
@@ -459,7 +462,13 @@ def events(container: AppContainer = Depends(get_container)) -> StreamingRespons
     return StreamingResponse(
         stream(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            # Сжатие потока ломает поток: буферизация съедает heartbeat
+            # и события приходят пачками вместо сразу.
+            "Content-Encoding": "identity",
+        },
     )
 
 

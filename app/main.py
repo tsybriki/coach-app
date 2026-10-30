@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.dependencies import build_container
@@ -44,6 +45,11 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Сжатие: без него клиент тянет 53 КБ JS и 24 КБ CSS открытым текстом.
+    # На мобильном канале это заметная задержка первого открытия.
+    # Минимальный порог — 1 КБ, чтобы не сжимать мелкие ответы.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     app.include_router(router)
 
