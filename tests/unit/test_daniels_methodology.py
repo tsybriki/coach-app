@@ -473,11 +473,10 @@ def test_every_term_keeps_total_and_order(plan):
 
 
 def test_extra_week_takes_plan_from_phase_tail(plan):
-    """Лишняя неделя берёт план из хвоста своей фазы.
+    """Лишняя неделя берёт план с края фазы, куда она вставлена.
 
-    Кирилл, 30.10.2026: «последние две недели каждой фазы». Хвост фазы
-    программы — её третьи-четвёртые недели: II — 11-12, III — 17-18,
-    IV — 21-22 (третья и четвёртая, а не пятая и шестая).
+    Кирилл, 30.10.2026: «последние две недели каждой фазы». Фазы II и III
+    растут в конец — план из хвоста: II — 11-12, III — 17-18.
 
     Неделя программы 25 стоит на 13-й неделе сезона: лишние недели идут
     в конце своей фазы (фазы идут по порядку, а недели программы внутри
@@ -489,8 +488,6 @@ def test_extra_week_takes_plan_from_phase_tail(plan):
     assert plan.plan_week(29, 14) == (3, 13, 13)
     assert plan.plan_week(29, 20) == (3, 26, 17)
     assert plan.plan_week(29, 21) == (3, 29, 18)
-    # Фаза IV: одна лишняя неделя (27) — план из последней недели фазы.
-    assert plan.plan_week(29, 28) == (4, 27, 24)
 
 
 def test_long_term_phases_use_own_program_weeks(plan):
@@ -505,12 +502,60 @@ def test_long_term_phases_use_own_program_weeks(plan):
     assert plan.plan_week(29, 11) == (2, 12, 12)
 
 
-def test_single_extra_week_takes_last_week_of_phase(plan):
-    """Одна лишняя неделя фазы — план последней недели фазы.
+def test_phase_four_grows_at_the_front(plan):
+    """Фаза IV растёт в начало: неделя 23 сезона — лишняя.
 
-    При 29 неделях у фазы IV одна лишняя неделя (27): план из 24-й.
+    Кирилл, 31.10.2026: «в фазе 4 их нужно вставлять в начало». Фаза IV
+    растёт вперёд, чтобы соревновательные недели программы (23, 24) не
+    отодвигались от гонки.
     """
-    assert plan.plan_week(29, 28) == (4, 27, 24)
+    schedule = plan.schedule_for(29)
+    assert schedule is not None
+    # Неделя 23 сезона — первая неделя фазы IV, и она лишняя.
+    assert schedule.weeks_for(4) == (27, 19, 20, 21, 22, 23, 24)
+    assert plan.plan_week(29, 22) == (4, 27, 19)
+    # Неделя 24 сезона — программная 19, план из 19-й.
+    assert plan.plan_week(29, 23) == (4, 19, 19)
+    # Дальше фаза IV идёт по своим неделям программы подряд.
+    assert plan.plan_week(29, 24) == (4, 20, 20)
+    assert plan.plan_week(29, 28) == (4, 24, 24)
+
+
+def test_phase_four_repeats_first_two_weeks(plan):
+    """План лишней недели фазы IV — по кругу из 19 и 20.
+
+    Кирилл, 31.10.2026: «чередуя недели 19 и 20 из плана Дэниэлса, в
+    зависимости от того, сколько недель добавилась к фазе 4».
+    """
+    # Одна лишняя неделя фазы IV — план из 19-й.
+    # При 27 неделях лишние идут по кругу: 25 → II, 26 → III, 27 → IV.
+    assert plan.plan_week(27, 20) == (4, 27, 19)
+    # Две лишние — 19 и 20. При 30 неделях: 28 → II, 29 → III, 30 → IV.
+    assert plan.plan_week(30, 22) == (4, 27, 19)
+    assert plan.plan_week(30, 23) == (4, 30, 20)
+    # Три лишние — 19, 20, 19. При 33 неделях: 31 → II, 32 → III, 33 → IV.
+    schedule = plan.schedule_for(33)
+    assert schedule is not None
+    extras = [w for w in schedule.weeks_for(4) if w > 24]
+    assert [schedule.plan_for(w) for w in extras] == [19, 20, 19]
+
+
+def test_single_extra_week_takes_edge_week_of_phase(plan):
+    """Одна лишняя неделя фазы — план с края, куда она вставлена.
+
+    Фазы II и III растут в конец (планы 12 и 18), фаза IV — в начало
+    (план 19).
+    """
+    # Фаза II при одной лишней неделе — план из последней недели фазы.
+    single_ii = plan.schedule_for(25)
+    assert single_ii is not None
+    assert single_ii.plan_for(25) == 12
+    # Фаза III при одной лишней неделе — тоже последняя неделя фазы.
+    single_iii = plan.schedule_for(26)
+    assert single_iii is not None
+    assert single_iii.plan_for(26) == 18
+    # Фаза IV растёт в начало — план из первой недели фазы (19).
+    assert plan.plan_week(27, 20) == (4, 27, 19)
 
 
 def test_extra_week_plans_repeat_cyclically(plan):
@@ -532,14 +577,15 @@ def test_extra_week_plans_repeat_cyclically(plan):
 
 
 def test_extra_week_plan_comes_from_its_own_phase(plan):
-    """План лишней недели — из хвоста именно её фазы.
+    """План лишней недели — с края именно её фазы.
 
-    Хвост фазы: II — 11-12, III — 17-18, IV — 21-22 (две и больше лишних
-    недель) либо последняя неделя фазы (II — 12, III — 18, IV — 24), если
-    лишняя неделя одна.
+    Фазы II и III растут в конец: хвост II — 11-12, хвост III — 17-18,
+    одна лишняя неделя — последняя неделя фазы (12 и 18).
+
+    Фаза IV растёт в начало: план из 19-20, одна лишняя неделя — 19.
     """
-    tails = {2: {11, 12}, 3: {17, 18}, 4: {21, 22}}
-    last_of_phase = {2: 12, 3: 18, 4: 24}
+    tails = {2: {11, 12}, 3: {17, 18}, 4: {19, 20}}
+    single = {2: 12, 3: 18, 4: 19}
     for weeks in range(25, 40):
         schedule = plan.schedule_for(weeks)
         assert schedule is not None
@@ -547,10 +593,34 @@ def test_extra_week_plan_comes_from_its_own_phase(plan):
             extras = [w for w in program_weeks if w > 24]
             for program_week in extras:
                 plan_week = schedule.plan_for(program_week)
-                allowed = tails[phase] | {last_of_phase[phase]}
+                allowed = tails[phase] | {single[phase]}
                 assert plan_week in allowed, \
                     f"срок {weeks}: неделя {program_week} фазы {phase} — " \
-                    f"план не из хвоста фазы"
+                    f"план не с края фазы"
+
+
+def test_extra_weeks_stand_at_the_edge_of_their_phase(plan):
+    """Лишняя неделя стоит у края своей фазы.
+
+    Фазы II и III — в конце, фаза IV — в начале: фазы идут по порядку,
+    и прыжка фазы быть не может.
+    """
+    for weeks in range(25, 40):
+        schedule = plan.schedule_for(weeks)
+        assert schedule is not None
+        for phase, program_weeks in schedule.phases.items():
+            extras = [w for w in program_weeks if w > 24]
+            if not extras:
+                continue
+            own = [w for w in program_weeks if w <= 24]
+            if phase in plan.front_phases:
+                assert program_weeks[:len(extras)] == tuple(extras), \
+                    f"срок {weeks}: лишние недели фазы {phase} не в начале"
+                assert program_weeks[len(extras):] == tuple(own)
+            else:
+                assert program_weeks[-len(extras):] == tuple(extras), \
+                    f"срок {weeks}: лишние недели фазы {phase} не в конце"
+                assert program_weeks[:len(own)] == tuple(own)
 
 
 def test_regular_week_plan_is_itself(plan):

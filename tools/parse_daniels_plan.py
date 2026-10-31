@@ -15,6 +15,8 @@ parse_daniels_plan.py — разбор Табл. 19.1 (Daniels' Running Formula)
     <фаза> <неделя> cap <ЗОНА> <доля> [<потолок_км>]
     <фаза> <неделя> note <текст>
     MAP <фаза_сезона> <фаза_данiels> <первая_неделя> <последняя_неделя>
+    FRONT <фаза,...> — фазы, в которые лишняя неделя встаёт в НАЧАЛО
+    SINGLE <фаза>:<неделя> — план лишней недели, когда она одна
 
 Тело тренировки: части через « + ».
     Nx(...)             — повтор группы (N или N-M)
@@ -228,7 +230,8 @@ def parse(text: str) -> dict[str, Any]:
     base_schedule: dict[str, Any] | None = None
     extra_phases: tuple[int, ...] = ()
     extra_plans: dict[int, tuple[int, ...]] = {}
-    extra_last: dict[int, int] = {}
+    extra_single: dict[int, int] = {}
+    front_phases: tuple[int, ...] = ()
     program_weeks: dict[int, tuple[int, ...]] = {}
 
     for raw_line in text.splitlines():
@@ -260,10 +263,16 @@ def parse(text: str) -> dict[str, Any]:
                 )
             continue
 
-        if line.startswith("LAST "):
+        if line.startswith("SINGLE "):
             for item in line.split()[1:]:
                 phase_token, week = item.split(":")
-                extra_last[int(phase_token)] = int(week)
+                extra_single[int(phase_token)] = int(week)
+            continue
+
+        if line.startswith("FRONT "):
+            front_phases = tuple(
+                int(p) for p in line.split()[1].split(",") if p
+            )
             continue
 
         if line.startswith("PROGRAM "):
@@ -391,7 +400,8 @@ def parse(text: str) -> dict[str, Any]:
         "base_schedule": base_schedule,
         "extra_phases": list(extra_phases),
         "extra_plans": {str(k): list(v) for k, v in extra_plans.items()},
-        "extra_last": {str(k): v for k, v in extra_last.items()},
+        "extra_single": {str(k): v for k, v in extra_single.items()},
+        "front_phases": list(front_phases),
         "program_weeks": {str(k): list(v) for k, v in program_weeks.items()},
         "phases": phases,
     }

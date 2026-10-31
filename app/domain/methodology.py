@@ -246,7 +246,8 @@ class WeekSchedule:
 
     `plans` — из какой недели программы берётся план тренировки для
     каждой недели. Для обычных недели это сама неделя; для лишних —
-    неделя из хвоста фазы (см. `MethodPlan.extra_plans`).
+    неделя с того края фазы, куда вставлена лишняя неделя (см.
+    `MethodPlan.extra_plans`).
     """
 
     weeks: int
@@ -281,7 +282,8 @@ class MethodPlan:
     base_schedule: WeekSchedule | None = None
     extra_phases: tuple[int, ...] = ()
     extra_plans: dict[int, tuple[int, ...]] = field(default_factory=dict)
-    extra_last: dict[int, int] = field(default_factory=dict)
+    extra_single: dict[int, int] = field(default_factory=dict)
+    front_phases: tuple[int, ...] = ()
     program_weeks: dict[int, tuple[int, ...]] = field(default_factory=dict)
 
     def week(self, phase: int, week: int) -> PhaseWeek | None:
@@ -313,13 +315,17 @@ class MethodPlan:
         Длиннее базы: фазы собираются из своих недель программы **подряд**
         (I — недели 1-6, II — 7-12, III — 13-18, IV — 19-24), а лишние
         недели программы (25, 26, …) идут по кругу через фазы
-        `extra_phases` и дописываются в конец своей фазы. Например, при 29
-        неделях 5 лишних дают 2 в фазу II, 2 в фазу III и 1 в фазу IV.
-        Фаза I не растёт: это база, а не тренировка.
+        `extra_phases`. Фаза I не растёт: это база, а не тренировка.
 
-        План тренировки для лишней недели — из хвоста своей фазы:
-        одна лишняя неделя берёт последнюю неделю фазы (`extra_last`),
-        две и больше — хвост из `extra_plans` по кругу.
+        Лишняя неделя встаёт в **конец** своей фазы, а в фазах из
+        `front_phases` — в **начало**: фаза IV растёт вперёд, чтобы
+        соревновательные недели программы (23, 24) не отодвигались от
+        гонки. Например, при 29 неделях 5 лишних дают 2 в фазу II,
+        2 в фазу III и 1 в фазу IV.
+
+        План тренировки для лишней недели — с того края фазы, куда
+        вставлена лишняя неделя: одна лишняя неделя берёт `extra_single`,
+        две и больше — `extra_plans` по кругу.
         """
         base = self.base_schedule
         assert base is not None
@@ -346,17 +352,27 @@ class MethodPlan:
 
         plans: dict[int, int] = {}
         cycle = self.extra_phases or tuple(sorted(base.phases))
+        # Лишние недели сначала раскладываются по фазам, потом встают на
+        # своё место в фазе: в конец или (для фаз из `front_phases`) в
+        # начало. Порядок лишних недель внутри фазы — по порядку их
+        # появления, поэтому при нескольких лишних неделях фазы их планы
+        # идут по кругу с начала.
+        extras_by_phase: dict[int, list[int]] = {}
         for index, program_week in enumerate(
             range(base_weeks + 1, weeks_to_race + 1)
         ):
             phase = cycle[index % len(cycle)]
-            phases[phase] = (*phases.get(phase, ()), program_week)
-        # План лишней недели — из хвоста её фазы. Сколько лишних недель у
-        # фазы, столько и ступеней по хвосту: одна — последняя неделя фазы,
-        # две и больше — хвост из `extra_plans` по кругу.
-        extras_by_phase: dict[int, list[int]] = {}
-        for phase, weeks in phases.items():
-            extras_by_phase[phase] = [w for w in weeks if w > base_weeks]
+            extras_by_phase.setdefault(phase, []).append(program_week)
+
+        for phase, extras in extras_by_phase.items():
+            if phase in self.front_phases:
+                phases[phase] = (*extras, *phases.get(phase, ()))
+            else:
+                phases[phase] = (*phases.get(phase, ()), *extras)
+
+        # План лишней недели — с того края фазы, куда она вставлена.
+        # Сколько лишних недель у фазы, столько и ступеней: одна — из
+        # `extra_single`, две и больше — `extra_plans` по кругу.
         for phase, extras in extras_by_phase.items():
             tail = self._tail_for(phase, len(extras))
             for position, program_week in enumerate(extras):
@@ -364,21 +380,25 @@ class MethodPlan:
         return WeekSchedule(weeks=weeks_to_race, phases=phases, plans=plans)
 
     def _tail_for(self, phase: int, extras_count: int) -> tuple[int, ...]:
-        """Хвост фазы — источник планов для лишних недель.
+        """Край фазы — источник планов для лишних недель.
 
-        Одна лишняя неделя — последняя неделя фазы. Две и больше — две
-        недели из `extra_plans` (хвост фазы), по кругу.
+        Одна лишняя неделя — `extra_single` (неделя с того края, куда
+        вставлена лишняя неделя). Две и больше — `extra_plans` по кругу.
         """
         if extras_count <= 1:
-            last = self.extra_last.get(phase)
-            if last:
-                return (last,)
+            single = self.extra_single.get(phase)
+            if single:
+                return (single,)
         tail = self.extra_plans.get(phase) or ()
         if tail:
             return tail
-        # Запасной путь: последние недели фазы из её списка.
+        # Запасной путь: недели фазы с края, куда вставлена лишняя неделя.
         weeks = self.base_schedule.phases.get(phase, ()) if self.base_schedule else ()
-        return weeks[-1:] if weeks else ()
+        if not weeks:
+            return ()
+        if phase in self.front_phases:
+            return weeks[:2]
+        return weeks[-2:]
 
     def program_week(self, weeks_to_race: int, offset: int) -> tuple[int, int] | None:
         """Неделя программы для недели сезона.
