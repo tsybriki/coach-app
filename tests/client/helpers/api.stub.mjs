@@ -57,6 +57,11 @@ export function getDetail(actualId) {
   return Promise.resolve({version: f.version ?? 42, data: detail});
 }
 
+export function getSeason() {
+  const f = fixture();
+  return Promise.resolve({version: f.version ?? 42, data: f.seasonPlan || {}});
+}
+
 export function sendCommand(command) {
   const f = fixture();
   const handler = f.onCommand;

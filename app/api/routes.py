@@ -24,7 +24,7 @@ from app.domain.entities import (
     WeekSummary,
     WorkoutDetail,
 )
-from app.domain.enums import CommandType
+from app.domain.enums import CommandType, PlanStatus
 from app.ports.storage import (
     DuplicateExternalIdError,
     ExternalSourceError,
@@ -224,8 +224,49 @@ def athlete(container: AppContainer = Depends(get_container)) -> JSONResponse:
 
 @router.get("/season")
 def season(container: AppContainer = Depends(get_container)) -> JSONResponse:
-    """Скелет сезона: фазы и недели без деталей."""
+    """Скелет сезона: фазы, недели макро-плана и загруженные недели.
+
+    Макро-план — весь сезон целиком: что в каждой неделе задумано, до
+    всякой раскладки по слотам. Загруженные недели — те, что уже есть в
+    хранилище: по ним видно, что закрыто, а что ещё впереди.
+    """
     loaded = container.season_repo.load()
+    plan = next((p for p in loaded.plans if p.status is PlanStatus.ACTIVE), None)
+    stored = {w.season_week: w for w in container.season_repo.weeks()}
+
+    macro_weeks: list[dict[str, Any]] = []
+    if plan is not None:
+        for entry in plan.macro_weeks:
+            week = stored.get(entry.season_week)
+            macro_weeks.append({
+                "season_week": entry.season_week,
+                "phase_id": entry.phase_id,
+                "focus": entry.focus,
+                "goal_text": entry.goal_text,
+                "run_km": entry.run_km,
+                "total_h": entry.total_h,
+                "sessions_target": entry.sessions_target,
+                "deload": entry.deload,
+                "status": week.status.value if week else None,
+                "has_fact": bool(week and week.summary),
+            })
+
+    phases = []
+    if plan is not None:
+        for phase in plan.phases:
+            weeks = [w.season_week for w in plan.macro_weeks
+                     if w.phase_id == phase.id]
+            phases.append({
+                "id": phase.id,
+                "objective": phase.objective,
+                "focus": phase.focus,
+                "week_from": min(weeks) if weeks else None,
+                "week_to": max(weeks) if weeks else None,
+                "load_range": list(phase.load_range) if phase.load_range else None,
+                "volume_range": (list(phase.volume_range)
+                                 if phase.volume_range else None),
+            })
+
     return ok(container, {
         "id": loaded.id,
         "horizon": {
@@ -235,9 +276,13 @@ def season(container: AppContainer = Depends(get_container)) -> JSONResponse:
         },
         "plans": [
             {"id": p.id, "status": p.status.value,
-             "goal": p.goal.target_friendly}
+             "goal": p.goal.target_friendly,
+             "race_date": p.goal.race_date.isoformat(),
+             "venue": p.goal.venue}
             for p in loaded.plans
         ],
+        "phases": phases,
+        "macro_weeks": macro_weeks,
     })
 
 

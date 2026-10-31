@@ -96,7 +96,7 @@
 </head><body>
 <header>
 <h1>Модель домена — спецификация</h1>
-<div class="meta">Coach App · v3.7 · 20 сущностей · 44 инвариантов (44 подтверждено) · 6 вопросов</div>
+<div class="meta">Coach App · v3.8 · 21 сущностей · 44 инвариантов (44 подтверждено) · 6 вопросов</div>
 <div class="meta">состав: диаграмма · сущности · связи · вопросы</div>
 </header>
 <nav>
@@ -258,6 +258,16 @@
 <li><code>load_range</code> · <code>volume_range</code> · <code>intensity_pct_mean</code> · <code>deload_weeks[]</code></li>
 <li><code>sport_weights{}</code> — распределение внутри фазы</li>
 <li><code>slot_overrides[]</code></li>
+</ul></div>
+<div class="ent">
+<div class="eh"><span>MacroWeek</span><span class="k">value</span></div>
+<div class="role">Неделя макро-плана: что в неделе задумано, до всякой раскладки. Не <code>Week</code> — неделя это конкретное расписание с запросами и шагами, а макро-неделя строка плана на весь сезон.</div>
+<ul class="pl">
+<li><code>season_week</code> · <code>phase_id</code> — фаза, в которую неделя попадает</li>
+<li><code>focus</code> · <code>goal_text</code> — что развиваем: «Развиваем VO2max»</li>
+<li><code>run_km</code> · <code>total_h</code> · <code>sessions_target</code> · <code>deload</code></li>
+<li>Хранится одна на неделю сезона, включая будущие: план известен целиком, а не по мере наступления недели</li>
+<li>Факта у макро-недели нет: он живёт в <code>Week.summary</code>. Неделя сезона без закрытой <code>Week</code> — факта не имеет</li>
 </ul></div>
 <div class="ent">
 <div class="eh"><span>Week</span><span class="k">aggregate</span></div>
@@ -435,6 +445,7 @@
 <tr><td>Plan</td><td>Goal</td><td>владение</td><td>1 → 1</td></tr>
 <tr><td>Plan</td><td>PlanModel</td><td>ссылка</td><td>N → N</td></tr>
 <tr><td>Plan</td><td>Phase</td><td>владение</td><td>1 → N</td></tr>
+<tr><td>Plan</td><td>MacroWeek</td><td>макро-план</td><td>1 → N</td></tr>
 <tr><td>Plan</td><td>Week</td><td>владение</td><td>1 → N</td></tr>
 <tr><td>Phase</td><td>SlotOverride</td><td>перекрытие</td><td>1 → N</td></tr>
 <tr><td>Season</td><td>Command</td><td>журнал</td><td>1 → N</td></tr>
@@ -649,7 +660,7 @@
 <li>Где и как храним? Формат и объём: JSON-файлы или БД; правило атомарной записи и миграции схемы.</li>
 </ol>
 <p>---</p>
-<p>Coach App · модель домена v3.7</p>
+<p>Coach App · модель домена v3.8</p>
 </section>
 <hr>
 <p class="end">Coach App · модель домена</p>

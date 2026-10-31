@@ -36,6 +36,8 @@ from app.domain.entities import (  # noqa: E402
     Athlete,
     Goal,
     LoadModel,
+    MacroWeek,
+    Phase,
     Plan,
     Request,
     Season,
@@ -224,6 +226,56 @@ def macro_week(season_plan: dict[str, Any], season_week: int) -> dict[str, Any]:
     return {}
 
 
+def build_phases(season_plan: dict[str, Any]) -> list[Phase]:
+    """Фазы плана — из плана сезона пайплайна.
+
+    Только фазы с неделями сезона: у гонок и переходов их нет, и они
+    остаются в `phase_ids` без подробностей.
+    """
+    phases: list[Phase] = []
+    for entry in season_plan.get("phases") or []:
+        phases.append(Phase(
+            id=entry.get("id", ""),
+            objective=entry.get("goal", ""),
+            focus=entry.get("focus"),
+            load_range=_range2(entry.get("load_range_h")),
+            volume_range=_range2(entry.get("run_km_range")),
+            intensity_pct_mean=entry.get("intensity_pct_mean"),
+            deload_weeks=tuple(entry.get("deload_weeks") or ()),
+        ))
+    return phases
+
+
+def build_macro_weeks(season_plan: dict[str, Any]) -> list[MacroWeek]:
+    """Недели макро-плана — из `weekly_macro` плана сезона пайплайна.
+
+    Импорт ничего не вычисляет: берём то, что посчитал пайплайн. Недель
+    может быть меньше, чем весь горизонт (макро кончается гонкой) — это
+    нормально, план сезона известен не на весь горизонт.
+    """
+    weeks: list[MacroWeek] = []
+    for entry in season_plan.get("weekly_macro") or []:
+        quality = entry.get("quality") or {}
+        weeks.append(MacroWeek(
+            season_week=int(entry.get("season_week", 0)),
+            phase_id=entry.get("phase", ""),
+            focus=entry.get("quality", {}).get("goal", "") or quality.get("goal", ""),
+            goal_text=quality.get("goal_text", "") or "",
+            run_km=float(entry.get("run_km", 0) or 0),
+            total_h=float(entry.get("total_h", 0) or 0),
+            sessions_target=int(entry.get("sessions_target", 0) or 0),
+            deload=bool(entry.get("deload", False)),
+        ))
+    return weeks
+
+
+def _range2(value: Any) -> tuple[float, float] | None:
+    """Список из двух чисел → пара. Не список — None."""
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        return None
+    return (float(value[0]), float(value[1]))
+
+
 # ------------------------------------------------------------------ сборка сущностей
 
 
@@ -263,6 +315,8 @@ def build_season(season_plan: dict[str, Any],
         period_end=end,
         load_budget={"hours_range": [0.0, 20.0]},
         phase_ids=[p["id"] for p in season_plan.get("phases") or []],
+        phases=build_phases(season_plan),
+        macro_weeks=build_macro_weeks(season_plan),
     )
 
     return Season(
@@ -690,7 +744,14 @@ def main() -> int:
     write_methodology(storage, season_plan, athlete_data)
 
     week = build_week(plan, season_plan)
-    storage.put_week(week, expected_version=storage.version())
+    # Закрытая неделя не меняется (I23): импорт не должен стирать её
+    # саммари и статус. План недели при этом может устареть — но
+    # закрытое уже не пересчитывается.
+    stored = storage.week(week.season_week)
+    if stored is not None and stored.status is WeekStatus.CLOSED:
+        print(f"неделя W{week.season_week} закрыта — импорт её не трогает")
+    else:
+        storage.put_week(week, expected_version=storage.version())
 
     sessions = build_sessions(load_json(STATE / "actual_load_cache.json"), start)
     sessions = preserve_links(storage, sessions)

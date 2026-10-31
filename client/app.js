@@ -34,6 +34,7 @@ const state = {
   detailId: null,        // разбор какой факта открыт
   weeks: [],
   summary: null,
+  seasonPlan: null,      // макро-план сезона: фазы и недели целиком
   stale: false,
   cachedAt: null,
   online: navigator.onLine,
@@ -404,24 +405,134 @@ function factList(workout) {
   return facts || `<p>${SPORT_NAME[workout.sport] || workout.sport}: активностей нет</p>`;
 }
 
+/* Цвета фаз — по фокусу недели. Читаемая шкала, а не украшение:
+ * по вертикали сезона видно, что тренируется. */
+const PHASE_COLOR = {
+  run_base: '#7ec8e3',
+  run_build: '#f0c674',
+  run_specific: '#d8a0ff',
+  run_taper: '#ff9b6a',
+  tri_base: '#5cd6c0',
+  tri_build: '#7ee787',
+  tri_specific: '#7aa2ff',
+  tri_taper: '#d8a0ff',
+  transition: '#9aa3b2',
+  race_run: '#ff6b5a',
+  race_tri: '#ff6b5a',
+};
+
+const PHASE_NAME = {
+  run_base: 'База',
+  run_build: 'Порог',
+  run_specific: 'Специфика',
+  run_taper: 'Тапер',
+  tri_base: 'База триатлона',
+  tri_build: 'Связки',
+  tri_specific: 'Специфика триатлона',
+  tri_taper: 'Тапер триатлона',
+  transition: 'Переход',
+  race_run: 'Гонка',
+  race_tri: 'Гонка',
+};
+
+/* Экран сезона: макро-план целиком.
+ *
+ * Что видно: фазы сезона, а в каждой — недели с фокусом и объёмом.
+ * Закрытые недели — с фактом; тап по неделе открывает её.
+ */
 function screenSeason() {
-  if (!state.season) return empty('Сезон ещё не загружена');
-  const s = state.season;
-  const plans = (s.plans || []).map((p) =>
-    `<li><div class="row"><span>${escapeHtml(p.goal || p.id)}</span>
-      <span class="num">${escapeHtml(p.status)}</span></div>
-      ${p.race_date ? `<div class="sub">гонка ${p.race_date}</div>` : ''}</li>`).join('');
+  const plan = state.seasonPlan;
+  if (!plan || !plan.macro_weeks || !plan.macro_weeks.length) {
+    return `${messageBlock()}<h2>Сезон</h2>`
+      + empty('Макро-план сезона ещё не загружен');
+  }
 
-  const weeks = state.weeks || [];
-  const weekRows = weeks.map((w) =>
-    `<li><div class="row"><span>W${w.season_week}</span>
-      <span class="num">${w.start.slice(5)} — ${w.end.slice(5)}</span></div></li>`).join('');
+  const goal = (plan.plans || []).find((p) => p.status === 'active') || {};
+  const race = goal.race_date
+    ? `<div class="card goal"><h3>Цель сезона</h3>
+        <p class="lead">${escapeHtml(goal.goal || '')}</p>
+        <p class="lead">${escapeHtml(goal.venue || '')} · ${escapeHtml(goal.race_date)}</p>
+      </div>`
+    : '';
 
-  return `${messageBlock()}<h2>Сезон</h2>
-    <div class="sub">${s.horizon.start} — ${s.horizon.end} · ${s.horizon.season_week_count} недель</div>
-    <div class="card"><h3>Планы</h3><ul class="plain">${plans || '<li>нет</li>'}</ul></div>
-    <div class="card"><h3>Загруженные недели</h3>
-      <ul class="plain">${weekRows || '<li>недель пока нет</li>'}</ul></div>`;
+  // Недели по фазам — в порядке фаз плана, недели внутри фазы по номеру.
+  const byPhase = new Map();
+  for (const week of plan.macro_weeks) {
+    if (!byPhase.has(week.phase_id)) byPhase.set(week.phase_id, []);
+    byPhase.get(week.phase_id).push(week);
+  }
+
+  const phaseBlocks = (plan.phases || []).map((phase) => {
+    const weeks = byPhase.get(phase.id) || [];
+    if (!weeks.length) return '';
+    const color = PHASE_COLOR[phase.id] || '#9aa3b2';
+    const rows = weeks.map((week) => macroWeekRow(week, color)).join('');
+    const range = phase.week_from && phase.week_to
+      ? `недели ${phase.week_from}–${phase.week_to}`
+      : '';
+    return `<div class="card phase-block">
+      <div class="phase-head">
+        <span class="dot" style="background:${color}"></span>
+        <span class="phase-name">${escapeHtml(PHASE_NAME[phase.id] || phase.id)}</span>
+        <span class="phase-range">${escapeHtml(range)}</span>
+      </div>
+      <p class="lead">${escapeHtml(phase.objective || '')}</p>
+      ${rows}
+    </div>`;
+  }).join('');
+
+  return `${messageBlock()}<h2>Макро-план сезона</h2>
+    <div class="sub">${plan.horizon.start} — ${plan.horizon.end} ·
+      ${plan.macro_weeks.length} недель в плане ·
+      ${plan.horizon.season_week_count} недель в сезоне</div>
+    ${race}
+    ${phaseBlocks}`;
+}
+
+/* Неделя макро-плана: фокус, объём, состояние.
+ *
+ * Закрытая неделя — с фактом; тап открывает её. Текущая и будущие —
+ * без факта: план ещё не исполнен, и выдумывать итог нельзя.
+ */
+function macroWeekRow(week, color) {
+  const closed = week.status === 'closed';
+  const current = week.season_week === state.seasonWeek;
+  const badge = closed
+    ? `<span class="badge done">факт</span>`
+    : (week.status
+      ? `<span class="badge">${escapeHtml(WEEK_STATUS[week.status] || week.status)}</span>`
+      : (current ? '<span class="badge current">сейчас</span>' : ''));
+  const volume = week.run_km
+    ? `<span class="vol">${Math.round(week.run_km)} км · ${formatHours(week.total_h * 60)} ч</span>`
+    : '';
+  const clickable = closed || week.status;
+  const tag = clickable ? 'button' : 'div';
+  const attrs = clickable
+    ? ` data-week="${week.season_week}" id="season-week-${week.season_week}"`
+    : '';
+  const cls = `macro-week${closed ? ' closed' : ''}${current ? ' current' : ''}`;
+  return `<${tag} class="${cls}"${attrs}>
+      <span class="wk">W${week.season_week}</span>
+      <span class="wk-body">
+        <span class="wk-focus">${escapeHtml(week.goal_text || week.focus || '')}</span>
+        <span class="wk-meta">${volume}</span>
+      </span>
+      ${badge}
+    </${tag}>`;
+}
+
+/* Открыть неделю из макро-плана.
+ *
+ * Неделя выбирается и грузится: у клиента один снимок недели, и
+ * переключение на другую неделю должно её подтянуть. Возврат на сезон —
+ * кнопка «назад» в шапке: неделя → сезон.
+ */
+async function openSeasonWeek(seasonWeek) {
+  localStorage.setItem('coach-app-week', String(seasonWeek));
+  state.seasonWeek = seasonWeek;
+  state.screen = 'week';
+  await load();
+  showPicker();
 }
 
 function screenFact() {
@@ -1013,10 +1124,11 @@ async function load() {
   try {
     // Запросы идут параллельно, а не по очереди: пять последовательных
     // round-trip'ов на телефоне — это и есть «несколько секунд».
-    const [snapshot, weeks, current] = await Promise.all([
+    const [snapshot, weeks, current, seasonPlan] = await Promise.all([
       api.getSnapshot(),
       api.getWeeks().catch(() => null),
       api.getCurrentWeek().catch(() => null),
+      api.getSeason().catch(() => null),
     ]);
 
     state.version = snapshot.version;
@@ -1027,6 +1139,13 @@ async function load() {
     // Кэш пишем после отрисовки: IndexedDB на телефоне медленный, и
     // ждать его перед показом экрана незачем.
     cacheWrites.push(putCache('snapshot', snapshot.data, snapshot.version));
+
+    if (seasonPlan) {
+      state.seasonPlan = seasonPlan.data;
+      cacheWrites.push(putCache('season-plan', seasonPlan.data, snapshot.version));
+    } else {
+      state.seasonPlan = (await getCache('season-plan'))?.value || null;
+    }
 
     if (weeks) {
       state.weeks = weeks.data.weeks || [];
@@ -1201,6 +1320,14 @@ document.addEventListener('click', async (event) => {
     // showPicker() уже перерисовывает экран и шапку — второй render()
     // делал ту же работу дважды.
     showPicker();
+    return;
+  }
+
+  // Неделя макро-плана: открыть неделю. Только те, что уже заведены:
+  // у будущей недели нет ни плана, ни факта — открывать нечего.
+  const seasonWeek = closest('[data-week]');
+  if (seasonWeek) {
+    await openSeasonWeek(Number(seasonWeek.dataset.week));
     return;
   }
 

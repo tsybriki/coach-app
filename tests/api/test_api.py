@@ -16,13 +16,19 @@ from fastapi.testclient import TestClient
 from app.adapters.storage.files import FileStorage
 from app.domain.entities import (
     Assignment,
+    Goal,
+    MacroWeek,
+    Phase,
+    Plan,
     Request,
     Season,
     Step,
     Week,
+    WeekSummary,
     Workout,
 )
 from app.domain.enums import (
+    PlanStatus,
     Sport,
     StepRole,
     TargetType,
@@ -80,6 +86,70 @@ def seed_week(root: Path) -> int:
         expected_version=0,
     )
     return storage.put_week(week, expected_version=1)
+
+
+def seed_macro_plan(root: Path) -> int:
+    """Положить сезон с макро-планом: фазы и недели.
+
+    Макро-план нужен вкладке «Сезон»: без него нечего показывать.
+    """
+    storage = FileStorage(root)
+    storage.save(
+        Season(id="S1", horizon_start=date(2026, 10, 11),
+               horizon_end=date(2027, 9, 12), season_week_count=49, plans=[]),
+        expected_version=0,
+    )
+    goal = Goal(id="g1", discipline="run_10k", race_date=date(2027, 4, 18),
+                metric_type="time_sec", metric_target=2400.0,
+                target_friendly="40:00", venue="S25 Berlin 10K")
+    plan = Plan(
+        id="g1", status=PlanStatus.ACTIVE, goal=goal,
+        period_start=date(2026, 10, 11), period_end=date(2027, 9, 12),
+        phases=[
+            Phase(id="run_base", objective="Поднимаем базовый объём",
+                  load_range=(4.96, 9.74), volume_range=(27.0, 50.0)),
+            Phase(id="run_taper", objective="Снижаем объём"),
+        ],
+        macro_weeks=[
+            MacroWeek(season_week=1, phase_id="run_base",
+                      focus="progression", goal_text="Развиваем базу",
+                      run_km=27.0, total_h=4.99, sessions_target=6),
+            MacroWeek(season_week=2, phase_id="run_base",
+                      focus="vo2max", goal_text="Развиваем VO2max",
+                      run_km=35.0, total_h=6.24, sessions_target=7),
+            MacroWeek(season_week=3, phase_id="run_taper",
+                      focus="taper_race_pace", goal_text="Снимаем объём",
+                      run_km=16.0, total_h=3.15, sessions_target=5,
+                      deload=True),
+        ],
+    )
+    return storage.save(
+        Season(id="S1", horizon_start=date(2026, 10, 11),
+               horizon_end=date(2027, 9, 12), season_week_count=49,
+               plans=[plan]),
+        expected_version=storage.version(),
+    )
+
+
+def seed_stored_week(storage: FileStorage, season_week: int,
+                     status: WeekStatus) -> None:
+    """Положить неделю в хранилище с нужным статусом."""
+    step = Step(id="s1", role=StepRole.WORK, sport=Sport.RUN,
+                target_type=TargetType.TIME, target_value=60.0, duration_min=60.0)
+    request = Request(id="r1", sport=Sport.RUN, kind="easy", focus="base",
+                      duration_min=60)
+    week = Week(
+        id=f"W{season_week}", plan_id="p1", season_week=season_week,
+        start=date(2026, 10, 11), end=date(2026, 10, 17),
+        status=status, requests=[request],
+        assignments=[Assignment(request_id="r1", slot_id="s1", start="18:45",
+                                duration_min=60)],
+        workouts=[Workout(id="w1", request_id="r1", sport=Sport.RUN, kind="easy",
+                          focus="base", steps=[step], duration_min=60.0)],
+        summary=WeekSummary(week_id=f"W{season_week}")
+        if status is WeekStatus.CLOSED else None,
+    )
+    storage.put_week(week, expected_version=storage.version())
 
 
 # ------------------------------------------------------------------ чтение
@@ -262,6 +332,82 @@ def test_pull_fact_degrades_when_garmin_unavailable(client: TestClient, data_roo
         "expected_version": 2,
     })
     assert response.status_code == 503
+
+
+# ------------------------------------------------------------------ макро-план
+
+
+def test_season_serves_macro_plan(client: TestClient, data_root: Path):
+    """Вкладка «Сезон» получает макро-план: фазы и недели целиком."""
+    seed_macro_plan(data_root)
+    response = client.get("/api/v1/season")
+    assert response.status_code == 200
+    data = response.json()["data"]
+
+    assert len(data["macro_weeks"]) == 3, "не все недели макро-плана отданы"
+    week = data["macro_weeks"][0]
+    assert week["season_week"] == 1
+    assert week["phase_id"] == "run_base"
+    assert week["goal_text"] == "Развиваем базу"
+    assert week["run_km"] == 27.0
+    assert week["total_h"] == 4.99
+    assert week["sessions_target"] == 6
+    assert week["status"] is None, "будущей недели нет в хранилище"
+    assert week["has_fact"] is False
+
+    phases = {p["id"]: p for p in data["phases"]}
+    assert set(phases) == {"run_base", "run_taper"}
+    assert phases["run_base"]["objective"] == "Поднимаем базовый объём"
+    assert phases["run_base"]["week_from"] == 1
+    assert phases["run_base"]["week_to"] == 2
+    assert phases["run_taper"]["week_from"] == 3
+
+
+def test_season_marks_closed_week_with_fact(client: TestClient, data_root: Path):
+    """Закрытая неделя в макро-плане: помечена и помечена как с фактом."""
+    seed_macro_plan(data_root)
+    storage = FileStorage(data_root)
+    seed_stored_week(storage, 1, WeekStatus.CLOSED)
+
+    data = client.get("/api/v1/season").json()["data"]
+    first = data["macro_weeks"][0]
+    assert first["status"] == "closed"
+    assert first["has_fact"] is True
+
+    others = data["macro_weeks"][1:]
+    assert all(w["has_fact"] is False for w in others), (
+        "у будущей недели факта быть не может")
+
+
+def test_season_without_macro_plan_is_empty(client: TestClient, data_root: Path):
+    """Сезон без макро-плана — пустой список, не ошибка."""
+    seed_week(data_root)
+    data = client.get("/api/v1/season").json()["data"]
+    assert data["macro_weeks"] == []
+    assert data["phases"] == []
+
+
+def test_season_survives_macro_plan_roundtrip(client: TestClient, data_root: Path):
+    """Макро-план переживает запись и чтение: фазы и недели на месте."""
+    seed_macro_plan(data_root)
+    storage = FileStorage(data_root)
+    loaded = storage.load()
+    plan = loaded.plans[0]
+
+    assert len(plan.phases) == 2
+    assert plan.phases[0].objective == "Поднимаем базовый объём"
+    assert plan.phases[0].load_range == (4.96, 9.74)
+    assert plan.phases[0].volume_range == (27.0, 50.0)
+    assert len(plan.macro_weeks) == 3
+    assert plan.macro_weeks[2].deload is True
+    week_two = plan.macro_week(2)
+    assert week_two is not None
+    assert week_two.goal_text == "Развиваем VO2max"
+    assert plan.macro_week(99) is None
+    taper = plan.phase_by_id("run_taper")
+    assert taper is not None
+    assert taper.objective == "Снижаем объём"
+    assert plan.phase_by_id("нет") is None
 
 
 # ------------------------------------------------------------------ жизненный цикл

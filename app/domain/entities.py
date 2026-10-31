@@ -486,6 +486,35 @@ class Phase:
 
 
 @dataclass
+class MacroWeek:
+    """Неделя макро-плана: что в неделе задумано, до всякой раскладки.
+
+    Не `Week`: неделя — это конкретное расписание с запросами и шагами,
+    а макро-неделя — строка плана на весь сезон. Хранится одна на неделю
+    сезона, включая будущие: план известен целиком, а не по мере
+    наступления недели.
+    """
+
+    season_week: int
+    phase_id: str
+    focus: str = ""
+    goal_text: str = ""
+    run_km: float = 0.0
+    total_h: float = 0.0
+    sessions_target: int = 0
+    deload: bool = False
+
+    def validate(self) -> None:
+        """Проверить инварианты макро-недели."""
+        if self.season_week < 1:
+            raise InvariantViolationError(
+                "macro", f"неделя макро {self.season_week}: номер вне сезона")
+        if self.run_km < 0 or self.total_h < 0:
+            raise InvariantViolationError(
+                "macro", f"неделя макро {self.season_week}: отрицательный объём")
+
+
+@dataclass
 class Plan:
     """План: одна цель, последовательные фазы, один активный план на сезон."""
 
@@ -498,6 +527,22 @@ class Plan:
     load_budget: dict[str, Any] = field(default_factory=dict)
     phase_ids: list[str] = field(default_factory=list)
     transition: dict[str, Any] = field(default_factory=dict)
+    phases: list[Phase] = field(default_factory=list)
+    macro_weeks: list[MacroWeek] = field(default_factory=list)
+
+    def phase_by_id(self, phase_id: str) -> Phase | None:
+        """Фаза по идентификатору. Нет — None, не исключение."""
+        for phase in self.phases:
+            if phase.id == phase_id:
+                return phase
+        return None
+
+    def macro_week(self, season_week: int) -> MacroWeek | None:
+        """Неделя макро-плана по номеру недели сезона."""
+        for entry in self.macro_weeks:
+            if entry.season_week == season_week:
+                return entry
+        return None
 
 
 @dataclass

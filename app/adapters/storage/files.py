@@ -31,6 +31,8 @@ from app.domain.entities import (
     Equipment,
     Goal,
     LoadModel,
+    MacroWeek,
+    Phase,
     Plan,
     Request,
     Season,
@@ -680,7 +682,44 @@ def _plan_from_dict(data: dict[str, Any]) -> Plan:
         load_budget=data.get("load_budget", {}),
         phase_ids=data.get("phase_ids", []),
         transition=data.get("transition", {}),
+        phases=[_phase_from_dict(p) for p in data.get("phases", [])],
+        macro_weeks=[_macro_week_from_dict(m) for m in data.get("macro_weeks", [])],
     )
+
+
+def _phase_from_dict(data: dict[str, Any]) -> Phase:
+    """Фаза из словаря. Числа в диапазонах — списки, как в JSON."""
+    return Phase(
+        id=data["id"],
+        objective=data.get("objective", ""),
+        focus=data.get("focus"),
+        load_range=_pair(data.get("load_range")),
+        volume_range=_pair(data.get("volume_range")),
+        intensity_pct_mean=data.get("intensity_pct_mean"),
+        deload_weeks=tuple(data.get("deload_weeks", []) or ()),
+        sport_weights=data.get("sport_weights", {}) or {},
+    )
+
+
+def _macro_week_from_dict(data: dict[str, Any]) -> MacroWeek:
+    """Неделя макро-плана из словаря."""
+    return MacroWeek(
+        season_week=int(data["season_week"]),
+        phase_id=data.get("phase_id", ""),
+        focus=data.get("focus", "") or "",
+        goal_text=data.get("goal_text", "") or "",
+        run_km=float(data.get("run_km", 0.0) or 0.0),
+        total_h=float(data.get("total_h", 0.0) or 0.0),
+        sessions_target=int(data.get("sessions_target", 0) or 0),
+        deload=bool(data.get("deload", False)),
+    )
+
+
+def _pair(value: Any) -> tuple[float, float] | None:
+    """Список из двух чисел → пара. Не список — None."""
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        return None
+    return (float(value[0]), float(value[1]))
 
 
 def _goal_from_dict(data: dict[str, Any]) -> Goal:

@@ -413,6 +413,140 @@ h3 {
   background: rgba(255, 155, 106, 0.05);
 }
 
+/* -------------------------------------------------------- макро-план сезона */
+
+/* Блок фазы: заголовок с цветом фазы и недели внутри. */
+.phase-block {
+  padding: 11px 12px 8px;
+}
+
+.phase-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 4px;
+}
+
+.phase-head .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.phase-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.phase-range {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.phase-block .lead {
+  margin-bottom: 8px;
+}
+
+/* Неделя макро-плана: номер, фокус, объём, состояние.
+ *
+ * Одна строка на неделю: длинный список из 28 недель должен читаться
+ * сверху вниз, а не листаться.
+ */
+.macro-week {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 3px;
+  border-radius: 8px;
+  background: var(--panel2);
+  border: 1px solid transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+button.macro-week {
+  cursor: pointer;
+}
+
+button.macro-week:active {
+  opacity: 0.8;
+}
+
+.macro-week.closed {
+  border-color: rgba(126, 231, 135, 0.3);
+}
+
+.macro-week.current {
+  border-color: rgba(122, 162, 255, 0.5);
+}
+
+.macro-week .wk {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  min-width: 26px;
+  flex-shrink: 0;
+}
+
+.macro-week.closed .wk {
+  color: var(--good);
+}
+
+.macro-week.current .wk {
+  color: var(--accent);
+}
+
+.wk-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.wk-focus {
+  font-size: 12px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wk-meta {
+  font-size: 10.5px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.badge {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.badge.done {
+  background: rgba(126, 231, 135, 0.16);
+  color: var(--good);
+}
+
+.badge.current {
+  background: rgba(122, 162, 255, 0.18);
+  color: var(--accent);
+}
+
 .chead {
   display: flex;
   align-items: baseline;
