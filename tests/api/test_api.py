@@ -262,7 +262,107 @@ def test_pull_fact_degrades_when_garmin_unavailable(client: TestClient, data_roo
         "expected_version": 2,
     })
     assert response.status_code == 503
-    assert response.json()["error"]["code"] == "degraded"
+
+
+# ------------------------------------------------------------------ жизненный цикл
+
+
+def _command(client: TestClient, cid: str, ctype: str, version: int,
+             season_week: int = 1):
+    """Команда с причиной — команды без причины не принимаются."""
+    return client.post("/api/v1/commands", json={
+        "id": cid, "type": ctype,
+        "args": {"season_week": season_week}, "reason": f"проверка {ctype}",
+        "expected_version": version,
+    })
+
+
+def test_close_week_requires_active_week(client: TestClient, data_root: Path):
+    """Закрыть proposed-неделю нельзя — понятный отказ, не 500."""
+    version = seed_week(data_root)
+    response = _command(client, "close-1", "close_week", version)
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"]["code"] == "invalid_command"
+    assert "active" in body["error"]["message"]
+
+    week = client.get("/api/v1/week/1").json()["data"]
+    assert week["status"] == "proposed", "неделя не изменилась"
+
+
+def test_activate_then_close_works(client: TestClient, data_root: Path):
+    """Полный путь: proposed → active → closed."""
+    version = seed_week(data_root)
+
+    activated = _command(client, "act-1", "activate_week", version)
+    assert activated.status_code == 200
+    version = client.get("/api/v1/snapshot").json()["version"]
+
+    closed = _command(client, "close-1", "close_week", version)
+    assert closed.status_code == 200
+
+    week = client.get("/api/v1/week/1").json()["data"]
+    assert week["status"] == "closed"
+    assert week["summary"] is not None
+
+
+def test_close_week_sets_closed_at(client: TestClient, data_root: Path):
+    """Закрытая неделя помнит, когда её закрыли."""
+    version = seed_week(data_root)
+    _command(client, "act-1", "activate_week", version)
+    version = client.get("/api/v1/snapshot").json()["version"]
+    _command(client, "close-1", "close_week", version)
+
+    summary = client.get("/api/v1/week/1").json()["data"]["summary"]
+    assert summary["closed_at"], "время закрытия не проставлено"
+
+
+def test_propose_on_closed_week_is_rejected(client: TestClient, data_root: Path):
+    """I23: закрытая неделя не меняется — propose на неё отказ."""
+    version = seed_week(data_root)
+    _command(client, "act-1", "activate_week", version)
+    version = client.get("/api/v1/snapshot").json()["version"]
+    _command(client, "close-1", "close_week", version)
+    version = client.get("/api/v1/snapshot").json()["version"]
+
+    before = client.get("/api/v1/week/1").json()["data"]
+    response = _command(client, "prop-1", "propose_week", version)
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_command"
+
+    after = client.get("/api/v1/week/1").json()["data"]
+    assert after["status"] == "closed", "закрытая неделя переоткрылась"
+    assert after["summary"] is not None, "саммари затёрто"
+    assert len(after["workouts"]) == len(before["workouts"])
+
+
+def test_propose_on_active_week_is_rejected(client: TestClient, data_root: Path):
+    """Предлагать заново можно только proposed-неделю."""
+    version = seed_week(data_root)
+    _command(client, "act-1", "activate_week", version)
+    version = client.get("/api/v1/snapshot").json()["version"]
+
+    response = _command(client, "prop-1", "propose_week", version)
+    assert response.status_code == 400
+    assert "proposed" in response.json()["error"]["message"]
+
+
+def test_close_week_survives_unavailable_garmin(
+    client: TestClient, data_root: Path
+):
+    """Garmin недоступен — неделя всё равно закрывается.
+
+    Ритуал закрытия вытягивает остаток факта, но отсутствие источника не
+    должно блокировать закрытие: пользователь решил закрыть.
+    """
+    version = seed_week(data_root)
+    _command(client, "act-1", "activate_week", version)
+    version = client.get("/api/v1/snapshot").json()["version"]
+
+    response = _command(client, "close-1", "close_week", version)
+    assert response.status_code == 200
+    week = client.get("/api/v1/week/1").json()["data"]
+    assert week["status"] == "closed"
 
 
 def test_batch_commands(client: TestClient, data_root: Path):

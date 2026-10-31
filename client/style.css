@@ -645,6 +645,37 @@ h3 {
   border: 1px solid var(--border);
 }
 
+/* Ряд действий: две кнопки рядом, каждая — половина ширины.
+ *
+ * Основное действие — заливка, второстепенное — контур: иначе на
+ * телефоне две одинаковые залитые кнопки читаются как одна.
+ */
+.action-row {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.action-row .action {
+  margin: 0;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 11px 8px;
+  text-align: center;
+}
+
+.action-row .action.secondary,
+.action-row .action:not(.primary) {
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--border);
+}
+
+.action.primary {
+  background: var(--accent);
+  color: var(--bg);
+}
+
 /* ------------------------------------------------------------------ списки */
 
 ul.plain {

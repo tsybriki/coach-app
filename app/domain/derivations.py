@@ -154,17 +154,16 @@ def actual_intensity_min(sessions: list[ActualSession]) -> dict[str, int]:
 
     Недельные агрегаты Garmin (пн→вс) не используются — считаем сами по
     тренировкам. Если источник не делит интенсивность — всё идёт в moderate.
+
+    Правило деления — `_intensity_split`, то же, что и в вкладах недели:
+    иначе итог и сумма вкладов разойдутся (I16).
     """
     moderate = 0
     vigorous = 0
     for session in sessions:
-        if session.source is FactSource.GARMIN and session.moderate_min == 0 \
-                and session.vigorous_min == 0:
-            # источник не разделил — всё в moderate
-            moderate += session.duration_min
-            continue
-        moderate += session.moderate_min
-        vigorous += session.vigorous_min
+        session_moderate, session_vigorous = _intensity_split(session)
+        moderate += session_moderate
+        vigorous += session_vigorous
     return {"moderate": moderate, "vigorous": vigorous}
 
 
@@ -176,21 +175,39 @@ def facts_in_week_range(week: Week, sessions: list[ActualSession]) -> list[Actua
 def week_contributions(
     week: Week, sessions: list[ActualSession]
 ) -> list[dict[str, int | str]]:
-    """I18: один факт — один вклад в неделю."""
+    """I18: один факт — один вклад в неделю.
+
+    Вклад считается по тому же правилу, что и итог: источник не разделил
+    интенсивность — всё идёт в moderate. Иначе вклады не сойдутся с
+    `actual_moderate`, и I16 будет нарушен на живых данных.
+    """
     contributions: list[dict[str, int | str]] = []
     seen: set[str] = set()
     for session in facts_in_week_range(week, sessions):
         if session.id in seen:
             continue
         seen.add(session.id)
+        moderate, vigorous = _intensity_split(session)
         contributions.append(
             {
                 "actual_id": session.id,
-                "moderate_min": session.moderate_min,
-                "vigorous_min": session.vigorous_min,
+                "moderate_min": moderate,
+                "vigorous_min": vigorous,
             }
         )
     return contributions
+
+
+def _intensity_split(session: ActualSession) -> tuple[int, int]:
+    """Интенсивность факта: (moderate, vigorous).
+
+    Источник не делит — всё в moderate (I29). То же правило, что и в
+    `actual_intensity_min`: иначе итог и вклады считаются по-разному.
+    """
+    if session.source is FactSource.GARMIN and session.moderate_min == 0 \
+            and session.vigorous_min == 0:
+        return (session.duration_min, 0)
+    return (session.moderate_min, session.vigorous_min)
 
 
 def plan_week_totals(week: Week) -> dict[str, float]:

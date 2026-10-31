@@ -388,11 +388,18 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
     if command.type is CommandType.PROPOSE_WEEK:
         # Неделя предлагается заново по правилам методики: макро берётся
         # из текущей недели, качественная работа — из правил Дэниэлса.
+        # Проверка статуса — в сервисе: закрытую и активную неделю
+        # предлагать заново нельзя (I23: закрытая неделя не меняется).
         season = container.season_repo.load()
         updated = propose_by_rules(season, week, container.planner)
     elif command.type is CommandType.ACTIVATE_WEEK:
         updated = activate_week(week)
     elif command.type is CommandType.CLOSE_WEEK:
+        # Ритуал закрытия: вытянуть остаток факта → посчитать → записать.
+        # Выкачка Garmin может не удаться (нет сети, нет ключа) — тогда
+        # закрываем по тому факту, что уже есть: пользователь решил
+        # закрыть, и отсутствие выкачки не должно его блокировать.
+        _pull_remaining_fact(container, season_week, week)
         sessions = container.fact_repo.list_for_week(season_week)
         assessment = container.assessor.assess(week, sessions)
         updated = close_week(week, assessment.summary)
@@ -425,6 +432,33 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
     return {"status": "applied", "new_version": version, "diff": diff,
             "consequences": {"scope": "local", "affected": [f"W{season_week}"]},
             "warnings": []}
+
+
+def _pull_remaining_fact(
+    container: AppContainer,
+    season_week: int,
+    week: Week,
+) -> list[str]:
+    """Вытянуть остаток факта недели перед закрытием.
+
+    Первый шаг ритуала закрытия: «вытянуть остаток факта → сопоставить
+    руками → посчитать и записать». Сопоставление — руками, а выкачка
+    может быть нечем: Garmin недоступен, ключа нет, сети нет.
+
+    Недоступность источника — не повод отказывать в закрытии: закрываем
+    по тому факту, что уже есть, и говорим, что выкачка не удалась.
+    Связи пользователя при этом сохраняются.
+    """
+    try:
+        sessions = container.activity_port.pull(week.start, week.end)
+    except ExternalSourceError:
+        return []
+
+    preserved = preserve_fact_links(
+        container.fact_repo.list_for_week(season_week), sessions)
+    for session in preserved:
+        container.fact_repo.upsert(session)
+    return [s.id for s in preserved]
 
 
 @router.post("/narrate")

@@ -17,7 +17,8 @@ from dataclasses import dataclass
 from datetime import date
 
 from app.domain.entities import Season, Slot, Week, Workout
-from app.domain.enums import Sport
+from app.domain.enums import Sport, WeekStatus
+from app.services.week_lifecycle import TransitionError
 from app.services.week_planner import WeeklyTarget, WeekPlanInput, WeekPlanner
 
 # Длинный бег: 25 % недельного километража или 1,5 часа, что меньше.
@@ -101,7 +102,15 @@ def propose_week(season: Season,
     `current` — текущая неделя: из неё берётся макро (объём по видам спорта).
     Качественная работа по бегу — из правил Дэниэлса, по номеру недели
     программы для этого срока до старта.
+
+    I21/I40: повторный propose полностью заменяет содержимое proposed-недели.
+    I23: закрытая неделя не меняется — предлагать её заново нельзя.
     """
+    if current.status is not WeekStatus.PROPOSED:
+        raise TransitionError(
+            f"предложить заново можно только proposed-неделю, а не {current.status}"
+        )
+
     macro = macro_from_week(current)
     targets = build_targets(macro, current)
     if not targets:

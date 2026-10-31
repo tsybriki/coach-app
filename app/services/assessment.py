@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from app.domain.derivations import (
     actual_intensity_min,
@@ -49,7 +50,13 @@ class Assessor:
 
         Шаги: берём факт недели по датам → считаем contributions → строим
         саммари → определяем вердикты по сессиям.
+
+        `closed_at` — время закрытия недели. Проставляется, если не
+        задан: неделя закрывается сейчас, и без отметки не видно, когда
+        это случилось.
         """
+        if closed_at is None:
+            closed_at = datetime.now(UTC).isoformat(timespec="seconds")
         in_range = facts_in_week_range(week, sessions)
 
         linked: list[LinkRequest] = []

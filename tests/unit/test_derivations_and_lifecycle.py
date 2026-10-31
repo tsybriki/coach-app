@@ -332,6 +332,38 @@ def test_i18_one_fact_one_contribution():
     assert ids == ["a1", "a2"], "дубль факта не даёт второго вклада"
 
 
+def test_i16_contributions_sum_to_actual_intensity():
+    """I16: вклады недели сходятся с итогом интенсивности.
+
+    Garmin не всегда делит интенсивность: тогда всё идёт в moderate.
+    Итог и вклады должны считаться по одному правилу, иначе вклады
+    нулевые, а итог — полный.
+    """
+    week = make_week()
+    sessions = [
+        make_session("a1", moderate=0, vigorous=0),
+        make_session("a2", moderate=0, vigorous=0),
+    ]
+
+    intensity = actual_intensity_min(sessions)
+    contributions = week_contributions(week, sessions)
+
+    total = sum(int(c["moderate_min"]) for c in contributions)
+    assert total == intensity["moderate"], (
+        f"вклады {total} ≠ итог {intensity['moderate']}")
+    assert total == 120, "источник не разделил — всё в moderate"
+
+    summary = WeekSummary(
+        week_id="W1",
+        intensity={
+            "actual_moderate": intensity["moderate"],
+            "actual_vigorous": intensity["vigorous"],
+            "contributions": contributions,
+        },
+    )
+    summary.check_contributions_sum()
+
+
 # ------------------------------------------------------------------ I19
 
 

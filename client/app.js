@@ -42,6 +42,7 @@ const state = {
   message: null,
   messageKind: 'info',   // 'info' — гаснет само, 'error' — ждёт действия
   messageTimer: null,
+  busy: false,           // идёт команда: плашка не гаснет и экран не мигает
   base: localStorage.getItem('coach-app-base') || location.origin,
 };
 
@@ -166,6 +167,30 @@ function messageBlock() {
     : '';
 }
 
+/* Статус недели по-русски. */
+const WEEK_STATUS = {
+  proposed: 'предложена',
+  active: 'активна',
+  closed: 'закрыта',
+};
+
+/* Итог саммари — одной строкой: что сделано против плана. */
+function summaryLine(summary) {
+  if (!summary) return '';
+  const totals = summary.totals || {};
+  const verdicts = Object.entries(summary.verdict || {})
+    .filter(([, count]) => count)
+    .map(([name, count]) => `${count} ${name}`)
+    .join(' · ');
+  const parts = [];
+  if (totals.planned_minutes) {
+    parts.push(`${formatHours(totals.planned_minutes)} ч план · `
+      + `${formatHours(totals.actual_minutes)} ч факт`);
+  }
+  if (verdicts) parts.push(verdicts);
+  return parts.join(' · ');
+}
+
 /* Показать сообщение. Информационное гаснет само через несколько секунд —
  * иначе плашка висит и закрывает половину экрана. Ошибка ждёт действия:
  * её закрывают вручную. */
@@ -176,7 +201,9 @@ function showMessage(text, kind = 'info') {
     clearTimeout(state.messageTimer);
     state.messageTimer = null;
   }
-  if (kind === 'info') {
+  // Пока идёт команда, плашка не гаснет: выкачка Garmin занимает
+  // полминуты, и «Закрываю неделю…» должно её пережить.
+  if (kind === 'info' && !state.busy) {
     state.messageTimer = setTimeout(() => {
       state.message = null;
       state.messageTimer = null;
@@ -274,9 +301,46 @@ function screenWeek() {
       </div>
       ${progressBlock(week.progress)}
     </div>
+    ${weekActions(week)}
     ${unplaced}
     <h2 class="slots-header">Тренировки · ${(week.workouts || []).length} шт</h2>
     <div class="slots-list">${slots || '<p>Тренировок нет.</p>'}</div>`;
+}
+
+/* Действия недели — по её статусу.
+ *
+ * Жизненный цикл: proposed → active → closed. Каждый переход — команда
+ * пользователя, ничего не инициируется само (I19).
+ *
+ * У закрытой недели действий нет: она не меняется (I23).
+ */
+function weekActions(week) {
+  const status = week.status || 'proposed';
+  const label = WEEK_STATUS[status] || status;
+
+  if (status === 'closed') {
+    const line = summaryLine(week.summary);
+    return `<div class="card"><div class="chead">Неделя закрыта</div>
+      ${line ? `<p class="lead">${escapeHtml(line)}</p>` : ''}</div>`;
+  }
+
+  if (status === 'active') {
+    const disabled = state.busy ? ' disabled' : '';
+    return `<div class="card"><div class="chead">Неделя активна</div>
+      <p class="lead">${(week.workouts || []).length} тренировок · `
+      + `${state.actual.length} сессий в факте</p>
+      <button class="action" id="close"${disabled}>Закрыть неделю</button></div>`;
+  }
+
+  // proposed: неделю можно пересобрать или оживить.
+  const disabled = state.busy ? ' disabled' : '';
+  return `<div class="card"><div class="chead">Неделя ${escapeHtml(label)}</div>
+    <p class="lead">${(week.workouts || []).length} тренировок · `
+    + `${state.actual.length} сессий в факте</p>
+    <div class="action-row">
+      <button class="action" id="propose"${disabled}>Предложить заново</button>
+      <button class="action primary" id="activate"${disabled}>Активировать неделю</button>
+    </div></div>`;
 }
 
 /* Факт недели против плана: «N из M».
@@ -402,14 +466,45 @@ function screenFact() {
 }
 
 function screenClose() {
+  const week = state.week;
+  const status = week ? (week.status || 'proposed') : 'proposed';
+  const linked = week ? (week.workouts || []).filter((w) => w.actual_id).length : 0;
+
+  if (status === 'closed') {
+    const line = summaryLine(week ? week.summary : null);
+    return `${messageBlock()}<h2>Закрытие недели</h2>
+    <div class="card">
+      <div class="chead">Неделя закрыта</div>
+      ${line ? `<p class="lead">${escapeHtml(line)}</p>` : ''}
+      <div class="metrics">
+        <div class="metric"><div class="v">${state.actual.length}</div><div class="l">сессий в факте</div></div>
+        <div class="metric"><div class="v">${week ? (week.workouts || []).length : 0}</div><div class="l">в плане</div></div>
+        <div class="metric"><div class="v">${linked}</div><div class="l">связано</div></div>
+      </div>
+    </div>`;
+  }
+
+  if (status !== 'active') {
+    // Закрыть можно только активную неделю: сначала активация.
+    return `${messageBlock()}<h2>Закрытие недели</h2>
+    <div class="card">
+      <div class="chead">Сначала активируй неделю</div>
+      <p class="lead">Неделя ${escapeHtml(WEEK_STATUS[status] || status)}: `
+      + `закрыть можно только активную. Нажми «Активировать неделю» `
+      + `на экране недели.</p>
+    </div>`;
+  }
+
   return `${messageBlock()}<h2>Закрытие недели</h2>
     <div class="card">
       <div class="chead">Неделя ${state.week ? state.week.season_week : ''}</div>
       <div class="metrics">
         <div class="metric"><div class="v">${state.actual.length}</div><div class="l">сессий в факте</div></div>
-        <div class="metric"><div class="v">${state.week ? (state.week.workouts || []).length : 0}</div><div class="l">в плане</div></div>
-        <div class="metric"><div class="v">${state.week ? (state.week.workouts || []).filter((w) => w.actual_id).length : 0}</div><div class="l">связано</div></div>
+        <div class="metric"><div class="v">${week ? (week.workouts || []).length : 0}</div><div class="l">в плане</div></div>
+        <div class="metric"><div class="v">${linked}</div><div class="l">связано</div></div>
       </div>
+      <p class="lead">Закрытие посчитает итог: что планировали против что сделали. `
+      + `Факт подтянется из Garmin автоматически.</p>
     </div>
     <button class="action" id="close">Закрыть неделю</button>`;
 }
@@ -971,7 +1066,6 @@ async function load() {
     }
 
     state.summary = state.week ? state.week.summary : null;
-    state.message = null;
   } catch (error) {
     await loadFromCache();
     showMessage('Сервер недоступен — показан последний известный снимок', 'error');
@@ -1150,27 +1244,63 @@ document.addEventListener('click', async (event) => {
     });
     await flushOutbox();
     await load();
-    state.message = null;
+    // Сообщение ставим ПОСЛЕ load(): load() больше не стирает плашку,
+    // а ошибка команды должна её пережить.
+    if (state.messageKind !== 'error') {
+      showMessage('Факт загружен');
+    }
     render();
     // Вернуться в детали, если тренировка была открыта.
     if (state.week && state.openWorkoutId) showWorkout(state.openWorkoutId);
     return;
   }
 
+  if (closest('#propose')) {
+    await runWeekCommand('propose_week', 'Предлагаю неделю заново…',
+      'Неделя предложена заново');
+    return;
+  }
+
+  if (closest('#activate')) {
+    await runWeekCommand('activate_week', 'Активирую неделю…',
+      'Неделя активна');
+    return;
+  }
+
   if (closest('#close')) {
-    showMessage('Закрываю неделю…');
-    render();
-    await queueCommand({
-      id: `close-${Date.now()}`,
-      type: 'close_week',
-      args: { season_week: state.seasonWeek },
-      reason: 'закрытие недели',
-      expected_version: state.version,
-    });
-    await flushOutbox();
-    await load();
+    await runWeekCommand('close_week', 'Закрываю неделю…', 'Неделя закрыта');
+    return;
   }
 });
+
+/* Команда недели: propose → activate → close.
+ *
+ * Ошибка команды — не пустота на экране: плашка с текстом отказа должна
+ * пережить перезагрузку данных, иначе нажатие выглядит как «ничего не
+ * произошло».
+ */
+async function runWeekCommand(type, pendingText, doneText) {
+  showMessage(pendingText);
+  state.busy = true;
+  render();
+  await queueCommand({
+    id: `${type}-${Date.now()}`,
+    type,
+    args: { season_week: state.seasonWeek },
+    reason: type,
+    expected_version: state.version,
+  });
+  await flushOutbox();
+  await load();
+  state.busy = false;
+  // Плашка с ошибкой пережила перезагрузку — оставляем её.
+  if (state.messageKind === 'error' && state.message) {
+    render();
+    return;
+  }
+  showMessage(doneText);
+  render();
+}
 
 /* Кнопка «назад» на телефоне — убрать верхний уровень вложенности.
  *
@@ -1331,6 +1461,9 @@ api.subscribe((event) => {
   // шло с версией сезона, а клиент держит глобальную: расхождение было
   // постоянным, и каждое событие перезагружало данные целиком.
   if (event.version === state.version) return;
+  // Пока идёт команда — не перезагружать: перезагрузка сбрасывает
+  // плашку «Закрываю неделю…» и экран мигает.
+  if (state.busy) return;
   load();
 });
 
