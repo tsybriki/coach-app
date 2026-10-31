@@ -60,10 +60,12 @@ SOFT_TOKENS = [r"\bopen\(", r"\bPath\(", r"\.json\b", r"\bdata/", r"\btmp\b"]
 # `adapters/garmin`, `adapters/fit` — внешние источники: формат ответа
 # Garmin и путь к FIT-файлу знают они. Ни то, ни другое — не хранилище
 # приложения.
+# `adapters/daniels` — справочник методики: формат разобранных таблиц
+# знает только он.
 ALLOWED_CODE_DIRS = ("adapters/storage", "adapters/migrations",
                      "tools", "tests", "migrations")
 ALLOWED_CODE_FILES = ("app/api/dependencies.py", "app/adapters/garmin.py",
-                      "app/adapters/fit.py")
+                      "app/adapters/fit.py", "app/adapters/daniels.py")
 
 # --- места в дизайне, где знание о формате — по делу ---
 # (имя файла, регулярка, обязательное пояснение рядом)

@@ -10,8 +10,10 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 from typing import Any
 
+from app.adapters.daniels import ReferenceNotFoundError, load_paces, load_plan
 from app.adapters.storage.files import FileStorage
 from app.domain.entities import (
     ActualSession,
@@ -23,6 +25,7 @@ from app.domain.entities import (
     Week,
     WorkoutDetail,
 )
+from app.domain.methodology import DanielsPaces, MethodPlan
 
 
 class SeasonRepoAdapter:
@@ -96,10 +99,17 @@ class DetailRepoAdapter:
 
 
 class MethodologyRepoAdapter:
-    """Порт `MethodologyRepo`: правила методики."""
+    """Порт `MethodologyRepo`: правила методики.
 
-    def __init__(self, storage: FileStorage) -> None:
+    Шаблоны и правило нагрузки лежат в хранилище — их можно менять. Таблицы
+    Дэниэлса и программа тренировок — **справочник**: они приходят из
+    репозитория и меняются только при смене издания. Поэтому здесь два
+    источника, и знает о них только адаптер.
+    """
+
+    def __init__(self, storage: FileStorage, reference_dir: Path | None = None) -> None:
         self._storage = storage
+        self._reference_dir = reference_dir
 
     def plan_models(self) -> list[PlanModel]:
         return []
@@ -109,6 +119,32 @@ class MethodologyRepoAdapter:
 
     def workout_templates(self) -> dict[str, Any]:
         return self._storage.load_workout_templates()
+
+    def training_paces(self) -> DanielsPaces:
+        """Таблица темпов Дэниэлса.
+
+        Нет справочника — пустая таблица, а не исключение: приложение должно
+        работать и без него, просто без темпов.
+        """
+        if self._reference_dir is None:
+            return DanielsPaces()
+        try:
+            return load_paces(self._reference_dir)
+        except (ReferenceNotFoundError, ValueError, KeyError):
+            return DanielsPaces()
+
+    def method_plan(self) -> MethodPlan:
+        """Программа тренировок.
+
+        Нет справочника — пустая программа: планировщик честно скажет, что
+        правил нет, вместо того чтобы выдумать неделю.
+        """
+        if self._reference_dir is None:
+            return MethodPlan()
+        try:
+            return load_plan(self._reference_dir)
+        except (ReferenceNotFoundError, ValueError, KeyError):
+            return MethodPlan()
 
 
 class CommandLogAdapter:

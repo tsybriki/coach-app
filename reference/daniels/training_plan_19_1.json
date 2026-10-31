@@ -1,0 +1,2741 @@
+{
+ "_parsed_by": "tools/parse_daniels_plan.py",
+ "_source": "Daniels' Running Formula, Табл. 19.1 — программа для дистанций 5000-15000 м",
+ "_source_file": "reference/daniels/training_plan_19_1.txt",
+ "_zone_full": {
+  "E": "лёгкий темп",
+  "I": "интервальный темп",
+  "M": "марафонский темп",
+  "R": "повторный темп",
+  "T": "пороговый темп"
+ },
+ "_zone_names": {
+  "E": "Л",
+  "I": "И",
+  "M": "М",
+  "R": "Пв",
+  "T": "П"
+ },
+ "base_schedule": {
+  "phases": {
+   "1": [
+    1,
+    2,
+    3,
+    13,
+    21,
+    23
+   ],
+   "2": [
+    10,
+    11,
+    12,
+    18,
+    19,
+    20
+   ],
+   "3": [
+    7,
+    8,
+    9,
+    14,
+    15,
+    16
+   ],
+   "4": [
+    4,
+    5,
+    6,
+    17,
+    22,
+    24
+   ]
+  },
+  "weeks": 24
+ },
+ "phase_map": [],
+ "phases": {
+  "1": [
+   {
+    "caps": [],
+    "notes": [
+     "7 дней в неделю Л-темп (достаточный для желательного недельного километража).",
+     "3-4 дня дополнительные тренировки (глава 10)."
+    ],
+    "phase": 1,
+    "sessions": [
+     {
+      "body": "continuous",
+      "flat": [],
+      "kind": "FILL",
+      "label": "Лёгкий бег",
+      "sets": []
+     }
+    ],
+    "week": 1
+   },
+   {
+    "caps": [],
+    "notes": [
+     "7 дней в неделю Л-темп. 3-4 дня дополнительные тренировки (глава 10)."
+    ],
+    "phase": 1,
+    "sessions": [
+     {
+      "body": "continuous",
+      "flat": [],
+      "kind": "FILL",
+      "label": "Лёгкий бег",
+      "sets": []
+     }
+    ],
+    "week": 2
+   },
+   {
+    "caps": [],
+    "notes": [
+     "7 дней в неделю Л-темп. 3-4 дня дополнительные тренировки (глава 10)."
+    ],
+    "phase": 1,
+    "sessions": [
+     {
+      "body": "continuous",
+      "flat": [],
+      "kind": "FILL",
+      "label": "Лёгкий бег",
+      "sets": []
+     }
+    ],
+    "week": 3
+   },
+   {
+    "caps": [],
+    "notes": [
+     "7 дней в неделю Л-темп. Один Д-забег (25% недельного километража или 1,5 ч).",
+     "6-8 коротких быстрых отрезков в неделю, по меньшей мере к четырём Л-забегам."
+    ],
+    "phase": 1,
+    "sessions": [
+     {
+      "body": "continuous",
+      "flat": [],
+      "kind": "FILL",
+      "label": "Лёгкий бег",
+      "sets": []
+     },
+     {
+      "body": "25% недельного километража или 1,5 ч — что меньше",
+      "flat": [],
+      "kind": "LONG",
+      "label": "Длинный бег",
+      "sets": []
+     }
+    ],
+    "week": 4
+   },
+   {
+    "caps": [],
+    "notes": [
+     "7 дней в неделю Л-темп. Один Д-забег. 6-8 коротких быстрых отрезков в неделю."
+    ],
+    "phase": 1,
+    "sessions": [
+     {
+      "body": "continuous",
+      "flat": [],
+      "kind": "FILL",
+      "label": "Лёгкий бег",
+      "sets": []
+     },
+     {
+      "body": "25% недельного километража или 1,5 ч — что меньше",
+      "flat": [],
+      "kind": "LONG",
+      "label": "Длинный бег",
+      "sets": []
+     }
+    ],
+    "week": 5
+   },
+   {
+    "caps": [],
+    "notes": [
+     "7 дней в неделю Л-темп. Один Д-забег. 6-8 коротких быстрых отрезков в неделю."
+    ],
+    "phase": 1,
+    "sessions": [
+     {
+      "body": "continuous",
+      "flat": [],
+      "kind": "FILL",
+      "label": "Лёгкий бег",
+      "sets": []
+     },
+     {
+      "body": "25% недельного километража или 1,5 ч — что меньше",
+      "flat": [],
+      "kind": "LONG",
+      "label": "Длинный бег",
+      "sets": []
+     }
+    ],
+    "week": 6
+   }
+  ],
+  "2": [
+   {
+    "caps": [
+     {
+      "ceiling_km": null,
+      "fraction_of_week": 0.05,
+      "zone": "R"
+     },
+     {
+      "ceiling_km": 10.0,
+      "fraction_of_week": 0.08,
+      "zone": "I"
+     }
+    ],
+    "notes": [],
+    "phase": 2,
+    "sessions": [
+     {
+      "body": "5-6x(2x200m@R + 200m@E) + 1x400m@R + 400m@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": 400.0,
+        "minutes": null,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "R",
+      "label": "Работа в повторном темпе",
+      "sets": [
+       {
+        "label": "5-6×(200м Пв + 200м Пв + 200м Л)",
+        "reps_max": 6,
+        "reps_min": 5,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       },
+       {
+        "label": "1×(400м Пв)",
+        "reps_max": 1,
+        "reps_min": 1,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "5-6x(1600m@T + 1min@E + 400m@E)",
+      "flat": [],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": [
+       {
+        "label": "5-6×(1600м П + 1мин Л + 400м Л)",
+        "reps_max": 6,
+        "reps_min": 5,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 1600.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "T"
+         },
+         {
+          "alternatives": [],
+          "distance_m": null,
+          "minutes": 1.0,
+          "seconds": null,
+          "zone": "E"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "2min@I + 1min@E + 1min@I + 30s@E + 30s@I + 30s@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "E"
+       }
+      ],
+      "kind": "I",
+      "label": "Работа в интервальном темпе",
+      "sets": []
+     }
+    ],
+    "week": 7
+   },
+   {
+    "caps": [
+     {
+      "ceiling_km": null,
+      "fraction_of_week": 0.05,
+      "zone": "R"
+     }
+    ],
+    "notes": [],
+    "phase": 2,
+    "sessions": [
+     {
+      "body": "10-12x(400m@R + 400m@E)",
+      "flat": [],
+      "kind": "R",
+      "label": "Работа в повторном темпе",
+      "sets": [
+       {
+        "label": "10-12×(400м Пв + 400м Л)",
+        "reps_max": 12,
+        "reps_min": 10,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "4x(200m@R + 200m@E) + 2x(400m@R + 400m@E) + 1x800m@R + 800m@E + 2x(400m@R + 400m@E) + 4x(200m@R + 200m@E)",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": 800.0,
+        "minutes": null,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "R",
+      "label": "Работа в повторном темпе",
+      "sets": [
+       {
+        "label": "4×(200м Пв + 200м Л)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       },
+       {
+        "label": "2×(400м Пв + 400м Л)",
+        "reps_max": 2,
+        "reps_min": 2,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       },
+       {
+        "label": "1×(800м Пв)",
+        "reps_max": 1,
+        "reps_min": 1,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 800.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         }
+        ]
+       },
+       {
+        "label": "2×(400м Пв + 400м Л)",
+        "reps_max": 2,
+        "reps_min": 2,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       },
+       {
+        "label": "4×(200м Пв + 200м Л)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "40min@T",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 40.0,
+        "seconds": null,
+        "zone": "T"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": []
+     }
+    ],
+    "week": 8
+   },
+   {
+    "caps": [
+     {
+      "ceiling_km": null,
+      "fraction_of_week": 0.08,
+      "zone": "I"
+     }
+    ],
+    "notes": [],
+    "phase": 2,
+    "sessions": [
+     {
+      "body": "3x(3200m@T~10-12min@T) + 2min@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": [
+       {
+        "label": "3×(3200м П)",
+        "reps_max": 3,
+        "reps_min": 3,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 3200.0,
+          "minutes": 10.0,
+          "seconds": null,
+          "zone": "T"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "5-6x(3min@I il 800m@I il 1000m@I il 1200m@I) + 3min@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 3.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "I",
+      "label": "Работа в интервальном темпе",
+      "sets": [
+       {
+        "label": "5-6×(3мин И)",
+        "reps_max": 6,
+        "reps_min": 5,
+        "segments": [
+         {
+          "alternatives": [
+           {
+            "distance_m": 800.0,
+            "minutes": null,
+            "seconds": null,
+            "zone": "I"
+           },
+           {
+            "distance_m": 1000.0,
+            "minutes": null,
+            "seconds": null,
+            "zone": "I"
+           },
+           {
+            "distance_m": 1200.0,
+            "minutes": null,
+            "seconds": null,
+            "zone": "I"
+           }
+          ],
+          "distance_m": null,
+          "minutes": 3.0,
+          "seconds": null,
+          "zone": "I"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "-",
+      "flat": [],
+      "kind": "RACE",
+      "label": "Соревнование",
+      "sets": []
+     }
+    ],
+    "week": 9
+   },
+   {
+    "caps": [
+     {
+      "ceiling_km": null,
+      "fraction_of_week": 0.05,
+      "zone": "R"
+     }
+    ],
+    "notes": [],
+    "phase": 2,
+    "sessions": [
+     {
+      "body": "4x(200m@R + 200m@E + 200m@R + 400m@E + 800m@R + 400m@E)",
+      "flat": [],
+      "kind": "R",
+      "label": "Работа в повторном темпе",
+      "sets": [
+       {
+        "label": "4×(200м Пв + 200м Л + 200м Пв + 400м Л + 800м Пв + 400м Л)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 800.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "40min@T",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 40.0,
+        "seconds": null,
+        "zone": "T"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": []
+     },
+     {
+      "body": "-",
+      "flat": [],
+      "kind": "RACE",
+      "label": "Соревнование",
+      "sets": []
+     }
+    ],
+    "week": 10
+   },
+   {
+    "caps": [
+     {
+      "ceiling_km": null,
+      "fraction_of_week": 0.05,
+      "zone": "R"
+     },
+     {
+      "ceiling_km": 10.0,
+      "fraction_of_week": 0.08,
+      "zone": "I"
+     }
+    ],
+    "notes": [],
+    "phase": 2,
+    "sessions": [
+     {
+      "body": "10-12x(400m@R + 400m@E)",
+      "flat": [],
+      "kind": "R",
+      "label": "Работа в повторном темпе",
+      "sets": [
+       {
+        "label": "10-12×(400м Пв + 400м Л)",
+        "reps_max": 12,
+        "reps_min": 10,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "15min@T~4800m + 3min@E + 10min@T~3200m + 2min@E + 5min@T~1600m",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": 4800.0,
+        "minutes": 15.0,
+        "seconds": null,
+        "zone": "T"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 3.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": 3200.0,
+        "minutes": 10.0,
+        "seconds": null,
+        "zone": "T"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": 1600.0,
+        "minutes": 5.0,
+        "seconds": null,
+        "zone": "T"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": []
+     },
+     {
+      "body": "2min@I + 1min@E + 1min@I + 30s@E + 30s@I + 30s@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "E"
+       }
+      ],
+      "kind": "I",
+      "label": "Работа в интервальном темпе",
+      "sets": []
+     }
+    ],
+    "week": 11
+   },
+   {
+    "caps": [],
+    "notes": [],
+    "phase": 2,
+    "sessions": [
+     {
+      "body": "4x(200m@R + 200m@E + 200m@R + 400m@E + 800m@R + 400m@E)",
+      "flat": [],
+      "kind": "R",
+      "label": "Работа в повторном темпе",
+      "sets": [
+       {
+        "label": "4×(200м Пв + 200м Л + 200м Пв + 400м Л + 800м Пв + 400м Л)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 800.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "45min@T",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 45.0,
+        "seconds": null,
+        "zone": "T"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": []
+     },
+     {
+      "body": "20min@T~6400m + 4min@E + 15min@T~4800m + 3min@E + 10min@T~3200m + 2min@E + 5min@T~1600m",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": 6400.0,
+        "minutes": 20.0,
+        "seconds": null,
+        "zone": "T"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 4.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": 4800.0,
+        "minutes": 15.0,
+        "seconds": null,
+        "zone": "T"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 3.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": 3200.0,
+        "minutes": 10.0,
+        "seconds": null,
+        "zone": "T"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": 1600.0,
+        "minutes": 5.0,
+        "seconds": null,
+        "zone": "T"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": []
+     },
+     {
+      "body": "-",
+      "flat": [],
+      "kind": "RACE",
+      "label": "Соревнование",
+      "sets": []
+     }
+    ],
+    "week": 12
+   }
+  ],
+  "3": [
+   {
+    "caps": [
+     {
+      "ceiling_km": 10.0,
+      "fraction_of_week": 0.08,
+      "zone": "I"
+     }
+    ],
+    "notes": [],
+    "phase": 3,
+    "sessions": [
+     {
+      "body": "4-5x(5min@I il 1200m@I il 1600m@I) + 3-4min@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 3.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "I",
+      "label": "Работа в интервальном темпе",
+      "sets": [
+       {
+        "label": "4-5×(5мин И)",
+        "reps_max": 5,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [
+           {
+            "distance_m": 1200.0,
+            "minutes": null,
+            "seconds": null,
+            "zone": "I"
+           },
+           {
+            "distance_m": 1600.0,
+            "minutes": null,
+            "seconds": null,
+            "zone": "I"
+           }
+          ],
+          "distance_m": null,
+          "minutes": 5.0,
+          "seconds": null,
+          "zone": "I"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "3x(1600m@T~10-12min@T) + 2min@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": [
+       {
+        "label": "3×(1600м П)",
+        "reps_max": 3,
+        "reps_min": 3,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 1600.0,
+          "minutes": 10.0,
+          "seconds": null,
+          "zone": "T"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "2min@I + 1min@E + 1min@I + 30s@E + 30s@I + 30s@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "E"
+       }
+      ],
+      "kind": "I",
+      "label": "Работа в интервальном темпе",
+      "sets": []
+     }
+    ],
+    "week": 13
+   },
+   {
+    "caps": [
+     {
+      "ceiling_km": 10.0,
+      "fraction_of_week": 0.08,
+      "zone": "I"
+     }
+    ],
+    "notes": [],
+    "phase": 3,
+    "sessions": [
+     {
+      "body": "4-5x(5min@I il 1200m@I il 1600m@I) + 3-4min@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 3.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "I",
+      "label": "Работа в интервальном темпе",
+      "sets": [
+       {
+        "label": "4-5×(5мин И)",
+        "reps_max": 5,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [
+           {
+            "distance_m": 1200.0,
+            "minutes": null,
+            "seconds": null,
+            "zone": "I"
+           },
+           {
+            "distance_m": 1600.0,
+            "minutes": null,
+            "seconds": null,
+            "zone": "I"
+           }
+          ],
+          "distance_m": null,
+          "minutes": 5.0,
+          "seconds": null,
+          "zone": "I"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "40min@T",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 40.0,
+        "seconds": null,
+        "zone": "T"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": []
+     },
+     {
+      "body": "-",
+      "flat": [],
+      "kind": "RACE",
+      "label": "Соревнование",
+      "sets": []
+     }
+    ],
+    "week": 14
+   },
+   {
+    "caps": [
+     {
+      "ceiling_km": 10.0,
+      "fraction_of_week": 0.08,
+      "zone": "I"
+     }
+    ],
+    "notes": [],
+    "phase": 3,
+    "sessions": [
+     {
+      "body": "2min@I + 1min@E + 1min@I + 30s@E + 30s@I + 30s@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "E"
+       }
+      ],
+      "kind": "I",
+      "label": "Работа в интервальном темпе",
+      "sets": []
+     },
+     {
+      "body": "3-5x(3200m@T~10min@T) + 2min@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": [
+       {
+        "label": "3-5×(3200м П)",
+        "reps_max": 5,
+        "reps_min": 3,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 3200.0,
+          "minutes": 10.0,
+          "seconds": null,
+          "zone": "T"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "-",
+      "flat": [],
+      "kind": "RACE",
+      "label": "Соревнование",
+      "sets": []
+     },
+     {
+      "body": "4x(200m@R + 200m@E) + 3x(1000m@I + 2min@E) + 4x(400m@R + 400m@E)",
+      "flat": [],
+      "kind": "R",
+      "label": "Работа в повторном темпе",
+      "sets": [
+       {
+        "label": "4×(200м Пв + 200м Л)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       },
+       {
+        "label": "3×(1000м И + 2мин Л)",
+        "reps_max": 3,
+        "reps_min": 3,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 1000.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "I"
+         },
+         {
+          "alternatives": [],
+          "distance_m": null,
+          "minutes": 2.0,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       },
+       {
+        "label": "4×(400м Пв + 400м Л)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "week": 15
+   },
+   {
+    "caps": [
+     {
+      "ceiling_km": null,
+      "fraction_of_week": 0.05,
+      "zone": "R"
+     }
+    ],
+    "notes": [],
+    "phase": 3,
+    "sessions": [
+     {
+      "body": "3x(1600m@I il 1200m@I) + 4min@E + 3x(1000m@I il 800m@I) + 2min@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 4.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "I",
+      "label": "Работа в интервальном темпе",
+      "sets": [
+       {
+        "label": "3×(1600м И)",
+        "reps_max": 3,
+        "reps_min": 3,
+        "segments": [
+         {
+          "alternatives": [
+           {
+            "distance_m": 1200.0,
+            "minutes": null,
+            "seconds": null,
+            "zone": "I"
+           }
+          ],
+          "distance_m": 1600.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "I"
+         }
+        ]
+       },
+       {
+        "label": "3×(1000м И)",
+        "reps_max": 3,
+        "reps_min": 3,
+        "segments": [
+         {
+          "alternatives": [
+           {
+            "distance_m": 800.0,
+            "minutes": null,
+            "seconds": null,
+            "zone": "I"
+           }
+          ],
+          "distance_m": 1000.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "I"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "15min@T~4800m + 3min@E + 10min@T~3200m + 2min@E + 5min@T~1600m",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": 4800.0,
+        "minutes": 15.0,
+        "seconds": null,
+        "zone": "T"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 3.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": 3200.0,
+        "minutes": 10.0,
+        "seconds": null,
+        "zone": "T"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": 1600.0,
+        "minutes": 5.0,
+        "seconds": null,
+        "zone": "T"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": []
+     },
+     {
+      "body": "-",
+      "flat": [],
+      "kind": "RACE",
+      "label": "Соревнование",
+      "sets": []
+     },
+     {
+      "body": "4x(200m@R + 200m@E) + 2x(400m@R + 400m@E) + 1x800m@R + 800m@E + 2x(400m@R + 400m@E) + 4x(200m@R + 200m@E)",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": 800.0,
+        "minutes": null,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "R",
+      "label": "Работа в повторном темпе",
+      "sets": [
+       {
+        "label": "4×(200м Пв + 200м Л)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       },
+       {
+        "label": "2×(400м Пв + 400м Л)",
+        "reps_max": 2,
+        "reps_min": 2,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       },
+       {
+        "label": "1×(800м Пв)",
+        "reps_max": 1,
+        "reps_min": 1,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 800.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         }
+        ]
+       },
+       {
+        "label": "2×(400м Пв + 400м Л)",
+        "reps_max": 2,
+        "reps_min": 2,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       },
+       {
+        "label": "4×(200м Пв + 200м Л)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "week": 16
+   },
+   {
+    "caps": [
+     {
+      "ceiling_km": 10.0,
+      "fraction_of_week": 0.08,
+      "zone": "I"
+     }
+    ],
+    "notes": [],
+    "phase": 3,
+    "sessions": [
+     {
+      "body": "4-5x(5min@I il 1200m@I il 1600m@I) + 3-4min@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 3.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "I",
+      "label": "Работа в интервальном темпе",
+      "sets": [
+       {
+        "label": "4-5×(5мин И)",
+        "reps_max": 5,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [
+           {
+            "distance_m": 1200.0,
+            "minutes": null,
+            "seconds": null,
+            "zone": "I"
+           },
+           {
+            "distance_m": 1600.0,
+            "minutes": null,
+            "seconds": null,
+            "zone": "I"
+           }
+          ],
+          "distance_m": null,
+          "minutes": 5.0,
+          "seconds": null,
+          "zone": "I"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "7-10x(1600m@T~5min@T) + 1min@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": [
+       {
+        "label": "7-10×(1600м П)",
+        "reps_max": 10,
+        "reps_min": 7,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 1600.0,
+          "minutes": 5.0,
+          "seconds": null,
+          "zone": "T"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "-",
+      "flat": [],
+      "kind": "RACE",
+      "label": "Соревнование",
+      "sets": []
+     }
+    ],
+    "week": 17
+   },
+   {
+    "caps": [
+     {
+      "ceiling_km": 10.0,
+      "fraction_of_week": 0.08,
+      "zone": "I"
+     },
+     {
+      "ceiling_km": null,
+      "fraction_of_week": 0.05,
+      "zone": "R"
+     }
+    ],
+    "notes": [],
+    "phase": 3,
+    "sessions": [
+     {
+      "body": "4-5x(5min@I il 1200m@I il 1600m@I) + 3-4min@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 3.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "I",
+      "label": "Работа в интервальном темпе",
+      "sets": [
+       {
+        "label": "4-5×(5мин И)",
+        "reps_max": 5,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [
+           {
+            "distance_m": 1200.0,
+            "minutes": null,
+            "seconds": null,
+            "zone": "I"
+           },
+           {
+            "distance_m": 1600.0,
+            "minutes": null,
+            "seconds": null,
+            "zone": "I"
+           }
+          ],
+          "distance_m": null,
+          "minutes": 5.0,
+          "seconds": null,
+          "zone": "I"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "20min@T~6400m + 4min@E + 15min@T~4800m + 3min@E + 10min@T~3200m + 2min@E + 5min@T~1600m",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": 6400.0,
+        "minutes": 20.0,
+        "seconds": null,
+        "zone": "T"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 4.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": 4800.0,
+        "minutes": 15.0,
+        "seconds": null,
+        "zone": "T"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 3.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": 3200.0,
+        "minutes": 10.0,
+        "seconds": null,
+        "zone": "T"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": 1600.0,
+        "minutes": 5.0,
+        "seconds": null,
+        "zone": "T"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": []
+     },
+     {
+      "body": "-",
+      "flat": [],
+      "kind": "RACE",
+      "label": "Соревнование",
+      "sets": []
+     },
+     {
+      "body": "10-12x(400m@R + 400m@E)",
+      "flat": [],
+      "kind": "R",
+      "label": "Работа в повторном темпе",
+      "sets": [
+       {
+        "label": "10-12×(400м Пв + 400м Л)",
+        "reps_max": 12,
+        "reps_min": 10,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "week": 18
+   }
+  ],
+  "4": [
+   {
+    "caps": [
+     {
+      "ceiling_km": 10.0,
+      "fraction_of_week": 0.08,
+      "zone": "I"
+     }
+    ],
+    "notes": [],
+    "phase": 4,
+    "sessions": [
+     {
+      "body": "3x(3200m@T) + 2min@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": [
+       {
+        "label": "3×(3200м П)",
+        "reps_max": 3,
+        "reps_min": 3,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 3200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "T"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "4x(1000-1600m@T) + 1min@E + 2x(1000m@I) + 3min@E + 4x(200m@R + 200m@E)",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 3.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": [
+       {
+        "label": "4×(1000м П)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 1000.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "T"
+         }
+        ]
+       },
+       {
+        "label": "2×(1000м И)",
+        "reps_max": 2,
+        "reps_min": 2,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 1000.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "I"
+         }
+        ]
+       },
+       {
+        "label": "4×(200м Пв + 200м Л)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "40min@T",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 40.0,
+        "seconds": null,
+        "zone": "T"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": []
+     },
+     {
+      "body": "-",
+      "flat": [],
+      "kind": "RACE",
+      "label": "Соревнование",
+      "sets": []
+     },
+     {
+      "body": "2min@I + 1min@E + 1min@I + 30s@E + 30s@I + 30s@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "E"
+       }
+      ],
+      "kind": "I",
+      "label": "Работа в интервальном темпе",
+      "sets": []
+     }
+    ],
+    "week": 19
+   },
+   {
+    "caps": [
+     {
+      "ceiling_km": 10.0,
+      "fraction_of_week": 0.08,
+      "zone": "I"
+     }
+    ],
+    "notes": [],
+    "phase": 4,
+    "sessions": [
+     {
+      "body": "3x(3200m@T) + 2min@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": [
+       {
+        "label": "3×(3200м П)",
+        "reps_max": 3,
+        "reps_min": 3,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 3200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "T"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "6x(1600m@T) + 1min@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": [
+       {
+        "label": "6×(1600м П)",
+        "reps_max": 6,
+        "reps_min": 6,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 1600.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "T"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "3200m pace_growth 5 final_zone I",
+      "distance_m": 3200.0,
+      "final_zone": "I",
+      "flat": [],
+      "kind": "ACC",
+      "label": "Бег с ускорением",
+      "pace_growth_sec_per_400m": 5.0,
+      "sets": []
+     },
+     {
+      "body": "-",
+      "flat": [],
+      "kind": "RACE",
+      "label": "Соревнование",
+      "sets": []
+     },
+     {
+      "body": "2min@I + 1min@E + 1min@I + 30s@E + 30s@I + 30s@E",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "I"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": null,
+        "seconds": 30.0,
+        "zone": "E"
+       }
+      ],
+      "kind": "I",
+      "label": "Работа в интервальном темпе",
+      "sets": []
+     }
+    ],
+    "week": 20
+   },
+   {
+    "caps": [
+     {
+      "ceiling_km": 10.0,
+      "fraction_of_week": 0.08,
+      "zone": "I"
+     }
+    ],
+    "notes": [],
+    "phase": 4,
+    "sessions": [
+     {
+      "body": "4x(1000-1600m@T) + 1min@E + 2x(1000m@I) + 3min@E + 4x(200m@R + 200m@E)",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 3.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": [
+       {
+        "label": "4×(1000м П)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 1000.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "T"
+         }
+        ]
+       },
+       {
+        "label": "2×(1000м И)",
+        "reps_max": 2,
+        "reps_min": 2,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 1000.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "I"
+         }
+        ]
+       },
+       {
+        "label": "4×(200м Пв + 200м Л)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "40min@T + 4x(200m@R + 200m@E)",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 40.0,
+        "seconds": null,
+        "zone": "T"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": [
+       {
+        "label": "4×(200м Пв + 200м Л)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "-",
+      "flat": [],
+      "kind": "RACE",
+      "label": "Соревнование",
+      "sets": []
+     }
+    ],
+    "week": 21
+   },
+   {
+    "caps": [
+     {
+      "ceiling_km": 10.0,
+      "fraction_of_week": 0.08,
+      "zone": "I"
+     }
+    ],
+    "notes": [],
+    "phase": 4,
+    "sessions": [
+     {
+      "body": "4x(1000-1600m@T) + 1min@E + 2x(1000m@I) + 3min@E + 4x(200m@R + 200m@E)",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 1.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 3.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": [
+       {
+        "label": "4×(1000м П)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 1000.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "T"
+         }
+        ]
+       },
+       {
+        "label": "2×(1000м И)",
+        "reps_max": 2,
+        "reps_min": 2,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 1000.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "I"
+         }
+        ]
+       },
+       {
+        "label": "4×(200м Пв + 200м Л)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "-",
+      "flat": [],
+      "kind": "RACE",
+      "label": "Соревнование",
+      "sets": []
+     },
+     {
+      "body": "4x(200m@R + 200m@E) + 3x(1000m@I) + 2min@E + 2x(400m@R + 400m@E)",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "R",
+      "label": "Работа в повторном темпе",
+      "sets": [
+       {
+        "label": "4×(200м Пв + 200м Л)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       },
+       {
+        "label": "3×(1000м И)",
+        "reps_max": 3,
+        "reps_min": 3,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 1000.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "I"
+         }
+        ]
+       },
+       {
+        "label": "2×(400м Пв + 400м Л)",
+        "reps_max": 2,
+        "reps_min": 2,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "week": 22
+   },
+   {
+    "caps": [],
+    "notes": [
+     "Соревнования — пятницы и субботы."
+    ],
+    "phase": 4,
+    "sessions": [
+     {
+      "body": "4x(1600m@T) + 2min@E + 6x(200m@R + 200m@E) + 1600m@T",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "E"
+       },
+       {
+        "alternatives": [],
+        "distance_m": 1600.0,
+        "minutes": null,
+        "seconds": null,
+        "zone": "T"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": [
+       {
+        "label": "4×(1600м П)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 1600.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "T"
+         }
+        ]
+       },
+       {
+        "label": "6×(200м Пв + 200м Л)",
+        "reps_max": 6,
+        "reps_min": 6,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "40min@T + 4x(200m@R + 200m@E)",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 40.0,
+        "seconds": null,
+        "zone": "T"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": [
+       {
+        "label": "4×(200м Пв + 200м Л)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "-",
+      "flat": [],
+      "kind": "RACE",
+      "label": "Соревнование",
+      "sets": []
+     }
+    ],
+    "week": 23
+   },
+   {
+    "caps": [],
+    "notes": [],
+    "phase": 4,
+    "sessions": [
+     {
+      "body": "4x(1200m@T) + 2min@E + 4x(200m@R + 200m@E)",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 2.0,
+        "seconds": null,
+        "zone": "E"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": [
+       {
+        "label": "4×(1200м П)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 1200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "T"
+         }
+        ]
+       },
+       {
+        "label": "4×(200м Пв + 200м Л)",
+        "reps_max": 4,
+        "reps_min": 4,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "body": "40min@T",
+      "flat": [
+       {
+        "alternatives": [],
+        "distance_m": null,
+        "minutes": 40.0,
+        "seconds": null,
+        "zone": "T"
+       }
+      ],
+      "kind": "T",
+      "label": "Работа в пороговом темпе",
+      "sets": []
+     },
+     {
+      "body": "-",
+      "flat": [],
+      "kind": "RACE",
+      "label": "Соревнование",
+      "sets": []
+     }
+    ],
+    "week": 24
+   }
+  ]
+ },
+ "schedules": [
+  {
+   "phases": {
+    "1": [
+     1,
+     2,
+     3,
+     13,
+     21,
+     23
+    ],
+    "2": [
+     10,
+     11,
+     12,
+     18,
+     19,
+     20
+    ],
+    "3": [
+     7,
+     8,
+     9,
+     14,
+     15,
+     16
+    ],
+    "4": [
+     4,
+     5,
+     6,
+     17,
+     22,
+     24
+    ]
+   },
+   "weeks": 24
+  }
+ ]
+}

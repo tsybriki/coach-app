@@ -74,6 +74,21 @@ class SystemClock(Clock):
         return date.today()
 
 
+def reference_dir() -> Path | None:
+    """Каталог справочника методики.
+
+    Справочник — часть репозитория: таблицы Дэниэлса и программа тренировок.
+    Это версионируемые правила, а не состояние, поэтому они лежат рядом с
+    кодом, а не в хранилище.
+    """
+    env = os.environ.get("COACH_APP_REFERENCE")
+    if env:
+        return Path(env)
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    candidate = repo_root / "reference" / "daniels"
+    return candidate if candidate.is_dir() else None
+
+
 @dataclass
 class AppContainer:
     """Собранное приложение. Передаётся в FastAPI как зависимость."""
@@ -106,7 +121,7 @@ def build_container(data_root: Path | None = None) -> AppContainer:
         )
 
     storage = FileStorage(data_root)
-    methodology = MethodologyRepoAdapter(storage)
+    methodology = MethodologyRepoAdapter(storage, reference_dir=reference_dir())
     templates = methodology.workout_templates()
     load_model = methodology.load_model()
     athlete = AthleteRepoAdapter(storage).get()
@@ -115,6 +130,8 @@ def build_container(data_root: Path | None = None) -> AppContainer:
         templates=templates,
         load_model=load_model,
         athlete=athlete,
+        paces=methodology.training_paces(),
+        plan=methodology.method_plan(),
     )
 
     feasibility = GoalFeasibility(

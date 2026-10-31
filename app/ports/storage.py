@@ -19,6 +19,7 @@ from app.domain.entities import (
     Week,
     WorkoutDetail,
 )
+from app.domain.methodology import DanielsPaces, MethodPlan
 
 
 class SeasonRepo(Protocol):
@@ -109,6 +110,18 @@ class MethodologyRepo(Protocol):
 
     def workout_templates(self) -> dict[str, object]:
         """Шаблоны тренировок по (goal, scale)."""
+        ...
+
+    def training_paces(self) -> DanielsPaces:
+        """Таблица темпов: VDOT → темпы зон.
+
+        Справочник, а не профиль: атлет читает из него темпы для своего VDOT.
+        """
+        ...
+
+    def method_plan(self) -> MethodPlan:
+        """Программа тренировок: недели по фазам, ограничения недели,
+        распределение недель по сроку до старта."""
         ...
 
 

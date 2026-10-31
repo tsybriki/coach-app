@@ -314,10 +314,10 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         close_week,
         link_actual,
         link_actual_session,
-        propose_week,
         replan_remainder,
         unlink_actual,
     )
+    from app.services.week_proposal import propose_week as propose_by_rules
 
     # Команды, не требующие недели: загрузка факта, разбор FIT и текст
     if command.type is CommandType.IMPORT_FIT:
@@ -386,7 +386,10 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
     diff: list[dict[str, Any]] = []
 
     if command.type is CommandType.PROPOSE_WEEK:
-        updated = propose_week(week, week)
+        # Неделя предлагается заново по правилам методики: макро берётся
+        # из текущей недели, качественная работа — из правил Дэниэлса.
+        season = container.season_repo.load()
+        updated = propose_by_rules(season, week, container.planner)
     elif command.type is CommandType.ACTIVATE_WEEK:
         updated = activate_week(week)
     elif command.type is CommandType.CLOSE_WEEK:
