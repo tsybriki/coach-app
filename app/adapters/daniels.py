@@ -153,6 +153,10 @@ def load_plan(reference_dir: Path) -> MethodPlan:
         extra_phases=tuple(
             int(p) for p in data.get("extra_phases", []) if p
         ),
+        extra_plans={
+            int(k): tuple(int(w) for w in v)
+            for k, v in (data.get("extra_plans") or {}).items()
+        },
     )
 
 

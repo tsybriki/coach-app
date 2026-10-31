@@ -469,6 +469,70 @@ def test_every_term_keeps_total_and_order(plan):
         assert len(set(all_weeks)) == weeks, f"срок {weeks}: недели повторяются"
 
 
+# ------------------------------------------------------------------ планы лишних недель
+
+
+def test_extra_week_takes_plan_from_phase_tail(plan):
+    """Лишняя неделя берёт план из хвоста своей фазы.
+
+    Кирилл, 30.10.2026: «последние две недели каждой фазы». Хвост фазы
+    программы — её третьи-четвёртые недели: II — 11-12, III — 17-18,
+    IV — 21-22 (третья и четвёртая, а не пятая и шестая).
+
+    Неделя программы 25 стоит на 13-й неделе сезона: лишние недели идут
+    в конце своей фазы (фазы идут по порядку, а недели программы внутри
+    фазы — по её списку).
+    """
+    assert plan.plan_week(29, 12) == (2, 25, 11)
+    assert plan.plan_week(29, 13) == (2, 28, 12)
+    # Дальше — фаза III: сначала её базовые недели, потом лишние.
+    assert plan.plan_week(29, 14) == (3, 7, 7)
+    assert plan.plan_week(29, 20) == (3, 26, 17)
+    assert plan.plan_week(29, 21) == (3, 29, 18)
+    # Фаза IV: лишняя неделя 27 берёт план из 21.
+    assert plan.plan_week(29, 28) == (4, 27, 21)
+
+
+def test_extra_week_plans_repeat_cyclically(plan):
+    """Планы лишних недель повторяются по кругу.
+
+    Три лишние недели фазы II берут 11, 12, 11; четыре — 11, 12, 11, 12.
+    """
+    three = plan.schedule_for(32)
+    assert three is not None
+    assert [
+        three.plan_for(w) for w in three.weeks_for(2) if w > 24
+    ] == [11, 12, 11]
+
+    four = plan.schedule_for(34)
+    assert four is not None
+    assert [
+        four.plan_for(w) for w in four.weeks_for(2) if w > 24
+    ] == [11, 12, 11, 12]
+
+
+def test_extra_week_plan_comes_from_its_own_phase(plan):
+    """План лишней недели — из хвоста именно её фазы."""
+    tails = {2: {11, 12}, 3: {17, 18}, 4: {21, 22}}
+    for weeks in range(25, 40):
+        schedule = plan.schedule_for(weeks)
+        assert schedule is not None
+        for phase, program_weeks in schedule.phases.items():
+            for program_week in program_weeks:
+                if program_week <= 24:
+                    continue
+                assert schedule.plan_for(program_week) in tails[phase], \
+                    f"срок {weeks}: неделя {program_week} фазы {phase} — " \
+                    f"план не из хвоста фазы"
+
+
+def test_regular_week_plan_is_itself(plan):
+    """Для обычной недели план — она сама."""
+    assert plan.plan_week(24, 0) == (1, 1, 1)
+    assert plan.plan_week(24, 6) == (2, 10, 10)
+    assert plan.plan_week(24, 23) == (4, 24, 24)
+
+
 def test_program_week_beyond_program_is_none(plan):
     """За пределами программы недели нет."""
     assert plan.program_week(24, 24) is None

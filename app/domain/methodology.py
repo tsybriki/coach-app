@@ -243,10 +243,15 @@ class WeekSchedule:
     недели перетасовываются между фазами, и одна и та же неделя программы
     в разных сроках попадает в разные фазы. Считать «6 недель первой фазы»
     нельзя — это другая неделя программы.
+
+    `plans` — из какой недели программы берётся план тренировки для
+    каждой недели. Для обычных недели это сама неделя; для лишних —
+    неделя из хвоста фазы (см. `MethodPlan.extra_plans`).
     """
 
     weeks: int
     phases: dict[int, tuple[int, ...]] = field(default_factory=dict)
+    plans: dict[int, int] = field(default_factory=dict)
 
     def total(self) -> int:
         return sum(len(weeks) for weeks in self.phases.values())
@@ -254,6 +259,10 @@ class WeekSchedule:
     def weeks_for(self, phase: int) -> tuple[int, ...]:
         """Недели программы, попадающие в фазу."""
         return self.phases.get(phase, ())
+
+    def plan_for(self, program_week: int) -> int:
+        """Неделя программы, из которой берётся план тренировки."""
+        return self.plans.get(program_week, program_week)
 
     def phase_of(self, program_week: int) -> int | None:
         """Фаза, в которую попадает неделя программы."""
@@ -271,6 +280,7 @@ class MethodPlan:
     schedules: tuple[WeekSchedule, ...] = ()
     base_schedule: WeekSchedule | None = None
     extra_phases: tuple[int, ...] = ()
+    extra_plans: dict[int, tuple[int, ...]] = field(default_factory=dict)
 
     def week(self, phase: int, week: int) -> PhaseWeek | None:
         for entry in self.weeks:
@@ -302,6 +312,12 @@ class MethodPlan:
         через фазы `extra_phases` — по кругу, а не поровну: при 29 неделях
         5 лишних дают 2 в фазу II, 2 в фазу III и 1 в фазу IV. Фаза I не
         растёт: это база, а не тренировка.
+
+        План тренировки для лишней недели берётся из **хвоста своей фазы**
+        (Кирилл, 30.10.2026): фаза II — недели 11-12, фаза III — 17-18,
+        фаза IV — 21-22 (третья и четвёртая, а не пятая и шестая). План
+        повторяется по кругу: две лишние недели фазы II берут 11 и 12,
+        четыре — 11, 12, 11, 12.
         """
         base = self.base_schedule
         assert base is not None
@@ -318,13 +334,20 @@ class MethodPlan:
             )
 
         phases = {phase: tuple(weeks) for phase, weeks in base.phases.items()}
+        plans: dict[int, int] = {}
         cycle = self.extra_phases or tuple(sorted(base.phases))
+        counters: dict[int, int] = {}
         for index, program_week in enumerate(
             range(base_weeks + 1, weeks_to_race + 1)
         ):
             phase = cycle[index % len(cycle)]
             phases[phase] = (*phases.get(phase, ()), program_week)
-        return WeekSchedule(weeks=weeks_to_race, phases=phases)
+            tail = self.extra_plans.get(phase) or ()
+            if tail:
+                taken = counters.get(phase, 0)
+                counters[phase] = taken + 1
+                plans[program_week] = tail[taken % len(tail)]
+        return WeekSchedule(weeks=weeks_to_race, phases=phases, plans=plans)
 
     def program_week(self, weeks_to_race: int, offset: int) -> tuple[int, int] | None:
         """Неделя программы для недели сезона.
@@ -352,6 +375,21 @@ class MethodPlan:
                 return (phase, weeks[remaining])
             remaining -= len(weeks)
         return None
+
+    def plan_week(self, weeks_to_race: int, offset: int) -> tuple[int, int, int] | None:
+        """Фаза, неделя программы и неделя плана для недели сезона.
+
+        Для обычной недели неделя плана равна неделе программы. Для лишней
+        недели (срок больше базы) план берётся из хвоста своей фазы.
+        """
+        located = self.program_week(weeks_to_race, offset)
+        if located is None:
+            return None
+        phase, program_week = located
+        schedule = self.schedule_for(weeks_to_race)
+        if schedule is None:
+            return None
+        return (phase, program_week, schedule.plan_for(program_week))
 
 
 # ------------------------------------------------------------------ вычисления

@@ -218,19 +218,22 @@ class WeekPlanner:
         """Рецепты недели программы.
 
         Номер недели программы берётся из срока до старта: программа
-        раскладывается по фазам в зависимости от того, сколько недель
-        осталось. Если недель программы не хватает — рецептов нет, и неделя
-        собирается только из макро.
+        раскладывается под срок по фазам. Если недель программы не хватает —
+        рецептов нет, и неделя собирается только из макро.
+
+        Для лишней недели (срок больше базы) план берётся из хвоста своей
+        фазы: неделя 25 в фазе II использует план недели 11.
         """
         if not self._plan.weeks:
             return []
         phase = data.phase
         week = data.week
+        plan_week = week
         if data.weeks_to_race:
-            mapped = self._plan.program_week(data.weeks_to_race, data.season_week - 1)
+            mapped = self._plan.plan_week(data.weeks_to_race, data.season_week - 1)
             if mapped is not None:
-                phase, week = mapped
-        entry = self._plan.week(phase, week)
+                phase, week, plan_week = mapped
+        entry = self._plan.week(phase, plan_week)
         if entry is None:
             return []
         return list(entry.recipes)
@@ -241,12 +244,15 @@ class WeekPlanner:
         «R-темп — не более 5 % недельного километража», «I-темп — 8 % или
         10 км, что меньше». Предел задан на неделю целиком, поэтому считается
         сумма по зоне за неделю: если она выше предела, работа урезается.
+
+        Ограничения берутся из недели **плана**: у лишней недели план из
+        хвоста фазы, значит и пределы её.
         """
         recipes = self._recipes_for(data)
         if not recipes or data.run_km <= 0:
             return recipes
 
-        entry = self._plan.week(*self._program_position(data))
+        entry = self._plan.week(*self._plan_position(data))
         if entry is None or not entry.caps:
             return recipes
         return apply_week_caps(recipes, entry.caps, data.run_km)
@@ -257,6 +263,18 @@ class WeekPlanner:
             mapped = self._plan.program_week(data.weeks_to_race, data.season_week - 1)
             if mapped is not None:
                 return mapped
+        return (data.phase, data.week)
+
+    def _plan_position(self, data: WeekPlanInput) -> tuple[int, int]:
+        """Неделя **плана** для недели сезона: фаза и неделя, чей план берётся.
+
+        Для лишней недели это неделя из хвоста фазы.
+        """
+        if data.weeks_to_race:
+            mapped = self._plan.plan_week(data.weeks_to_race, data.season_week - 1)
+            if mapped is not None:
+                phase, _program_week, plan_week = mapped
+                return (phase, plan_week)
         return (data.phase, data.week)
 
     def _plan_sessions(self, data: WeekPlanInput) -> list[_PlannedSession]:
