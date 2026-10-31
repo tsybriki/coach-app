@@ -404,6 +404,71 @@ def test_phase_of_program_week(plan):
     assert schedule.phase_of(24) == 4
 
 
+# ------------------------------------------------------------------ другие сроки
+
+
+def test_shorter_term_trims_base_table(plan):
+    """Короче 24 недель: недели программы сверх срока отпадают."""
+    schedule = plan.schedule_for(19)
+    assert schedule is not None
+    assert schedule.weeks_for(1) == (1, 2, 3, 13)
+    assert schedule.weeks_for(2) == (10, 11, 12, 18, 19)
+    assert schedule.weeks_for(3) == (7, 8, 9, 14, 15, 16)
+    assert schedule.weeks_for(4) == (4, 5, 6, 17)
+    assert schedule.total() == 19
+
+
+def test_longer_term_adds_evenly_to_phases_two_three_four(plan):
+    """Длиннее 24: лишние недели по кругу через фазы II, III, IV.
+
+    Пример Кирилла: 29 недель → 5 лишних → 2 в фазу II, 2 в фазу III,
+    1 в фазу IV. Фаза I не растёт.
+    """
+    schedule = plan.schedule_for(29)
+    assert schedule is not None
+    base = plan.schedule_for(24)
+    assert base is not None
+    extras = {
+        phase: len(schedule.weeks_for(phase)) - len(base.weeks_for(phase))
+        for phase in sorted(schedule.phases)
+    }
+    assert extras == {1: 0, 2: 2, 3: 2, 4: 1}
+    assert schedule.total() == 29
+
+
+def test_extra_weeks_go_in_cyclic_order(plan):
+    """Лишние недели программы идут по кругу: 25 → II, 26 → III, 27 → IV."""
+    schedule = plan.schedule_for(29)
+    assert schedule is not None
+    assert 25 in schedule.weeks_for(2)
+    assert 26 in schedule.weeks_for(3)
+    assert 27 in schedule.weeks_for(4)
+    assert 28 in schedule.weeks_for(2)
+    assert 29 in schedule.weeks_for(3)
+
+
+def test_every_term_keeps_total_and_order(plan):
+    """Любой срок: сумма недель равна сроку, фазы идут по порядку.
+
+    Прыжок фазы (1, 2, 3, 1) означал бы, что неделя из третьей фазы
+    оказалась раньше второй.
+    """
+    for weeks in range(10, 33):
+        schedule = plan.schedule_for(weeks)
+        assert schedule is not None
+        assert schedule.total() == weeks, f"срок {weeks}: сумма не сходится"
+        flat = [
+            phase
+            for phase in sorted(schedule.phases)
+            for _ in schedule.weeks_for(phase)
+        ]
+        assert flat == sorted(flat), f"срок {weeks}: фазы идут не по порядку"
+        all_weeks = [
+            w for phase in schedule.phases for w in schedule.weeks_for(phase)
+        ]
+        assert len(set(all_weeks)) == weeks, f"срок {weeks}: недели повторяются"
+
+
 def test_program_week_beyond_program_is_none(plan):
     """За пределами программы недели нет."""
     assert plan.program_week(24, 24) is None

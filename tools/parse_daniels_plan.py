@@ -226,6 +226,7 @@ def parse(text: str) -> dict[str, Any]:
     notes: list[str] = []
     schedules: list[dict[str, Any]] = []
     base_schedule: dict[str, Any] | None = None
+    extra_phases: tuple[int, ...] = ()
 
     for raw_line in text.splitlines():
         line = raw_line.strip()
@@ -240,6 +241,12 @@ def parse(text: str) -> dict[str, Any]:
                 "week_from": int(parts[3]),
                 "week_to": int(parts[4]),
             })
+            continue
+
+        if line.startswith("EXTRA "):
+            extra_phases = tuple(
+                int(p) for p in line.split()[1].split(",") if p
+            )
             continue
 
         if line.startswith("SCHED ") or line.startswith("BASE "):
@@ -357,6 +364,7 @@ def parse(text: str) -> dict[str, Any]:
         "phase_map": phase_map,
         "schedules": schedules,
         "base_schedule": base_schedule,
+        "extra_phases": list(extra_phases),
         "phases": phases,
     }
 

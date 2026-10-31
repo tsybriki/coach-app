@@ -270,6 +270,7 @@ class MethodPlan:
     weeks: tuple[PhaseWeek, ...] = ()
     schedules: tuple[WeekSchedule, ...] = ()
     base_schedule: WeekSchedule | None = None
+    extra_phases: tuple[int, ...] = ()
 
     def week(self, phase: int, week: int) -> PhaseWeek | None:
         for entry in self.weeks:
@@ -278,13 +279,52 @@ class MethodPlan:
         return None
 
     def schedule_for(self, weeks_to_race: int) -> WeekSchedule | None:
-        """Распределение недель по фазам для заданного срока до старта."""
+        """Распределение недель по фазам для заданного срока до старта.
+
+        Явное правило для этого срока — если оно есть. Иначе считается от
+        базовой таблицы: короче — обрезка, длиннее — лишние недели по кругу
+        через фазы `extra_phases`.
+        """
         for schedule in self.schedules:
             if schedule.weeks == weeks_to_race:
                 return schedule
-        if self.base_schedule is not None:
-            return self.base_schedule
-        return None
+        if self.base_schedule is None:
+            return None
+        return self._schedule_for_base(weeks_to_race)
+
+    def _schedule_for_base(self, weeks_to_race: int) -> WeekSchedule:
+        """Распределение от базовой таблицы для произвольного срока.
+
+        Короче базы: недели программы сверх срока отпадают — неделя
+        программы попадает в свою фазу, пока срок её не съел.
+
+        Длиннее базы: лишние недели программы (25, 26, …) идут по кругу
+        через фазы `extra_phases` — по кругу, а не поровну: при 29 неделях
+        5 лишних дают 2 в фазу II, 2 в фазу III и 1 в фазу IV. Фаза I не
+        растёт: это база, а не тренировка.
+        """
+        base = self.base_schedule
+        assert base is not None
+        base_weeks = base.weeks
+
+        if weeks_to_race <= base_weeks:
+            phases = {
+                phase: tuple(w for w in weeks if w <= weeks_to_race)
+                for phase, weeks in base.phases.items()
+            }
+            return WeekSchedule(
+                weeks=weeks_to_race,
+                phases={p: w for p, w in phases.items() if w},
+            )
+
+        phases = {phase: tuple(weeks) for phase, weeks in base.phases.items()}
+        cycle = self.extra_phases or tuple(sorted(base.phases))
+        for index, program_week in enumerate(
+            range(base_weeks + 1, weeks_to_race + 1)
+        ):
+            phase = cycle[index % len(cycle)]
+            phases[phase] = (*phases.get(phase, ()), program_week)
+        return WeekSchedule(weeks=weeks_to_race, phases=phases)
 
     def program_week(self, weeks_to_race: int, offset: int) -> tuple[int, int] | None:
         """Неделя программы для недели сезона.

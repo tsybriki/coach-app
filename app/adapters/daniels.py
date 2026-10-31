@@ -150,6 +150,9 @@ def load_plan(reference_dir: Path) -> MethodPlan:
         weeks=tuple(sorted(weeks, key=lambda w: (w.phase, w.week))),
         schedules=schedules,
         base_schedule=base_schedule,
+        extra_phases=tuple(
+            int(p) for p in data.get("extra_phases", []) if p
+        ),
     )
 
 

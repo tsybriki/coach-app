@@ -53,6 +53,11 @@
   },
   "weeks": 24
  },
+ "extra_phases": [
+  2,
+  3,
+  4
+ ],
  "phase_map": [],
  "phases": {
   "1": [
