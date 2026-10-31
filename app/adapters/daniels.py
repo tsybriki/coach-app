@@ -157,6 +157,14 @@ def load_plan(reference_dir: Path) -> MethodPlan:
             int(k): tuple(int(w) for w in v)
             for k, v in (data.get("extra_plans") or {}).items()
         },
+        extra_last={
+            int(k): int(v)
+            for k, v in (data.get("extra_last") or {}).items()
+        },
+        program_weeks={
+            int(k): tuple(int(w) for w in v)
+            for k, v in (data.get("program_weeks") or {}).items()
+        },
     )
 
 

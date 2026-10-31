@@ -228,6 +228,8 @@ def parse(text: str) -> dict[str, Any]:
     base_schedule: dict[str, Any] | None = None
     extra_phases: tuple[int, ...] = ()
     extra_plans: dict[int, tuple[int, ...]] = {}
+    extra_last: dict[int, int] = {}
+    program_weeks: dict[int, tuple[int, ...]] = {}
 
     for raw_line in text.splitlines():
         line = raw_line.strip()
@@ -254,6 +256,20 @@ def parse(text: str) -> dict[str, Any]:
             for item in line.split()[1:]:
                 phase_token, weeks_list = item.split(":")
                 extra_plans[int(phase_token)] = tuple(
+                    int(w) for w in weeks_list.split(",") if w
+                )
+            continue
+
+        if line.startswith("LAST "):
+            for item in line.split()[1:]:
+                phase_token, week = item.split(":")
+                extra_last[int(phase_token)] = int(week)
+            continue
+
+        if line.startswith("PROGRAM "):
+            for item in line.split()[1:]:
+                phase_token, weeks_list = item.split(":")
+                program_weeks[int(phase_token)] = tuple(
                     int(w) for w in weeks_list.split(",") if w
                 )
             continue
@@ -375,6 +391,8 @@ def parse(text: str) -> dict[str, Any]:
         "base_schedule": base_schedule,
         "extra_phases": list(extra_phases),
         "extra_plans": {str(k): list(v) for k, v in extra_plans.items()},
+        "extra_last": {str(k): v for k, v in extra_last.items()},
+        "program_weeks": {str(k): list(v) for k, v in program_weeks.items()},
         "phases": phases,
     }
 
