@@ -10,12 +10,12 @@ from collections.abc import AsyncIterator
 from datetime import date, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.adapters.fit import parse_fit
-from app.api.dependencies import AppContainer, build_container
+from app.api.dependencies import AppContainer, get_container
 from app.domain.derivations import preserve_fact_links, week_progress
 from app.domain.entities import (
     ActualSession,
@@ -33,19 +33,6 @@ from app.ports.storage import (
 )
 
 router = APIRouter(prefix="/api/v1")
-
-
-def get_container(request: Request) -> AppContainer:
-    """Зависимость: собранное приложение.
-
-    Контейнер один на процесс: он держит хранилище и сервисы, которые
-    переиспользуются между запросами.
-    """
-    container = getattr(request.app.state, "container", None)
-    if container is None:
-        container = build_container()
-        request.app.state.container = container
-    return container
 
 
 # ------------------------------------------------------------------ схемы

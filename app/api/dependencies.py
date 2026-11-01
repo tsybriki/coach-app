@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from fastapi import Request
+
 from app.adapters.garmin import GarminActivityPort, GarminFitPort
 from app.adapters.storage.files import FileStorage
 from app.adapters.storage.ports import (
@@ -170,4 +172,23 @@ def _target_vdot_for_metric(goal: Goal) -> float | None:
     return None
 
 
-__all__ = ["AppContainer", "build_container", "StubNarrator", "SystemClock"]
+def get_container(request: Request) -> AppContainer:
+    """Зависимость: собранное приложение.
+
+    Контейнер один на процесс: он держит хранилище и сервисы, которые
+    переиспользуются между запросами.
+    """
+    container = getattr(request.app.state, "container", None)
+    if container is None:
+        container = build_container()
+        request.app.state.container = container
+    return container
+
+
+__all__ = [
+    "AppContainer",
+    "build_container",
+    "get_container",
+    "StubNarrator",
+    "SystemClock",
+]

@@ -20,6 +20,7 @@ from starlette.staticfiles import PathLike
 from starlette.types import Scope
 
 from app.api.dependencies import build_container
+from app.api.install import router as install_router
 from app.api.routes import router
 
 CLIENT_DIR = "client"
@@ -55,6 +56,8 @@ def create_app() -> FastAPI:
     app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     app.include_router(router)
+    # Публичные маршруты установки — без префикса `/api/v1`.
+    app.include_router(install_router)
 
     @app.get("/health")
     def health() -> dict[str, object]:

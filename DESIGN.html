@@ -894,6 +894,7 @@ test_contract_athlete_repo.py</code></pre>
 <p>понадобится.</p>
 <h2>Маршруты</h2>
 <pre><code>GET  /health                          liveness + версия
+GET  /ca.crt                          корневой CA для установки на телефон
 GET  /api/v1/snapshot                 весь сезон: план + состояние + version
 GET  /api/v1/week/{n}                одна неделя
 GET  /api/v1/actual/{n}              факт недели
@@ -909,6 +910,10 @@ POST /api/v1/commands/batch          несколько команд подря�
 POST /api/v1/narrate                 спросить нарратора (текст, не числа)
 
 GET  /api/v1/events                  SSE: изменения версии</code></pre>
+<p><code>/ca.crt</code> — вне префикса <code>/api/v1</code>: ссылка на сертификат должна быть</p>
+<p>короткой, её телефон открывает руками. Файл читает адаптер хранилища; сам</p>
+<p>сертификат лежит в каталоге данных, приватный ключ CA в репозиторий не</p>
+<p>попадает. Подробности установки — <code>04-хостинг.md</code>.</p>
 <p>Отдельного маршрута под загрузку факта нет: <code>pull_fact</code> — это команда, она идёт</p>
 <p>POST <code>/api/v1/commands</code> как любая другая. Отдельный маршрут означал бы, что загрузка</p>
 <p>факта — не действие пользователя, а фоновый процесс. Но по правилам модели загрузка</p>
@@ -1074,8 +1079,65 @@ GET  /api/v1/events                  SSE: изменения версии</code>
 <td>Приложение работает, очередь команд в IndexedDB — тоже, но без service worker</td>
 </tr>
 </table></div>
-<p><b>Решение не принято.</b> По умолчанию в базе — обычный HTTP: приложение доступно</p>
-<p>и работает, офлайн включается отдельным шагом.</p>
+<p><b>Решение (01.11.2026): HTTPS поднят на порту 8443.</b> BFF отвечает и по HTTP</p>
+<p>(<code>8080</code>), и по HTTPS (<code>8443</code>) — это два процесса: <code>coach-app.service</code> и</p>
+<p><code>coach-app-tls.service</code>. Порт 443 занять нельзя без sudo, а PWA работает на</p>
+<p>любом HTTPS-порту.</p>
+<p>Сертификат — локальный CA (mkcert) на имя <code>192.168.178.43</code>, <code>192.168.178.44</code>,</p>
+<p><code>localhost</code>, <code>127.0.0.1</code>. Файлы лежат в <code>~/.local/share/coach-app/tls/</code></p>
+<p><b>вне репозитория</b>: приватный ключ CA в git попадать не должен.</p>
+<h3>Установка на телефон</h3>
+<p>Chrome на Android не считает <code>192.168.x.x</code> безопасным: без HTTPS он не</p>
+<p>предложит «Установить приложение». С HTTP-адреса установка невозможна.</p>
+<p>Порядок на телефоне (один раз):</p>
+<ol>
+<li>Открыть <code>http://192.168.178.43:8080/ca.crt</code> — сертификат CA скачается.</li>
+</ol>
+<p>Android спросит, откуда; выбрать «Настройки» и поставить.</p>
+<ol>
+<li>Android 7+ требует для установки CA разблокировки экрана:</li>
+</ol>
+<p>Настройки → Безопасность → Шифрование и credentials → Установка сертификата</p>
+<p>→ «Сертификат CA пользователя».</p>
+<ol>
+<li>Открыть <code>https://192.168.178.43:8443/</code> — предупреждение исчезнет, когда</li>
+</ol>
+<p>телефон будет доверять CA.</p>
+<ol>
+<li>Меню Chrome → «Установить приложение» (или «Добавить на главный экран»).</li>
+</ol>
+<p><b>Проверка отпечатка CA.</b> Файл сертификата можно сверить с отпечатком на</p>
+<p>машине — так исключена подмена сертификата:</p>
+<pre><code>openssl x509 -in ~/.local/share/coach-app/tls/ca.pem -noout -fingerprint -sha256</code></pre>
+<p><b>Путь без ручной установки CA</b> — сертификат от публичного CA по</p>
+<p>настоящему домену (Let's Encrypt). Тогда телефон доверяет из коробки и ничего</p>
+<p>ставить не надо. Это отдельная задача: нужен домен и его DNS.</p>
+<h3>Условия установки PWA</h3>
+<p>Chrome проверяет четыре вещи. Все должны выполняться одновременно:</p>
+<div class="tw"><table><tr>
+<th>Условие</th>
+<th>Где</th>
+</tr>
+<tr>
+<td>HTTPS (или localhost)</td>
+<td><code>coach-app-tls.service</code> на 8443</td>
+</tr>
+<tr>
+<td>Манифест с <code>name</code>, <code>start_url</code>, <code>display: standalone</code></td>
+<td><code>client/manifest.json</code></td>
+</tr>
+<tr>
+<td>Иконки 192×192 и 512×512 (+ maskable для Android)</td>
+<td><code>client/icons/</code>, рисует <code>tools/render_icons.py</code></td>
+</tr>
+<tr>
+<td>Service worker с обработчиком <code>fetch</code></td>
+<td><code>client/sw.js</code></td>
+</tr>
+</table></div>
+<p>Иконки рисуются кодом, а не хранятся готовыми: палитра живёт в</p>
+<p><code>client/style.css</code>, и иконка обязана быть из неё же. <code>python3 tools/render_icons.py</code></p>
+<p>перерисовывает их после правки палитры.</p>
 <h2>Кэширование статики: почему <code>Cache-Control: no-cache</code></h2>
 <p><b>Статика отдаётся с <code>Cache-Control: no-cache</code>.</b> Без этого заголовка телефон</p>
 <p>по обычному HTTP (service worker не работает) держит <code>app.js</code> в браузерном</p>

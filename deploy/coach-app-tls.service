@@ -1,0 +1,15 @@
+[Unit]
+Description=Coach App BFF (HTTPS — для установки на телефон)
+After=network-online.target
+Wants=coach-app.service
+
+[Service]
+Type=simple
+ExecStart=/home/tsybriki/projects/coach-app/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8443 --ssl-keyfile /home/tsybriki/.local/share/coach-app/tls/key.pem --ssl-certfile /home/tsybriki/.local/share/coach-app/tls/cert.pem
+WorkingDirectory=/home/tsybriki/projects/coach-app
+Environment=COACH_APP_DATA=/home/tsybriki/.local/share/coach-app
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

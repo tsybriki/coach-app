@@ -921,3 +921,27 @@ def test_static_is_not_cached_stale(client: TestClient):
             f"{path}: Cache-Control={cache_control!r} — телефон будет "
             f"показывать старую версию"
         )
+
+
+def test_ca_certificate_is_served_for_phone_install(client: TestClient, data_root: Path):
+    """Сертификат CA отдаётся по короткой ссылке — телефон его скачает.
+
+    Без этого Chrome на Android не предложит «Установить приложение»:
+    HTTPS нужен, а доверять телефону нужно сертификату, который он
+    поставит сам.
+    """
+    response = client.get("/ca.crt")
+    assert response.status_code == 404, "без файла CA — честный 404"
+
+    # С сертификатом на диске — отдаём его.
+    tls = data_root / "tls"
+    tls.mkdir(parents=True, exist_ok=True)
+    (tls / "ca.pem").write_bytes(b"-----BEGIN CERTIFICATE-----\ntest\n")
+    try:
+        response = client.get("/ca.crt")
+        assert response.status_code == 200
+        assert response.content.startswith(b"-----BEGIN CERTIFICATE-----")
+        assert "attachment" in response.headers.get("content-disposition", "")
+        assert "x-x509" in response.headers.get("content-type", "")
+    finally:
+        (tls / "ca.pem").unlink()

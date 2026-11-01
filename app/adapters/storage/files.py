@@ -78,6 +78,18 @@ class FileStorage:
         (self.root / "weeks").mkdir(exist_ok=True)
         (self.root / "actual").mkdir(exist_ok=True)
 
+    def ca_certificate(self) -> bytes | None:
+        """Корневой CA для установки на телефон.
+
+        Сертификат лежит рядом с данными, а не в репозитории: приватный
+        ключ CA в git попадать не должен. Файла может не быть — тогда
+        установки на телефон не будет, и это не ошибка приложения.
+        """
+        path = self.root / "tls" / "ca.pem"
+        if not path.exists():
+            return None
+        return path.read_bytes()
+
     # ---------------------------------------------------------- служебное
 
     def _version(self) -> int:

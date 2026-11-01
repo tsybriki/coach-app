@@ -12,9 +12,11 @@
  * Ответы команд и ошибки не кэшируются никогда.
  */
 
-const CACHE = 'coach-app-shell-v17';
+const CACHE = 'coach-app-shell-v18';
 const SHELL = ['/', '/index.html', '/app.js', '/api.js', '/store.js', '/link.js',
-               '/chart.js', '/structure.js', '/style.css', '/manifest.json'];
+               '/chart.js', '/structure.js', '/style.css', '/manifest.json',
+               '/icons/icon-192.png', '/icons/icon-512.png',
+               '/icons/icon-maskable-512.png', '/icons/icon.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

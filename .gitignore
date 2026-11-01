@@ -9,6 +9,11 @@ token
 .env
 *.key
 
+# CA-сертификат mkcert — приватный ключ корневого CA не должен
+# попасть в репозиторий ни при каких условиях.
+*ca-key.pem
+coach-app-ca.crt
+
 # Python
 __pycache__/
 *.py[cod]
