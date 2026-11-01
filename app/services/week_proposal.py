@@ -14,10 +14,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
+from typing import Any
 
-from app.domain.entities import Season, Slot, Week, Workout
-from app.domain.enums import Sport, WeekStatus
+from app.domain.entities import MacroWeek, Season, Slot, Step, Week, Workout
+from app.domain.enums import PlanStatus, Sport, WeekStatus
 from app.services.week_lifecycle import TransitionError
 from app.services.week_planner import WeeklyTarget, WeekPlanInput, WeekPlanner
 
@@ -57,15 +58,39 @@ def macro_from_week(week: Week) -> MacroVolume:
     return MacroVolume(minutes=minutes, run_km=run_km, long_min=long_min)
 
 def weeks_to_race(season: Season, week_start: date) -> int:
-    """Сколько недель до старта — по дате гонки плана.
+    """Горизонт сезона — от старта сезона до гонки, **в неделях до гонки**.
 
     Этот срок определяет, как программа Дэниэлса раскладывается по фазам.
+
+    **Горизонт один на весь сезон.** Он считается от старта сезона, а не от
+    начала текущей недели: если считать заново каждую неделю, к гонке
+    горизонт сжимается, а номер недели сезона растёт — и неделя
+    запрашивается за пределами расписания. Тогда неделя собирается без
+    качественной работы программы молча, без ошибки, а макро-план и
+    планировщик показывают разные недели.
+
+    Расписание программы покрывает недели **до** гонки. Неделя гонки —
+    часть четвёртой фазы, но у неё нет недели программы: гонка — событие,
+    а не тренировка. Поэтому она добавляется в конец четвёртой фазы, а
+    лишняя неделя программы уходит по `EXTRA` в фазу по кругу — как у
+    планировщика.
     """
     for plan in season.plans:
-        days = (plan.goal.race_date - week_start).days
+        days = (plan.goal.race_date - season.horizon_start).days
         if days >= 0:
             return days // 7
     return 0
+
+
+def is_race_week(season: Season, week_start: date, week_end: date) -> bool:
+    """Неделя гонки — та, в которую попадает дата гонки.
+
+    Гонка — событие недели, а не тренировка: в неделю гонки нет качественной
+    работы по программе, есть гонка и восстановление после неё.
+    """
+    return any(
+        week_start <= plan.goal.race_date <= week_end for plan in season.plans
+    )
 
 
 def build_targets(macro: MacroVolume, week: Week) -> list[WeeklyTarget]:
@@ -83,6 +108,10 @@ def build_targets(macro: MacroVolume, week: Week) -> list[WeeklyTarget]:
         if not long_min and macro.run_km > 0:
             # Длинный бег по правилу: 25 % недельного километража или 1,5 ч.
             long_min = int(min(macro.run_km * LONG_FRACTION, LONG_MAX_MIN))
+        # Потолок правила — всегда: 25 % недельного километража **или**
+        # 1,5 часа, что меньше. Без него длинный пробежек растёт с
+        # километражом недели и перестаёт быть длинным пробежком.
+        long_min = min(long_min, LONG_MAX_MIN)
         targets.append(WeeklyTarget(
             sport=Sport.RUN,
             duration_min=run_minutes,
@@ -93,9 +122,446 @@ def build_targets(macro: MacroVolume, week: Week) -> list[WeeklyTarget]:
     return targets
 
 
+def _macro_week_of(season: Season, season_week: int) -> MacroWeek:
+    """Макро-неделя сезона — или отказ."""
+    plan = next((p for p in season.plans if p.status is PlanStatus.ACTIVE), None)
+    if plan is None:
+        raise TransitionError("в сезоне нет активного плана")
+    macro = plan.macro_week(season_week)
+    if macro is None:
+        raise TransitionError(f"в макро-плане нет недели W{season_week}")
+    return macro
+
+
+def macro_for_season_week(season: Season, season_week: int) -> MacroVolume:
+    """Макро недели — из макро-плана сезона.
+
+    Источник объёма — макро-план сезона, а не сохранённая неделя: неделя
+    хранит то, что уже собрано, и повторный propose сжимал бы неделю.
+    """
+    return macro_from_macro_week(_macro_week_of(season, season_week))
+
+
+def macro_from_macro_week(macro: MacroWeek) -> MacroVolume:
+    """Макро недели — из макро-недели сезона.
+
+    Для недели, которой ещё нет в хранилище: источник — макро-план
+    сезона (`Plan.macro_weeks`), а не сохранённая неделя.
+
+    Бег берётся **разбивкой пайплайна**: длинная + качественная + лёгкая.
+    Качественная работа по правилам Дэниэлса идёт внутри недельного объёма
+    бега, а не добавляется к нему — иначе неделя раздувается вдвое.
+    """
+    minutes: dict[Sport, int] = {}
+    for sport, value in macro.minutes_by_sport.items():
+        try:
+            minutes[Sport(sport)] = int(round(value))
+        except ValueError:
+            continue
+
+    run_minutes = minutes.get(Sport.RUN, 0)
+    if run_minutes and macro.long_min + macro.quality_min + macro.easy_min:
+        # Разбивка известна — бег собирается из неё.
+        run_minutes = (macro.long_min + macro.quality_min + macro.easy_min)
+        minutes[Sport.RUN] = run_minutes
+
+    run_km = macro.run_km
+    long_min = macro.long_min
+    if not long_min and run_km > 0:
+        # Длинный бег по правилу: 25 % недельного километража или 1,5 ч.
+        long_min = int(min(run_km * LONG_FRACTION, LONG_MAX_MIN))
+    elif long_min > LONG_MAX_MIN:
+        # Правило Дэниэлса: 25 % недельного километража **или** 1,5 часа,
+        # что меньше. Макро считает длинный бег по километражу без потолка —
+        # потолок применяется здесь.
+        long_min = LONG_MAX_MIN
+    return MacroVolume(minutes=minutes, run_km=run_km, long_min=long_min)
+
+
+def plan_from_macro(season: Season,
+                     season_week: int,
+                     planner: WeekPlanner,
+                     templates: dict[str, Any] | None = None,
+                     ) -> Week:
+    """Собрать неделю сезона из макро-плана и правил Дэниэлса.
+
+    Неделя, которой ещё нет в хранилище, собирается с нуля: объём по
+    видам спорта — из макро-плана сезона, качественная работа бега — из
+    правил Дэниэлса по неделе программы, раскладка по слотам — из среды.
+
+    Это то, чем пользователь планирует следующую неделю с телефона:
+    кнопка «Спланировать неделю» не требует, чтобы неделя уже была
+    создана заранее.
+    """
+    plan = next((p for p in season.plans if p.status is PlanStatus.ACTIVE), None)
+    if plan is None:
+        raise TransitionError("в сезоне нет активного плана")
+    templates = templates or {}
+    macro_week = plan.macro_week(season_week)
+    if macro_week is None:
+        raise TransitionError(
+            f"в макро-плане нет недели W{season_week}"
+        )
+
+    week_start = season.horizon_start + timedelta(days=7 * (season_week - 1))
+    week_end = week_start + timedelta(days=6)
+
+    volume = macro_from_macro_week(macro_week)
+    targets = build_targets(volume, _stub_week(macro_week, season_week,
+                                               week_start, week_end, plan.id))
+    if not targets:
+        raise TransitionError(
+            f"в макро недели W{season_week} нет объёма — нечего планировать"
+        )
+
+    race_week = is_race_week(season, week_start, week_end)
+
+    # Контрольная точка — первая: она задаёт качественную работу недели
+    # и занимает лучшее окно.
+    cp_workout, cp_slot = _plan_control_point(
+        macro_week, templates, season)
+    used_slots = {cp_slot.id} if cp_slot is not None else set()
+
+    # Тестовая сессия — часть недельного объёма бега, а не добавка к нему:
+    # иначе неделя раздувается на её длительность.
+    if cp_workout is not None:
+        run_minutes = volume.minutes.get(Sport.RUN, 0)
+        cp_minutes = int(round(cp_workout.duration_min))
+        volume.minutes[Sport.RUN] = max(run_minutes - cp_minutes, 0)
+        targets = build_targets(volume, _stub_week(
+            macro_week, season_week, week_start, week_end, plan.id))
+
+    # Не беговые виды спорта занимают слоты **первыми**: их объём известен
+    # точно (макро), а бегу остаток делится по тому, что осталось. Иначе
+    # бег забирает все большие окна, а вел и плавание уходят висяками.
+    others, other_slots = _plan_other_sports(volume, season, used_slots)
+    used_slots |= other_slots
+    free_slots = [s for s in season.slots if s.id not in used_slots]
+
+    planned = planner.build_from(WeekPlanInput(
+        season_week=season_week,
+        week_start=week_start,
+        week_end=week_end,
+        targets=targets,
+        slots=free_slots,
+        weeks_to_race=0 if race_week else weeks_to_race(season, week_start),
+        run_km=volume.run_km,
+        plan_id=plan.id,
+    ))
+
+    planned = _merge_others(planned, others, season)
+    if cp_workout is not None:
+        planned = _merge_control_point(planned, cp_workout)
+
+    planned.load_target = planner.load_target_for_week(planned)
+    planned.validate()
+    return planned
+
+
+def _stub_week(macro: MacroWeek, season_week: int, week_start: date,
+               week_end: date, plan_id: str) -> Week:
+    """Пустая неделя — только ради макро и фокуса.
+
+    `build_targets` берёт из недели фокус и минуты по видам спорта, а
+    сами минуты приходят из макро-недели.
+    """
+    return Week(
+        id=f"W{season_week}",
+        plan_id=plan_id,
+        season_week=season_week,
+        start=week_start,
+        end=week_end,
+        status=WeekStatus.PROPOSED,
+        focus=macro.goal_text or macro.focus,
+        load_target={
+            "hours": macro.total_h,
+            "sessions": float(macro.sessions_target),
+            "distance_m": macro.run_km * 1000.0,
+        },
+    )
+
+
+def _plain_step(sport: Sport, minutes: int) -> Step:
+    """Шаг тренировки без структуры: один кусок на всю длительность.
+
+    У велотренировки и бассейна нет зон и шагов Дэниэлса: инвариант
+    «длительность тренировки = Σ шагов» всё равно должен держаться, поэтому
+    шаг один и на всю тренировку.
+    """
+    from app.domain.entities import Step
+    from app.domain.enums import FocusType, StepRole, TargetType
+
+    return Step(
+        id="s1",
+        role=StepRole.WORK,
+        sport=sport,
+        target_type=TargetType.TIME,
+        target_value=float(minutes),
+        focus=FocusType.HR,
+        focus_value={"zone": "Z2"},
+        duration_min=float(minutes),
+    )
+
+
+def _plan_control_point(macro: MacroWeek,
+                        templates: dict[str, Any],
+                        season: Season,
+                        ) -> tuple[Workout | None, Slot | None]:
+    """Контрольная точка недели — качественная сессия.
+
+    Тестовая сессия задаёт работу недели: её дистанция и темп — из цели
+    CP, структура — из каталога шаблонов. В неделе программы, где по
+    правилам Дэниэлса качественной работы нет, CP всё равно её создаёт:
+    это проверка формы, а не тренировка по программе.
+    """
+    cp = macro.control_point
+    if not cp:
+        return None, None
+    if cp.get("kind") != "quality":
+        return None, None
+
+    variant = _cp_variant(templates, cp.get("variant_id"))
+    if variant is None:
+        return None, None
+
+    distance = float(cp.get("distance_m") or variant.get("work_m") or 0.0)
+    pace = cp.get("pace_min_per_km")
+    pace_sec = _pace_seconds(pace)
+    if pace_sec is None:
+        return None, None
+
+    # Разминка и заминка — по правилу CP: 15 мин Z1 и 12 мин Z1.
+    warmup = 15.0
+    cooldown = 12.0
+    # Темп — секунды на КИЛОМЕТР, дистанция — метры: переводим.
+    work_min = (distance / 1000.0) * pace_sec / 60.0
+
+    steps = [
+        _cp_step("s1", Sport.RUN, warmup, zone="Z1"),
+        _cp_step("s2", Sport.RUN, work_min, zone="Z4",
+                 pace=pace, distance=distance),
+        _cp_step("s3", Sport.RUN, cooldown, zone="Z1"),
+    ]
+    total = warmup + work_min + cooldown
+
+    slot = _slot_for_sport(season, Sport.RUN, int(round(total)),
+                            set())
+    workout = Workout(
+        id="w-control-point",
+        request_id="r-control-point",
+        sport=Sport.RUN,
+        kind="quality",
+        focus=cp.get("session_goal") or cp.get("title") or "Контрольная точка",
+        objective={
+            "name": cp.get("title") or "Контрольная точка",
+            "session": cp,
+            "slot_id": slot.id if slot else "",
+        },
+        time=slot.start if slot else None,
+        steps=steps,
+        duration_min=total,
+    )
+    return workout, slot
+
+
+def _cp_variant(templates: dict[str, Any], variant_id: str | None) -> dict[str, Any] | None:
+    """Вариант каталога для контрольной точки."""
+    if not variant_id:
+        return None
+    for variant in (templates.get("time_trial") or {}).get("variants", []):
+        if variant.get("id") == variant_id:
+            found: dict[str, Any] = variant
+            return found
+    return None
+
+
+def _cp_step(step_id: str, sport: Sport, minutes: float, *,
+             zone: str = "Z2", pace: str | None = None,
+             distance: float = 0.0) -> Step:
+    """Шаг тестовой сессии."""
+    from app.domain.enums import FocusType, StepRole, TargetType
+
+    focus_value: dict[str, Any] = {"zone": zone}
+    if pace:
+        focus_value["pace_min_per_km"] = pace
+    return Step(
+        id=step_id,
+        role=StepRole.WORK,
+        sport=sport,
+        target_type=(TargetType.DISTANCE if distance
+                     else TargetType.TIME),
+        target_value=distance if distance else minutes,
+        focus=FocusType.HR if zone != "Z4" else FocusType.PACE,
+        focus_value=focus_value,
+        duration_min=round(minutes, 2),
+    )
+
+
+def _pace_seconds(pace: str | None) -> float | None:
+    """'4:40' → 280 секунд на километр."""
+    if not pace or ":" not in pace:
+        return None
+    minutes, _, seconds = pace.partition(":")
+    try:
+        return float(minutes) * 60.0 + float(seconds)
+    except ValueError:
+        return None
+
+
+def _plan_other_sports(volume: MacroVolume, season: Season,
+                       taken: set[str] | None = None,
+                       ) -> tuple[list[Workout], set[str]]:
+    """Вел, плавание и ОФП — по объёму макро, раскладка — по слотам среды.
+
+    Правила Дэниэлса задают бег. Остальные виды спорта приходят из макро
+    и среды: их объём известен, а куда поставить — решает слот.
+
+    Возвращает тренировки и занятые слоты: бег встанет в оставшиеся.
+    """
+    workouts: list[Workout] = []
+    used: set[str] = set(taken or set())
+
+    for sport in (Sport.BIKE, Sport.SWIM, Sport.OFP):
+        minutes = int(volume.minutes.get(sport, 0))
+        if minutes <= 0:
+            continue
+        slot = _slot_for_sport(season, sport, minutes, used)
+        if slot is None:
+            continue
+        used.add(slot.id)
+        name = {
+            Sport.BIKE: "Вел",
+            Sport.SWIM: "Пул",
+            Sport.OFP: "ОФП",
+        }[sport]
+        workouts.append(Workout(
+            id=f"w-{sport.value}",
+            request_id=f"r-{sport.value}",
+            sport=sport,
+            kind=sport.value,
+            focus=sport.value,
+            objective={"name": f"{name} {minutes}мин", "day": slot.day},
+            time=slot.start,
+            steps=[_plain_step(sport, minutes)],
+            duration_min=float(minutes),
+        ))
+    return workouts, used
+
+
+def _merge_control_point(week: Week, workout: Workout) -> Week:
+    """Добавить тестовую сессию контрольной точки к собранной неделе."""
+    from app.domain.entities import Assignment, Request
+
+    request_id = f"r{week.season_week}-cp"
+    requests = list(week.requests)
+    requests.append(Request(
+        id=request_id,
+        sport=workout.sport,
+        kind=workout.kind,
+        focus=workout.focus,
+        duration_min=int(workout.duration_min),
+    ))
+    assignments = list(week.assignments)
+    slot_id = str((workout.objective or {}).get("slot_id") or "")
+    if slot_id:
+        assignments.append(Assignment(
+            request_id=request_id,
+            slot_id=slot_id,
+            start=workout.time or "",
+            duration_min=int(workout.duration_min),
+        ))
+    workouts = list(week.workouts)
+    workouts.append(_rebind(workout, request_id))
+    return week.copy_with(requests=requests, assignments=assignments,
+                           workouts=workouts)
+
+
+def _merge_others(week: Week, others: list[Workout],
+                   season: Season) -> Week:
+    """Добавить не беговые тренировки к собранной неделе.
+
+    Запросы и размещения создаются под них, чтобы инвариант «каждый
+    Workout вырос из Request» не нарушился.
+    """
+    from app.domain.entities import Assignment, Request
+
+    if not others:
+        return week
+
+    requests = list(week.requests)
+    assignments = list(week.assignments)
+    workouts = list(week.workouts)
+
+    for index, workout in enumerate(others):
+        request_id = f"r{week.season_week}-other-{index + 1}"
+        requests.append(Request(
+            id=request_id,
+            sport=workout.sport,
+            kind=workout.kind,
+            focus=workout.focus,
+            duration_min=int(workout.duration_min),
+        ))
+        slot = _slot_by_start(season, workout.time)
+        if slot is not None:
+            assignments.append(Assignment(
+                request_id=request_id,
+                slot_id=slot.id,
+                start=slot.start,
+                duration_min=int(workout.duration_min),
+            ))
+        workouts.append(_rebind(workout, request_id))
+
+    return week.copy_with(requests=requests, assignments=assignments,
+                           workouts=workouts)
+
+
+def _rebind(workout: Workout, request_id: str) -> Workout:
+    """Тренировка с другим id запроса."""
+    return Workout(
+        id=workout.id,
+        request_id=request_id,
+        sport=workout.sport,
+        kind=workout.kind,
+        focus=workout.focus,
+        objective=workout.objective,
+        equipment_ids=workout.equipment_ids,
+        location=workout.location,
+        time=workout.time,
+        steps=workout.steps,
+        duration_min=workout.duration_min,
+        priority=workout.priority,
+        rationale=workout.rationale,
+    )
+
+
+def _slot_by_start(season: Season, start: str | None) -> Slot | None:
+    """Слот по времени начала — для уже размещённой тренировки."""
+    if not start:
+        return None
+    for slot in season.slots:
+        if slot.start == start:
+            return slot
+    return None
+
+
+def _slot_for_sport(season: Season, sport: Sport, minutes: int,
+                    taken: set[str]) -> Slot | None:
+    """Слот для вида спорта: по вместимости и запрету видов спорта."""
+    for slot in season.slots:
+        if slot.id in taken:
+            continue
+        if slot.capacity_min < minutes:
+            continue
+        if sport in slot.forbidden_sports:
+            continue
+        return slot
+    return None
+
+
 def propose_week(season: Season,
                  current: Week,
                  planner: WeekPlanner,
+                 templates: dict[str, Any] | None = None,
                  ) -> Week:
     """Собрать неделю по правилам методики.
 
@@ -111,28 +577,45 @@ def propose_week(season: Season,
             f"предложить заново можно только proposed-неделю, а не {current.status}"
         )
 
-    macro = macro_from_week(current)
+    # Объём — из макро-плана сезона, а не из самой недели: иначе повторный
+    # propose сжимает неделю (объём берётся из того, что уже собрано) и
+    # неделя с каждым нажатием становится всё короче.
+    templates = templates or {}
+    macro = macro_for_season_week(season, current.season_week)
+    macro_week = _macro_week_of(season, current.season_week)
     targets = build_targets(macro, current)
     if not targets:
         raise ValueError("в неделе нет объёма — нечего предлагать")
 
     slots = list(season.slots)
+    # Неделя гонки — событие, а не тренировка: в ней нет качественной
+    # работы по программе. Гонка и восстановление после неё — из макро.
+    race_week = is_race_week(season, current.start, current.end)
+
+    # Не беговые виды спорта занимают слоты первыми: их объём известен
+    # точно, а бегу остаётся то, что осталось.
+    cp_workout, cp_slot = _plan_control_point(
+        macro_week, templates, season)
+    used_slots = {cp_slot.id} if cp_slot is not None else set()
+
+    others, other_slots = _plan_other_sports(macro, season, used_slots)
+    used_slots |= other_slots
+    free_slots = [s for s in slots if s.id not in used_slots]
+
     planned = planner.build_from(WeekPlanInput(
         season_week=current.season_week,
         week_start=current.start,
         week_end=current.end,
         targets=targets,
-        slots=slots,
-        weeks_to_race=weeks_to_race(season, current.start),
+        slots=free_slots,
+        weeks_to_race=0 if race_week else weeks_to_race(season, current.start),
         run_km=macro.run_km,
         plan_id=current.plan_id,
     ))
 
-    # Не беговые тренировки переносим из текущей недели: правила Дэниэлса
-    # задают бег, а вел, плавание и ОФП — это из макро и среды.
-    others = [w for w in current.workouts if w.sport is not Sport.RUN]
-    if others:
-        planned = _append_others(planned, others, slots)
+    planned = _merge_others(planned, others, season)
+    if cp_workout is not None:
+        planned = _merge_control_point(planned, cp_workout)
 
     # Недельная цель пересчитывается по итоговой неделе: перенесённые
     # тренировки тоже тренировки, а число сессий показывается клиенту.
@@ -140,81 +623,6 @@ def propose_week(season: Season,
 
     planned.validate()
     return planned
-
-
-def _append_others(week: Week, others: list[Workout],
-                   slots: list[Slot]) -> Week:
-    """Добавить не беговые тренировки текущей недели к собранной.
-
-    Запросы и размещения создаются под них, чтобы инвариант «каждый Workout
-    вырос из Request» не нарушился.
-
-    Размещение ищется по времени тренировки среди слотов недели: слот должен
-    существовать, иначе висяк — тренировка без места. Выдуманный id слота
-    означал бы, что тренировка поставлена туда, куда бегать нельзя.
-    """
-    from app.domain.entities import Assignment, Request
-
-    requests = list(week.requests)
-    assignments = list(week.assignments)
-    workouts = list(week.workouts)
-    unplaced = list(week.unplaced)
-
-    by_time: dict[str, list[Slot]] = {}
-    for week_slot in slots:
-        by_time.setdefault(week_slot.start, []).append(week_slot)
-
-    taken = {a.slot_id for a in assignments}
-    for index, workout in enumerate(others):
-        request_id = f"r{week.season_week}-keep-{index + 1}"
-        requests.append(Request(
-            id=request_id,
-            sport=workout.sport,
-            kind=workout.kind,
-            focus=workout.focus,
-            duration_min=int(workout.duration_min),
-        ))
-        slot = _slot_for(workout, by_time, taken)
-        if slot is not None:
-            taken.add(slot.id)
-            assignments.append(Assignment(
-                request_id=request_id,
-                slot_id=slot.id,
-                start=slot.start,
-                duration_min=int(workout.duration_min),
-            ))
-        else:
-            # Места нет — висяк: решение пользователя.
-            unplaced.append(Request(
-                id=request_id,
-                sport=workout.sport,
-                kind=workout.kind,
-                focus=workout.focus,
-                duration_min=int(workout.duration_min),
-            ))
-
-        workouts.append(Workout(
-            id=f"w-{request_id}",
-            request_id=request_id,
-            sport=workout.sport,
-            kind=workout.kind,
-            focus=workout.focus,
-            objective=workout.objective,
-            equipment_ids=workout.equipment_ids,
-            location=workout.location,
-            time=workout.time,
-            steps=workout.steps,
-            duration_min=workout.duration_min,
-            priority=workout.priority,
-            rationale=workout.rationale,
-        ))
-
-    return week.copy_with(
-        requests=requests,
-        assignments=assignments,
-        unplaced=unplaced,
-        workouts=workouts,
-    )
 
 
 def _slot_for(workout: Workout, by_time: dict[str, list[Slot]],
@@ -239,7 +647,10 @@ def _slot_for(workout: Workout, by_time: dict[str, list[Slot]],
 __all__ = [
     "MacroVolume",
     "build_targets",
+    "is_race_week",
+    "macro_from_macro_week",
     "macro_from_week",
+    "plan_from_macro",
     "propose_week",
     "weeks_to_race",
 ]

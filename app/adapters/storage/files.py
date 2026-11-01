@@ -712,6 +712,14 @@ def _macro_week_from_dict(data: dict[str, Any]) -> MacroWeek:
         total_h=float(data.get("total_h", 0.0) or 0.0),
         sessions_target=int(data.get("sessions_target", 0) or 0),
         deload=bool(data.get("deload", False)),
+        minutes_by_sport={
+            str(k): float(v)
+            for k, v in (data.get("minutes_by_sport") or {}).items()
+        },
+        long_min=int(data.get("long_min", 0) or 0),
+        easy_min=int(data.get("easy_min", 0) or 0),
+        quality_min=int(data.get("quality_min", 0) or 0),
+        control_point=dict(data.get("control_point") or {}),
     )
 
 

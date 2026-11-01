@@ -279,7 +279,7 @@ function sortedWorkouts(workouts) {
 }
 
 function screenWeek() {
-  if (!state.week) return empty('Неделя ещё не загружена');
+  if (!state.week) return screenWeekMissing();
   const week = state.week;
   const target = week.load_target || {};
 
@@ -306,6 +306,38 @@ function screenWeek() {
     ${unplaced}
     <h2 class="slots-header">Тренировки · ${(week.workouts || []).length} шт</h2>
     <div class="slots-list">${slots || '<p>Тренировок нет.</p>'}</div>`;
+}
+
+/* Недели ещё нет — её можно спланировать.
+ *
+ * Неделя создаётся из макро-плана сезона и правил Дэниэлса: объём по
+ * видам спорта — из макро, качественная работа бега — из правил, раскладка
+ * по слотам — из среды. Команда `propose_week` создаёт неделю, если её
+ * ещё нет в хранилище.
+ */
+function screenWeekMissing() {
+  const disabled = state.busy ? ' disabled' : '';
+  const week = state.seasonWeek;
+  const macro = (state.seasonPlan?.macro_weeks || [])
+    .find((w) => w.season_week === week);
+  const plan = macro
+    ? `<div class="totals-card">
+        <div class="metrics">
+          <div class="metric"><div class="v">${macro.run_km.toFixed(0)}</div><div class="l">км</div></div>
+          <div class="metric"><div class="v">${formatHours(macro.total_h * 60)}</div><div class="l">ч · план</div></div>
+          <div class="metric"><div class="v">${macro.sessions_target || 0}</div><div class="l">сессий</div></div>
+        </div>
+      </div>`
+    : '';
+  return `${messageBlock()}
+    <h2>Неделя ${week}</h2>
+    ${plan}
+    <div class="card">
+      <div class="chead">Неделя ещё не спланирована</div>
+      <p class="lead">Объём взят из макро-плана сезона, качественная работа —
+      по правилам Дэниэлса, время — по твоим окнам тренировок.</p>
+    </div>
+    <button class="action primary" id="plan-week"${disabled}>Спланировать неделю</button>`;
 }
 
 /* Действия недели — по её статусу.
@@ -1379,6 +1411,12 @@ document.addEventListener('click', async (event) => {
     render();
     // Вернуться в детали, если тренировка была открыта.
     if (state.week && state.openWorkoutId) showWorkout(state.openWorkoutId);
+    return;
+  }
+
+  if (closest('#plan-week')) {
+    await runWeekCommand('propose_week', 'Планирую неделю…',
+      'Неделя спланирована — проверь и активируй');
     return;
   }
 

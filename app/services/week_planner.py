@@ -105,6 +105,42 @@ class _PlannedSession:
     recipe: WorkoutRecipe | None = None
 
 
+def _split_easy(minutes: float, slots: list[Slot]) -> list[int]:
+    """Лёгкий остаток недели — кусками по вместимости слотов.
+
+    Правило Дэниэлса: «7 дней в неделю Л-темп». Остаток бега — это не одна
+    тренировка длиной в полнедели, а несколько лёгких пробежек, каждая
+    в своём окне.
+
+    Куски идут по убыванию вместимости слота: сначала длинный пробежек,
+    потом покороче. Если остаток не влезает в слоты целиком — он делится
+    по их вместимости, а остаток уходит висяком (решение пользователя).
+    """
+    if minutes <= 0:
+        return []
+    capacities = sorted(
+        (slot.capacity_min for slot in slots
+         if slot.capacity_min > 0 and Sport.RUN not in slot.forbidden_sports),
+        reverse=True,
+    )
+    if not capacities:
+        return [int(round(minutes))]
+
+    pieces: list[int] = []
+    left = minutes
+    for capacity in capacities:
+        if left <= 0:
+            break
+        # Кусок занимает слот целиком, если влезает; иначе — по остатку.
+        take = min(capacity, left)
+        pieces.append(int(round(take)))
+        left -= take
+    if left > 0:
+        # Не влезло — возвращаем остаток одним куском: он станет висяком.
+        pieces.append(int(round(left)))
+    return pieces
+
+
 class WeekPlanner:
     """Собирает неделю из макро, профиля, среды и правил методики.
 
@@ -155,7 +191,7 @@ class WeekPlanner:
             data.week_overrides or [],
         )
 
-        sessions = self._plan_sessions(data)
+        sessions = self._plan_sessions(data, merged)
 
         requests: list[Request] = []
         assignments: list[Assignment] = []
@@ -178,7 +214,7 @@ class WeekPlanner:
             if slot is None:
                 # не разложилось — висяк, решение пользователя
                 unplaced.append(request)
-                workouts.append(self._build_workout(request, session))
+                workouts.append(self._build_workout(request, session, None))
                 continue
 
             assignments.append(
@@ -190,7 +226,7 @@ class WeekPlanner:
                     equipment_ids=slot.equipment_ids,
                 )
             )
-            workouts.append(self._build_workout(request, session))
+            workouts.append(self._build_workout(request, session, slot))
 
         week = Week(
             id=f"W{data.season_week}",
@@ -277,7 +313,8 @@ class WeekPlanner:
                 return (phase, plan_week)
         return (data.phase, data.week)
 
-    def _plan_sessions(self, data: WeekPlanInput) -> list[_PlannedSession]:
+    def _plan_sessions(self, data: WeekPlanInput,
+                       slots: list[Slot] | None = None) -> list[_PlannedSession]:
         """Тренировки недели: качество из правил, остальное — из макро.
 
         Порядок: сначала качественная работа (её кладут в лучшие слоты),
@@ -285,6 +322,7 @@ class WeekPlanner:
         """
         recipes = self._scaled_recipes(data)
         pace_by_zone = self._paces.pace_by_zone(self._athlete.vdot)
+        available = slots if slots is not None else list(data.slots)
 
         run_targets = [t for t in data.targets if t.sport is Sport.RUN]
         other_targets = [t for t in data.targets if t.sport is not Sport.RUN]
@@ -339,14 +377,19 @@ class WeekPlanner:
 
         remaining = max(run_minutes - used_minutes, 0)
         if remaining > 0:
-            sessions.append(_PlannedSession(
-                target=WeeklyTarget(
-                    sport=Sport.RUN,
-                    duration_min=int(round(remaining)),
-                    focus=data.targets[0].focus if data.targets else "",
-                    kind="easy",
-                ),
-            ))
+            # Лёгкий остаток делится на части по свободным слотам: правило
+            # Дэниэлса — «7 дней в неделю Л-темп», а не одна тренировка
+            # длиной в полнедели. Если остаток не влезает ни в один слот,
+            # он делится на куски по вместимости слота.
+            for minutes in _split_easy(remaining, available):
+                sessions.append(_PlannedSession(
+                    target=WeeklyTarget(
+                        sport=Sport.RUN,
+                        duration_min=int(minutes),
+                        focus=data.targets[0].focus if data.targets else "",
+                        kind="easy",
+                    ),
+                ))
 
         for target in other_targets:
             sessions.append(_PlannedSession(target=target))
@@ -403,8 +446,13 @@ class WeekPlanner:
             return slot
         return None
 
-    def _build_workout(self, request: Request, session: _PlannedSession) -> Workout:
-        """Тренировка из запроса: шаги по рецепту методики."""
+    def _build_workout(self, request: Request, session: _PlannedSession,
+                       slot: Slot | None) -> Workout:
+        """Тренировка из запроса: шаги по рецепту методики.
+
+        Время — из слота: клиент показывает время тренировки, а без
+        размещения его взять неоткуда.
+        """
         steps = self._build_steps(request, session)
         target = session.target
         return Workout(
@@ -413,6 +461,7 @@ class WeekPlanner:
             sport=request.sport,
             kind=request.kind,
             focus=request.focus,
+            time=slot.start if slot else None,
             steps=steps,
             duration_min=sum(s.duration_min for s in steps),
             rationale=f"{target.kind} · {target.focus}" if target.focus else target.kind,

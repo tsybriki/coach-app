@@ -9,6 +9,7 @@ from app.domain.entities import (
     Athlete,
     Goal,
     LoadModel,
+    MacroWeek,
     Plan,
     Season,
     Slot,
@@ -20,6 +21,7 @@ from app.domain.methodology import ZONE_REPETITION, ZONE_THRESHOLD
 from app.services.week_planner import WeekPlanner
 from app.services.week_proposal import (
     build_targets,
+    is_race_week,
     macro_from_week,
     propose_week,
     weeks_to_race,
@@ -44,6 +46,35 @@ SLOTS = [
 ]
 
 
+def _macro_weeks() -> list[MacroWeek]:
+    """Макро-недели сезона — по 6 недель на фазу, как в реальном плане.
+
+    Объём по видам спорта — из макро: неделя собирается из макро-плана
+    сезона, а не из самой себя (иначе повторный propose сжимает неделю).
+    """
+    weeks: list[MacroWeek] = []
+    for season_week in range(1, 29):
+        phase = 1 if season_week <= 6 else (
+            2 if season_week <= 13 else (
+                3 if season_week <= 20 else 4))
+        phase_id = {1: "run_base", 2: "run_build",
+                    3: "run_specific", 4: "run_taper"}[phase]
+        weeks.append(MacroWeek(
+            season_week=season_week,
+            phase_id=phase_id,
+            focus="tempo",
+            goal_text="Развиваем базу",
+            run_km=35.0,
+            total_h=6.24,
+            sessions_target=7,
+            minutes_by_sport={"run": 170.0, "bike": 45.0},
+            long_min=80,
+            easy_min=90,
+            quality_min=0,
+        ))
+    return weeks
+
+
 @pytest.fixture
 def season() -> Season:
     goal = Goal(
@@ -60,6 +91,7 @@ def season() -> Season:
         goal=goal,
         period_start=date(2026, 10, 11),
         period_end=date(2027, 9, 18),
+        macro_weeks=_macro_weeks(),
     )
     return Season(
         id="S1",
@@ -187,9 +219,29 @@ def test_targets_keep_long_run_and_other_sports(current_week):
 
 
 def test_weeks_to_race_from_goal_date(season):
-    """Срок до старта — по дате гонки."""
-    days = (date(2027, 4, 18) - date(2026, 10, 25)).days
+    """Горизонт сезона — от старта сезона до гонки, в неделях до гонки.
+
+    Горизонт **один на весь сезон**: считать его заново от начала каждой
+    недели нельзя — к гонке он сжимается, а номер недели сезона растёт,
+    и неделя запрашивается за пределами расписания. Расписание программы
+    покрывает недели до гонки: неделя гонки — событие, а не тренировка,
+    и своей недели программы у неё нет.
+    """
+    days = (date(2027, 4, 18) - date(2026, 10, 11)).days
     assert weeks_to_race(season, date(2026, 10, 25)) == days // 7
+    # Горизонт не зависит от недели, для которой спрашивают.
+    assert weeks_to_race(season, date(2026, 10, 11)) == days // 7
+    assert weeks_to_race(season, date(2027, 4, 12)) == days // 7
+
+
+def test_race_week_is_detected(season):
+    """Неделя гонки — та, в которую попадает дата гонки.
+
+    Гонка — событие недели, а не тренировка: в ней нет качественной
+    работы по программе.
+    """
+    assert is_race_week(season, date(2027, 4, 18), date(2027, 4, 24))
+    assert not is_race_week(season, date(2027, 4, 11), date(2027, 4, 17))
 
 
 def test_propose_builds_week_with_quality_from_rules(season, current_week, planner):

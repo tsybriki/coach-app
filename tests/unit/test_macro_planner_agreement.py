@@ -27,7 +27,7 @@ from typing import Any
 import pytest
 
 from app.adapters.daniels import load_plan
-from app.domain.methodology import MethodPlan
+from app.domain.methodology import MethodPlan, recipe_zone_volume_m
 
 REPO = Path(__file__).resolve().parent.parent.parent
 REFERENCE = REPO / "reference" / "daniels"
@@ -79,15 +79,20 @@ def _race(season_plan: dict[str, Any]) -> tuple[date, str]:
 
 
 def _horizon(season_plan: dict[str, Any]) -> int:
-    """Горизонт сезона: от старта до гонки, **включая неделю гонки**.
+    """Горизонт расписания программы: недели сезона **до** гонки.
 
-    Гонка в последней неделе плана — значит недель до старта N-1, а
-    расписание программы считается на N: `schedule_for(N)` включает неделю
-    гонки, и лишняя неделя уходит по `EXTRA` в фазу по кругу.
+    Неделя гонки — часть четвёртой фазы, но у неё нет недели программы:
+    гонка — событие, а не тренировка. Поэтому расписание программы
+    покрывает N-1 недель, а неделя гонки добавляется в конец фазы IV.
     """
     start = date.fromisoformat(season_plan["season_start_date"])
     race_date, _ = _race(season_plan)
-    return (race_date - start).days // 7 + 1
+    return (race_date - start).days // 7
+
+
+def _race_week(season_plan: dict[str, Any]) -> int:
+    """Номер недели гонки в сезоне."""
+    return _horizon(season_plan) + 1
 
 
 def _season_week_start(season_plan: dict[str, Any], season_week: int) -> date:
@@ -95,34 +100,34 @@ def _season_week_start(season_plan: dict[str, Any], season_week: int) -> date:
     return start + timedelta(days=7 * (season_week - 1))
 
 
-def test_horizon_covers_race_week(season_plan: dict[str, Any]) -> None:
-    """Горизонт включает неделю гонки.
+def test_horizon_is_weeks_before_race(season_plan: dict[str, Any]) -> None:
+    """Горизонт — недели сезона до гонки.
 
-    Гонка в последней неделе плана: недель до старта N-1, а расписание
-    программы — на N. Иначе неделя гонки остаётся без недели программы.
+    Неделя гонки — часть четвёртой фазы, но у неё нет недели программы:
+    гонка — событие, а не тренировка. Расписание программы покрывает
+    недели до гонки, а неделя гонки добавляется в конец фазы IV.
     """
     start = date.fromisoformat(season_plan["season_start_date"])
     race_date, _ = _race(season_plan)
     weeks_before = (race_date - start).days // 7
     horizon = _horizon(season_plan)
-    assert horizon == weeks_before + 1, (
-        f"горизонт {horizon} не включает неделю гонки "
-        f"(до старта {weeks_before} недель)"
+    assert horizon == weeks_before, (
+        f"горизонт {horizon} ≠ недель до гонки {weeks_before}"
     )
 
 
 def test_macro_covers_all_plan_weeks(season_plan: dict[str, Any]) -> None:
     """Макро покрывает все недели плана — от первой до недели гонки."""
-    horizon = _horizon(season_plan)
+    race_week = _race_week(season_plan)
     weeks = {w["season_week"] for w in season_plan.get("weekly_macro") or []}
-    missing = sorted(set(range(1, horizon + 1)) - weeks)
+    missing = sorted(set(range(1, race_week + 1)) - weeks)
     assert not missing, f"в макро нет недель: {missing}"
 
 
 def test_every_week_has_a_program_week(
     season_plan: dict[str, Any], daniels_plan: MethodPlan
 ) -> None:
-    """Каждая неделя сезона получает неделю программы — включая гонку.
+    """Каждая неделя сезона до гонки получает неделю программы.
 
     `plan_week` возвращает None за пределами расписания: неделя собралась
     бы без качественной работы Дэниэлса молча, без ошибки.
@@ -134,6 +139,20 @@ def test_every_week_has_a_program_week(
             f"неделя {season_week}: нет недели программы при горизонте "
             f"{horizon}"
         )
+
+
+def test_race_week_has_no_program_week(
+    season_plan: dict[str, Any], daniels_plan: MethodPlan
+) -> None:
+    """Неделя гонки — вне расписания программы.
+
+    Гонка — событие, а не тренировка: своей недели программы у неё нет.
+    """
+    horizon = _horizon(season_plan)
+    race_week = _race_week(season_plan)
+    assert daniels_plan.plan_week(horizon, race_week - 1) is None, (
+        f"неделя {race_week} (гонка) не должна быть в расписании программы"
+    )
 
 
 def test_macro_and_planner_agree_on_every_week(
@@ -149,6 +168,8 @@ def test_macro_and_planner_agree_on_every_week(
     macro = {w["season_week"]: w for w in season_plan.get("weekly_macro") or []}
     mismatches: list[str] = []
 
+    race_week = _race_week(season_plan)
+
     for season_week in range(1, horizon + 1):
         entry = macro.get(season_week)
         assert entry is not None, f"в макро нет недели {season_week}"
@@ -161,19 +182,6 @@ def test_macro_and_planner_agree_on_every_week(
         recorded_phase = recorded.get("daniels_phase")
         recorded_program = recorded.get("program_week")
         recorded_plan = recorded.get("plan_week")
-
-        # Неделя гонки — часть четвёртой фазы, отдельной фазы не имеет:
-        # её объём задаёт гонка, а не программа. Но она не «лишняя неделя
-        # программы»: у неё есть собственная неделя программы — та, чей
-        # план применился бы, если бы гонки не было.
-        is_race = season_week == horizon
-        if is_race:
-            if recorded_phase != 4:
-                mismatches.append(
-                    f"неделя {season_week} (гонка): фаза Дэниэлса "
-                    f"{recorded_phase}, ожидалась 4"
-                )
-            continue
 
         if recorded_phase != daniels_phase:
             mismatches.append(
@@ -191,6 +199,22 @@ def test_macro_and_planner_agree_on_every_week(
                 f"у планировщика {plan_week}"
             )
 
+    # Неделя гонки — часть четвёртой фазы. Своей недели программы у неё
+    # нет: гонка — событие, а не тренировка.
+    race_entry = macro.get(race_week)
+    assert race_entry is not None, f"в макро нет недели гонки {race_week}"
+    race_recorded = race_entry.get("_daniels") or {}
+    if race_recorded.get("daniels_phase") != 4:
+        mismatches.append(
+            f"неделя {race_week} (гонка): фаза Дэниэлса "
+            f"{race_recorded.get('daniels_phase')}, ожидалась 4"
+        )
+    if race_recorded.get("program_week") is not None:
+        mismatches.append(
+            f"неделя {race_week} (гонка): программной недели нет, "
+            f"а в макро {race_recorded.get('program_week')}"
+        )
+
     assert not mismatches, "макро и планировщик расходятся:\n" + "\n".join(
         mismatches
     )
@@ -207,6 +231,8 @@ def test_macro_phase_matches_daniels_phase(
     horizon = _horizon(season_plan)
     macro = {w["season_week"]: w for w in season_plan.get("weekly_macro") or []}
 
+    race_week = _race_week(season_plan)
+
     for season_week in range(1, horizon + 1):
         entry = macro[season_week]
         located = daniels_plan.plan_week(horizon, season_week - 1)
@@ -218,6 +244,14 @@ def test_macro_phase_matches_daniels_phase(
             f"у планировщика {expected} (Дэниэлс, фаза {daniels_phase})"
         )
 
+    # Неделя гонки — часть четвёртой фазы.
+    race_entry = macro.get(race_week)
+    assert race_entry is not None, f"в макро нет недели гонки {race_week}"
+    assert race_entry.get("phase") == DANIELS_PHASE_TO_SEASON[4], (
+        f"неделя {race_week} (гонка): фаза сезона "
+        f"{race_entry.get('phase')}, ожидалась {DANIELS_PHASE_TO_SEASON[4]}"
+    )
+
 
 def test_macro_phases_match_season_phase_boundaries(
     season_plan: dict[str, Any], daniels_plan: MethodPlan
@@ -228,6 +262,7 @@ def test_macro_phases_match_season_phase_boundaries(
     W13», а макро раскладывает по-другому.
     """
     horizon = _horizon(season_plan)
+    race_week = _race_week(season_plan)
 
     expected_bounds: dict[str, tuple[int, int]] = {}
     for season_week in range(1, horizon + 1):
@@ -239,6 +274,10 @@ def test_macro_phases_match_season_phase_boundaries(
         else:
             first, _ = expected_bounds[phase]
             expected_bounds[phase] = (first, season_week)
+    # Неделя гонки дописывается в конец четвёртой фазы.
+    fourth = DANIELS_PHASE_TO_SEASON[4]
+    first, _ = expected_bounds[fourth]
+    expected_bounds[fourth] = (first, race_week)
 
     for phase in season_plan.get("phases") or []:
         phase_id = phase.get("id")
@@ -253,15 +292,19 @@ def test_macro_phases_match_season_phase_boundaries(
         )
 
 
-def test_run_volume_matches_program_week_work(
+def test_macro_work_matches_program_week(
     season_plan: dict[str, Any], daniels_plan: MethodPlan
 ) -> None:
-    """Километраж недели соответствует работе её недели программы.
+    """Работа в макро — та же, что в неделе программы.
 
-    Правило Дэниэлса: объём недели ограничен долями недельного
-    километража («I-темп — не более 8 % или 10 км»), а качественная работа
-    задана неделей программы. Неделя с чужой работой и чужим объёмом —
-    план, который не соответствует ни одной неделе программы.
+    Это проверка **подмапливания**: неделя сезона должна брать работу той
+    недели программы, чей план к ней применён. Неделя с чужой работой —
+    план, который не соответствует ни одной неделе Дэниэлса.
+
+    Объём в зоне в макро — **как в программе**, до пределов: предел зоны
+    («R — не более 5 % недельного километража») применяет планировщик при
+    сборке недели, а не макро. Проверка предела — в тестах планировщика
+    (`test_planner_respects_zone_cap`).
 
     Неделя гонки — исключение: её объём задаёт гонка, а не программа.
     """
@@ -281,23 +324,19 @@ def test_run_volume_matches_program_week_work(
         program_entry = daniels_plan.week(daniels_phase, plan_week)
         assert program_entry is not None
 
-        run_km = float(entry.get("run_km") or 0.0)
         recorded = entry.get("_daniels") or {}
         zones = recorded.get("quality_zones") or {}
 
-        # Пределы недели программы — по её километражу.
-        for cap in program_entry.caps:
-            limit_m = cap.limit_km(run_km) * 1000.0
-            assert limit_m >= 0, (
-                f"неделя {season_week}: предел зоны {cap.zone} отрицателен"
-            )
+        expected: dict[str, float] = {}
+        for recipe in program_entry.recipes:
+            if recipe.kind == "RACE":
+                continue
+            for zone, value in recipe_zone_volume_m(recipe).items():
+                expected[zone] = expected.get(zone, 0.0) + value
 
-        # Объём работы в зоне не должен превышать предел недели программы.
-        for cap in program_entry.caps:
-            limit_m = cap.limit_km(run_km) * 1000.0
-            claimed_m = float(zones.get(cap.zone) or 0.0)
-            assert claimed_m <= limit_m + 1.0, (
-                f"неделя {season_week}: работа в зоне {cap.zone} "
-                f"{claimed_m:.0f} м превышает предел недели программы "
-                f"{plan_week} ({limit_m:.0f} м) при {run_km:.0f} км"
+        for zone, value in expected.items():
+            claimed = float(zones.get(zone) or 0.0)
+            assert claimed == pytest.approx(value, abs=1.0), (
+                f"неделя {season_week}: в зоне {zone} макро {claimed:.0f} м, "
+                f"в неделе программы {plan_week} — {value:.0f} м"
             )

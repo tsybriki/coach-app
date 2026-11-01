@@ -362,7 +362,12 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         replan_remainder,
         unlink_actual,
     )
-    from app.services.week_proposal import propose_week as propose_by_rules
+    from app.services.week_proposal import (
+        plan_from_macro,
+    )
+    from app.services.week_proposal import (
+        propose_week as propose_by_rules,
+    )
 
     # Команды, не требующие недели: загрузка факта, разбор FIT и текст
     if command.type is CommandType.IMPORT_FIT:
@@ -425,18 +430,26 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
 
     season_week = int(command.args.get("season_week", 0))
     week = container.season_repo.week(season_week)
-    if week is None:
-        raise ValueError(f"неделя W{season_week} не найдена")
 
     diff: list[dict[str, Any]] = []
 
-    if command.type is CommandType.PROPOSE_WEEK:
+    if command.type is CommandType.PROPOSE_WEEK and week is None:
+        # Недели ещё нет в хранилище — она собирается с нуля: объём по
+        # видам спорта из макро-плана сезона, качественная работа бега —
+        # из правил Дэниэлса, раскладка по слотам — из среды.
+        season = container.season_repo.load()
+        updated = plan_from_macro(season, season_week, container.planner,
+                                  container.methodology_repo.workout_templates())
+    elif week is None:
+        raise ValueError(f"неделя W{season_week} не найдена")
+    elif command.type is CommandType.PROPOSE_WEEK:
         # Неделя предлагается заново по правилам методики: макро берётся
         # из текущей недели, качественная работа — из правил Дэниэлса.
         # Проверка статуса — в сервисе: закрытую и активную неделю
         # предлагать заново нельзя (I23: закрытая неделя не меняется).
         season = container.season_repo.load()
-        updated = propose_by_rules(season, week, container.planner)
+        updated = propose_by_rules(season, week, container.planner,
+                                   container.methodology_repo.workout_templates())
     elif command.type is CommandType.ACTIVATE_WEEK:
         updated = activate_week(week)
     elif command.type is CommandType.CLOSE_WEEK:
@@ -472,7 +485,8 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         raise ValueError(f"команда {command.type} пока не реализована")
 
     version = container.season_repo.put_week(updated, command.expected_version)
-    diff.append({"path": f"week.W{season_week}", "before": week.status.value,
+    before = week.status.value if week is not None else "нет"
+    diff.append({"path": f"week.W{season_week}", "before": before,
                  "after": updated.status.value})
     return {"status": "applied", "new_version": version, "diff": diff,
             "consequences": {"scope": "local", "affected": [f"W{season_week}"]},

@@ -246,18 +246,74 @@ def build_phases(season_plan: dict[str, Any]) -> list[Phase]:
     return phases
 
 
+def entry_variant(cp: dict[str, Any], season_plan: dict[str, Any]) -> str:
+    """Вариант каталога для контрольной точки — из макро недели.
+
+    Каталог — источник истины по структуре тестовой сессии; макро несёт
+    ссылку на вариант.
+    """
+    week = cp.get("season_week")
+    for entry in season_plan.get("weekly_macro") or []:
+        if entry.get("season_week") == week:
+            quality = entry.get("quality") or {}
+            if quality.get("variant_id"):
+                return str(quality["variant_id"])
+    return ""
+
+
 def build_macro_weeks(season_plan: dict[str, Any]) -> list[MacroWeek]:
     """Недели макро-плана — из `weekly_macro` плана сезона пайплайна.
 
     Импорт ничего не вычисляет: берём то, что посчитал пайплайн. Недель
     может быть меньше, чем весь горизонт (макро кончается гонкой) — это
     нормально, план сезона известен не на весь горизонт.
+
+    Минуты по видам спорта берутся из разбивки нагрузки пайплайна: без них
+    неделю не собрать из макро — объём бега известен, а вел, плавание и
+    ОФП отдельными величинами.
     """
+    # Контрольные точки — по неделе сезона: тестовая сессия задаёт
+    # качественную работу этой недели.
+    control_points: dict[int, dict[str, Any]] = {}
+    for cp in season_plan.get("control_points") or []:
+        week = cp.get("season_week")
+        if week is None:
+            continue
+        session = cp.get("session") or {}
+        control_points[int(week)] = {
+            "id": cp.get("id", ""),
+            "kind": cp.get("kind", "quality"),
+            "quality_goal": cp.get("quality_goal"),
+            "title": cp.get("what", ""),
+            "session_goal": session.get("session_goal", ""),
+            "protocol": session.get("protocol", ""),
+            "pass_criteria": session.get("pass_criteria", ""),
+            "fail_action": session.get("fail_action", ""),
+            "test_type": session.get("test_type", ""),
+            "distance_m": session.get("distance_m", 0),
+            "pace_min_per_km": session.get("pace_min_per_km"),
+            "variant_id": (entry_variant(cp, season_plan)),
+        }
+
     weeks: list[MacroWeek] = []
     for entry in season_plan.get("weekly_macro") or []:
         quality = entry.get("quality") or {}
+        breakdown = entry.get("_load_breakdown") or {}
+        season_week = int(entry.get("season_week", 0))
+        minutes_by_sport: dict[str, float] = {}
+        for sport, key in (("run", "run_h"), ("bike", "bike_h"),
+                           ("swim", "swim_h"), ("ofp", "ofp_h")):
+            hours = float(breakdown.get(key) or 0.0)
+            if hours > 0:
+                minutes_by_sport[sport] = round(hours * 60.0, 1)
+        # Разбивка беговой части недели: длинная, качественная, лёгкая.
+        # Пайплайн уже разложил неделю — пересчитывать по километражу
+        # нельзя, получится другой объём.
+        long_min = int(round(float(breakdown.get("run_long_h") or 0.0) * 60.0))
+        quality_min = int(round(float(breakdown.get("run_quality_h") or 0.0) * 60.0))
+        easy_min = int(round(float(breakdown.get("run_easy_h") or 0.0) * 60.0))
         weeks.append(MacroWeek(
-            season_week=int(entry.get("season_week", 0)),
+            season_week=season_week,
             phase_id=entry.get("phase", ""),
             focus=entry.get("quality", {}).get("goal", "") or quality.get("goal", ""),
             goal_text=quality.get("goal_text", "") or "",
@@ -265,6 +321,11 @@ def build_macro_weeks(season_plan: dict[str, Any]) -> list[MacroWeek]:
             total_h=float(entry.get("total_h", 0) or 0),
             sessions_target=int(entry.get("sessions_target", 0) or 0),
             deload=bool(entry.get("deload", False)),
+            minutes_by_sport=minutes_by_sport,
+            long_min=long_min,
+            easy_min=easy_min,
+            quality_min=quality_min,
+            control_point=control_points.get(season_week, {}),
         ))
     return weeks
 
