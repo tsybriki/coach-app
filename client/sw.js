@@ -1,13 +1,18 @@
 /* Service worker.
  *
- * Оболочка — cache-first: приложение открывается мгновенно и без сети.
- * API — network-first: при недоступности сети клиент берёт кэш сам
- * (IndexedDB) и показывает отметку «данные на <время>».
+ * Оболочка — network-first: при наличии сети отдаётся свежий файл, кэш
+ * обновляется на ходу. Без сети — кэш: приложение открывается и без
+ * сети. API — всегда в сеть; клиент сам берёт кэш из IndexedDB и
+ * показывает отметку «данные на <время>».
+ *
+ * Почему не cache-first: при нём правка в коде не доезжает до экрана —
+ * телефон берёт старый `app.js` из кэша worker'а, и приложение выглядит
+ * сломанным. В инкогнито, где worker'а нет, работало — отсюда разница.
  *
  * Ответы команд и ошибки не кэшируются никогда.
  */
 
-const CACHE = 'coach-app-shell-v16';
+const CACHE = 'coach-app-shell-v17';
 const SHELL = ['/', '/index.html', '/app.js', '/api.js', '/store.js', '/link.js',
                '/chart.js', '/structure.js', '/style.css', '/manifest.json'];
 
@@ -43,19 +48,25 @@ self.addEventListener('fetch', (event) => {
   // навсегда остаётся старой.
   if (url.pathname === '/sw.js') return;
 
-  // Оболочка — из кэша, обновление в фоне
+  // Оболочка — из сети, кэш только офлайн.
+  //
+  // Раньше было cache-first: кэш отдавался всегда, и обновление уходило в
+  // фон. Из-за этого правка в коде не доезжала до экрана — телефон брал
+  // старый `app.js` из кэша service worker'а, и приложение выглядело
+  // сломанным (в инкогнито, где worker'а нет, работало).
+  //
+  // Теперь при наличии сети отдаётся свежий файл, а кэш обновляется на
+  // ходу. Без сети — кэш: офлайн по-прежнему работает.
   event.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request)
-        .then((response) => {
-          if (response && response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(() => cached || caches.match('/index.html'));
-      return cached || network;
-    }),
+    fetch(request)
+      .then((response) => {
+        if (response && response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE).then((cache) => cache.put(request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(request).then(
+        (cached) => cached || caches.match('/index.html'))),
   );
 });
