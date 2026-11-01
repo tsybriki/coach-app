@@ -28,6 +28,8 @@ ROOT = os.path.dirname(HERE)
 SPECS = os.path.join(ROOT, "specs")
 
 STEPS = [
+    ("логический уровень (MD)", ["tools/build_logical_md.py"]),
+    ("дизайн (MD)", ["tools/build_design_md.py"]),
     ("доменная модель", ["tools/render_spec.py",
                           "specs/domain/DOMAIN-SPEC.md", "DOMAIN-SPEC.html"]),
     ("логический уровень", ["tools/render_logical.py",
@@ -59,7 +61,8 @@ def main() -> int:
     print("== проверки ==")
     for label, script in [("утечки знания о хранилище", "tools/check_storage_leaks.py"),
                            ("покрытие инвариантов", "tools/check_invariant_coverage.py"),
-                           ("счётчики спецификации", "tools/count_spec.py")]:
+                           ("счётчики спецификации", "tools/count_spec.py"),
+                           ("документы против кода", "tools/check_docs_vs_code.py")]:
         print(f"-- {label}")
         if not run([script]):
             return 1

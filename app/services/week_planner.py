@@ -92,6 +92,10 @@ class WeekPlanInput:
     week: int = 0
     weeks_to_race: int = 0
     run_km: float = 0.0
+    # Число лёгких пробежек недели — из макро. Задаёт разбивку лёгкого
+    # остатка, чтобы макро и собранная неделя называли одно число
+    # тренировок.
+    easy_runs: int = 0
     plan_id: str = ""
     phase_overrides: list[SlotOverride] | None = None
     week_overrides: list[SlotOverride] | None = None
@@ -105,40 +109,46 @@ class _PlannedSession:
     recipe: WorkoutRecipe | None = None
 
 
-def _split_easy(minutes: float, slots: list[Slot]) -> list[int]:
-    """Лёгкий остаток недели — кусками по вместимости слотов.
+def _split_easy(minutes: float, runs: int) -> list[int]:
+    """Лёгкий остаток недели — на `runs` пробежек, поровну.
 
     Правило Дэниэлса: «7 дней в неделю Л-темп». Остаток бега — это не одна
-    тренировка длиной в полнедели, а несколько лёгких пробежек, каждая
-    в своём окне.
+    тренировка длиной в полнедели, а несколько лёгких пробежек.
 
-    Куски идут по убыванию вместимости слота: сначала длинный пробежек,
-    потом покороче. Если остаток не влезает в слоты целиком — он делится
-    по их вместимости, а остаток уходит висяком (решение пользователя).
+    Число пробежек задаёт **макро**: без него макро и собранная неделя
+    называют разное число тренировок. Без макро — одна пробежка.
     """
     if minutes <= 0:
         return []
-    capacities = sorted(
-        (slot.capacity_min for slot in slots
-         if slot.capacity_min > 0 and Sport.RUN not in slot.forbidden_sports),
-        reverse=True,
-    )
-    if not capacities:
+    if runs <= 0:
+        runs = 1
+    if runs == 1:
         return [int(round(minutes))]
+    each = int(minutes // runs)
+    parts = [each] * (runs - 1)
+    parts.append(int(minutes - each * (runs - 1)))
+    return [p for p in parts if p > 0]
 
-    pieces: list[int] = []
+
+def _easy_runs_by_slots(minutes: float, slots: list[Slot],
+                        taken: set[str]) -> int:
+    """Число лёгких пробежек — по свободным окнам.
+
+    Запасной путь для плана без макро: макро задаёт число пробежек само.
+    """
+    count = 0
     left = minutes
-    for capacity in capacities:
+    for slot in slots:
         if left <= 0:
             break
-        # Кусок занимает слот целиком, если влезает; иначе — по остатку.
-        take = min(capacity, left)
-        pieces.append(int(round(take)))
+        if slot.id in taken or Sport.RUN in slot.forbidden_sports:
+            continue
+        take = min(slot.capacity_min, left)
+        if take <= 0:
+            continue
         left -= take
-    if left > 0:
-        # Не влезло — возвращаем остаток одним куском: он станет висяком.
-        pieces.append(int(round(left)))
-    return pieces
+        count += 1
+    return max(count, 1)
 
 
 class WeekPlanner:
@@ -375,24 +385,31 @@ class WeekPlanner:
                 ),
             ))
 
+        for target in other_targets:
+            sessions.append(_PlannedSession(target=target))
+
+        # Лёгкий остаток — на столько пробежек, сколько задаёт макро.
+        #
+        # Пробежки раскладываются **последними**: окно занимает одна
+        # тренировка, и качественная работа с длинным бегом и прочие виды
+        # спорта берут свои окна первыми. Число пробежек — из макро
+        # (`easy_runs`): иначе макро и собранная неделя называют разное
+        # число тренировок.
         remaining = max(run_minutes - used_minutes, 0)
         if remaining > 0:
-            # Лёгкий остаток делится на части по свободным слотам: правило
-            # Дэниэлса — «7 дней в неделю Л-темп», а не одна тренировка
-            # длиной в полнедели. Если остаток не влезает ни в один слот,
-            # он делится на куски по вместимости слота.
-            for minutes in _split_easy(remaining, available):
+            runs = data.easy_runs
+            if runs <= 0:
+                runs = _easy_runs_by_slots(remaining, available, set())
+            focus = data.targets[0].focus if data.targets else ""
+            for minutes in _split_easy(remaining, runs):
                 sessions.append(_PlannedSession(
                     target=WeeklyTarget(
                         sport=Sport.RUN,
                         duration_min=int(minutes),
-                        focus=data.targets[0].focus if data.targets else "",
+                        focus=focus,
                         kind="easy",
                     ),
                 ))
-
-        for target in other_targets:
-            sessions.append(_PlannedSession(target=target))
 
         return sessions
 
@@ -431,8 +448,16 @@ class WeekPlanner:
         request: Request,
         taken: list[Assignment],
     ) -> Slot | None:
-        """Подобрать слот: помещается по времени, нет конфликта, доступно оборудование."""
+        """Подобрать слот: помещается по времени, нет конфликта, доступно оборудование.
+
+        Из подходящих берётся **самый тесный** — тот, в котором тренировка
+        оставляет меньше всего запаса. Первое попавшееся окно отдавало
+        широкое окно короткой тренировке, и длинный бег уходил в висяк,
+        хотя для него было другое окно: тренировка в 30 минут занимает
+        окно в 30 минут, а не в 90.
+        """
         used = {a.slot_id for a in taken}
+        best: Slot | None = None
         for slot in slots:
             if slot.id in used:
                 continue
@@ -443,8 +468,9 @@ class WeekPlanner:
             needed = set(request.equipment_required)
             if needed and not needed.issubset(set(slot.equipment_ids)):
                 continue
-            return slot
-        return None
+            if best is None or slot.capacity_min < best.capacity_min:
+                best = slot
+        return best
 
     def _build_workout(self, request: Request, session: _PlannedSession,
                        slot: Slot | None) -> Workout:

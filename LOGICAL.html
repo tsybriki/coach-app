@@ -274,7 +274,7 @@
 <div class="kv">
 <div><b>вход</b> согласованная цель + макро-правила из методологии</div>
 <div><b>цифры</b> weekly_macro покрывает 28 недель из 49 — написано руками</div>
-<div><b>есть</b> goal_guard.py — проверка согласованности макро с целью.</div>
+<div><b>есть</b> goal_guard.py — проверка согласованности макро с целью. В приложении макро лежит в `Plan.macro_weeks[]` и приходит импортом.</div>
 <div><b>нет</b> Генератора макро нет: макро пишется руками, а не считается.</div>
 </div>
 </div>
@@ -291,8 +291,8 @@
 <div class="kv">
 <div><b>вход</b> макро (weekly target недели) + Профиль атлета + Среда (слоты)</div>
 <div><b>цифры</b> работает: plan_generate · step_builder · quality_session · workout_templates</div>
-<div><b>есть</b> lib/plan_generate.py + lib/step_builder.py + lib/quality_session.py + state/workout_templates.json — этот вход собран и работает.</div>
-<div><b>нет</b> Наследование слотов Season ← Phase ← Week не реализовано: слот берётся только из constraints.json.</div>
+<div><b>есть</b> app/services/week_planner.py + app/services/week_proposal.py + reference/daniels/ — неделя собирается по правилам Дэниэлса и раскладывается по слотам.</div>
+<div><b>нет</b> Наследование слотов Season ← Phase ← Week реализовано в домене (`merged_slots`), но перекрытия в данных пусты — задаются пока только вручную.</div>
 </div>
 </div>
 <div class="ent3">
@@ -303,8 +303,8 @@
 </ol>
 <div class="kv">
 <div><b>вход</b> факт · отклонения · форма</div>
-<div><b>цифры</b> стаб</div>
-<div><b>есть</b> —</div>
+<div><b>цифры</b> заглушка</div>
+<div><b>есть</b> команда `replan_remainder` принимается BFF и вызывает сервис — но новых тренировок не строит.</div>
 <div><b>нет</b> lib/plan_adjust.py возвращает пустой diff; lib/season_replan.py архивирует и мержит season_plan без sanity-check.</div>
 </div>
 </div>
@@ -504,8 +504,7 @@
 <div class="note">Достижимость — функция методологии: правило роста формы в методологии, вердикт считает планировщик. Пока правило — заглушка, вердикт честно отвечает «не могу оценить».</div>
 <div class="note">Достижимость (шаг 1) и переплан остатка (шаг 4) не реализованы: модели потолка формы нет, генератора макро нет, переплан возвращает пустой diff.</div>
 <div class="note">Макро в данных покрывает 28 недель из 49 и написано руками — то есть сегодня его нет как результата работы подсистемы.</div>
-<div class="note">Связь план↔факт зафиксирована в домене (Workout.actual_id ↔ ActualSession.linked_workout_id), но в данных её нет ни в одной таблице state.</div>
-<div class="note">Диаграмма DOMAIN-SPEC.html подписывает блок факта как «Garmin / Stryd / TrainingPeaks» и содержит строку «поздно пришедшая активность меняет закрытую неделю» — обе расходятся с подтверждёнными I14 и I23.</div>
+<div class="note">Связь план↔факт зафиксирована в домене (Workout.actual_id ↔ ActualSession.linked_workout_id); в данных закрытой недели она есть — 8 связей из 9 тренировок.</div>
 <div class="note">Google Calendar не подключается: доступность тренировок — дефолтные слоты и инвентарь в подсистеме «Среда», версионируемые как обычное состояние.</div>
 <div class="note">Данные Stryd отдельно не грузим: берём то, что Stryd складывает в Garmin. Нагрудный ремень используется на важных тренировках — данные идут через Garmin.</div>
 </section>

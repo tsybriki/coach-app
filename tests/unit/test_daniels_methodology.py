@@ -540,20 +540,21 @@ def test_phase_four_repeats_first_two_weeks(plan):
     assert [schedule.plan_for(w) for w in extras] == [19, 20, 19]
 
 
-def test_single_extra_week_takes_edge_week_of_phase(plan):
-    """Одна лишняя неделя фазы — план с края, куда она вставлена.
+def test_single_extra_week_takes_first_week_of_the_cycle(plan):
+    """Одна лишняя неделя — план из круга, а не из отдельного правила.
 
-    Фазы II и III растут в конец (планы 12 и 18), фаза IV — в начало
-    (план 19).
+    Отдельного правила «одна лишняя неделя» нет (Кирилл): план всегда
+    идёт по кругу из двух недель края. Фазы 2 и 3 растут в конец — их
+    край это 11-12 и 17-18; фаза 4 растёт в начало — её край 19-20.
     """
-    # Фаза II при одной лишней неделе — план из последней недели фазы.
+    # Фаза II при одной лишней неделе — первая неделя круга (11).
     single_ii = plan.schedule_for(25)
     assert single_ii is not None
-    assert single_ii.plan_for(25) == 12
-    # Фаза III при одной лишней неделе — тоже последняя неделя фазы.
+    assert single_ii.plan_for(25) == 11
+    # Фаза III при одной лишней неделе — тоже первая неделя круга (17).
     single_iii = plan.schedule_for(26)
     assert single_iii is not None
-    assert single_iii.plan_for(26) == 18
+    assert single_iii.plan_for(26) == 17
     # Фаза IV растёт в начало — план из первой недели фазы (19).
     assert plan.plan_week(27, 20) == (4, 27, 19)
 
@@ -579,13 +580,10 @@ def test_extra_week_plans_repeat_cyclically(plan):
 def test_extra_week_plan_comes_from_its_own_phase(plan):
     """План лишней недели — с края именно её фазы.
 
-    Фазы II и III растут в конец: хвост II — 11-12, хвост III — 17-18,
-    одна лишняя неделя — последняя неделя фазы (12 и 18).
-
-    Фаза IV растёт в начало: план из 19-20, одна лишняя неделя — 19.
+    Фазы II и III растут в конец: хвост фазы — 11-12 и 17-18.
+    Фаза IV растёт в начало: её край — 19-20.
     """
-    tails = {2: {11, 12}, 3: {17, 18}, 4: {19, 20}}
-    single = {2: 12, 3: 18, 4: 19}
+    edges = {2: {11, 12}, 3: {17, 18}, 4: {19, 20}}
     for weeks in range(25, 40):
         schedule = plan.schedule_for(weeks)
         assert schedule is not None
@@ -593,8 +591,7 @@ def test_extra_week_plan_comes_from_its_own_phase(plan):
             extras = [w for w in program_weeks if w > 24]
             for program_week in extras:
                 plan_week = schedule.plan_for(program_week)
-                allowed = tails[phase] | {single[phase]}
-                assert plan_week in allowed, \
+                assert plan_week in edges[phase], \
                     f"срок {weeks}: неделя {program_week} фазы {phase} — " \
                     f"план не с края фазы"
 

@@ -719,6 +719,11 @@ def _macro_week_from_dict(data: dict[str, Any]) -> MacroWeek:
         long_min=int(data.get("long_min", 0) or 0),
         easy_min=int(data.get("easy_min", 0) or 0),
         quality_min=int(data.get("quality_min", 0) or 0),
+        sessions_by_sport={
+            str(k): [int(m) for m in v]
+            for k, v in (data.get("sessions_by_sport") or {}).items()
+        },
+        easy_runs=int(data.get("easy_runs", 0) or 0),
         control_point=dict(data.get("control_point") or {}),
     )
 

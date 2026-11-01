@@ -34,10 +34,16 @@ class MacroVolume:
     minutes: dict[Sport, int] = None  # type: ignore[assignment]
     run_km: float = 0.0
     long_min: int = 0
+    # Разбивка тренировок по видам спорта: «2×25м» → [25, 25].
+    sessions: dict[str, list[int]] = None  # type: ignore[assignment]
+    # Число лёгких пробежек недели — из макро.
+    easy_runs: int = 0
 
     def __post_init__(self) -> None:
         if self.minutes is None:
             self.minutes = {}
+        if self.sessions is None:
+            self.sessions = {}
 
 
 def macro_from_week(week: Week) -> MacroVolume:
@@ -175,7 +181,9 @@ def macro_from_macro_week(macro: MacroWeek) -> MacroVolume:
         # что меньше. Макро считает длинный бег по километражу без потолка —
         # потолок применяется здесь.
         long_min = LONG_MAX_MIN
-    return MacroVolume(minutes=minutes, run_km=run_km, long_min=long_min)
+    return MacroVolume(minutes=minutes, run_km=run_km, long_min=long_min,
+                       sessions=dict(macro.sessions_by_sport),
+                       easy_runs=macro.easy_runs)
 
 
 def plan_from_macro(season: Season,
@@ -246,6 +254,7 @@ def plan_from_macro(season: Season,
         slots=free_slots,
         weeks_to_race=0 if race_week else weeks_to_race(season, week_start),
         run_km=volume.run_km,
+        easy_runs=volume.easy_runs,
         plan_id=plan.id,
     ))
 
@@ -425,26 +434,34 @@ def _plan_other_sports(volume: MacroVolume, season: Season,
         minutes = int(volume.minutes.get(sport, 0))
         if minutes <= 0:
             continue
-        slot = _slot_for_sport(season, sport, minutes, used)
-        if slot is None:
-            continue
-        used.add(slot.id)
+        # Разбивка из макро: «2×25м» — две тренировки по 25 минут, а не
+        # одна на 50. Без разбивки число сессий не сходится с планом.
+        parts = volume.sessions.get(sport.value) or [minutes]
         name = {
             Sport.BIKE: "Вел",
             Sport.SWIM: "Пул",
             Sport.OFP: "ОФП",
         }[sport]
-        workouts.append(Workout(
-            id=f"w-{sport.value}",
-            request_id=f"r-{sport.value}",
-            sport=sport,
-            kind=sport.value,
-            focus=sport.value,
-            objective={"name": f"{name} {minutes}мин", "day": slot.day},
-            time=slot.start,
-            steps=[_plain_step(sport, minutes)],
-            duration_min=float(minutes),
-        ))
+        for index, part in enumerate(parts):
+            part_minutes = int(part)
+            if part_minutes <= 0:
+                continue
+            slot = _slot_for_sport(season, sport, part_minutes, used)
+            if slot is None:
+                continue
+            used.add(slot.id)
+            workouts.append(Workout(
+                id=f"w-{sport.value}-{index + 1}",
+                request_id=f"r-{sport.value}-{index + 1}",
+                sport=sport,
+                kind=sport.value,
+                focus=sport.value,
+                objective={"name": f"{name} {part_minutes}мин",
+                           "day": slot.day},
+                time=slot.start,
+                steps=[_plain_step(sport, part_minutes)],
+                duration_min=float(part_minutes),
+            ))
     return workouts, used
 
 
@@ -610,6 +627,7 @@ def propose_week(season: Season,
         slots=free_slots,
         weeks_to_race=0 if race_week else weeks_to_race(season, current.start),
         run_km=macro.run_km,
+        easy_runs=macro.easy_runs,
         plan_id=current.plan_id,
     ))
 

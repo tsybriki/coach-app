@@ -246,6 +246,26 @@ def build_phases(season_plan: dict[str, Any]) -> list[Phase]:
     return phases
 
 
+def _sessions_parts(spec: Any) -> list[int]:
+    """Разбор описания вида спорта в макро: «2×25м» → [25, 25].
+
+    Пусто — ни одной тренировки. Без «×» — одна тренировка целиком.
+    """
+    if not spec:
+        return []
+    text = str(spec).strip()
+    if "×" in text:
+        count_text, _, minutes_text = text.partition("×")
+        try:
+            count = int(count_text.strip())
+            minutes = int("".join(ch for ch in minutes_text if ch.isdigit()))
+        except ValueError:
+            return [0]
+        return [minutes] * max(count, 1)
+    digits = "".join(ch for ch in text if ch.isdigit())
+    return [int(digits)] if digits else []
+
+
 def entry_variant(cp: dict[str, Any], season_plan: dict[str, Any]) -> str:
     """Вариант каталога для контрольной точки — из макро недели.
 
@@ -312,6 +332,14 @@ def build_macro_weeks(season_plan: dict[str, Any]) -> list[MacroWeek]:
         long_min = int(round(float(breakdown.get("run_long_h") or 0.0) * 60.0))
         quality_min = int(round(float(breakdown.get("run_quality_h") or 0.0) * 60.0))
         easy_min = int(round(float(breakdown.get("run_easy_h") or 0.0) * 60.0))
+        # Тренировки по видам спорта — из макро: «2×25м» это две тренировки
+        # по 25 минут, а не одна на 50.
+        sessions_by_sport: dict[str, list[int]] = {}
+        for sport, key in (("bike", "bike"), ("swim", "swim"),
+                           ("ofp", "core")):
+            parts = _sessions_parts(entry.get(key))
+            if parts:
+                sessions_by_sport[sport] = parts
         weeks.append(MacroWeek(
             season_week=season_week,
             phase_id=entry.get("phase", ""),
@@ -325,6 +353,8 @@ def build_macro_weeks(season_plan: dict[str, Any]) -> list[MacroWeek]:
             long_min=long_min,
             easy_min=easy_min,
             quality_min=quality_min,
+            sessions_by_sport=sessions_by_sport,
+            easy_runs=int(entry.get("easy_runs", 0) or 0),
             control_point=control_points.get(season_week, {}),
         ))
     return weeks

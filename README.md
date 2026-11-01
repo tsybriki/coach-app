@@ -12,7 +12,7 @@
 ```
 specs/                  источники правды
   domain/               доменная модель (MD) + SVG-диаграмма
-    DOMAIN-SPEC.md      18 сущностей, 43 инварианта, 6 вопросов
+    DOMAIN-SPEC.md      21 сущность, 44 инварианта, 5 вопросов
     assets/             диаграмма сущностей
   logical/              логический уровень
     logical.json        источник: подсистемы, взаимодействия, развилки
@@ -22,10 +22,14 @@ specs/                  источники правды
 
 tools/                  сборка и проверки
 app/                    код приложения (домен → порты → сервисы → адаптеры → API)
+client/                 PWA-клиент
 tests/                  тесты
-data/                   состояние (локально, не в git)
+reference/daniels/      справочник методики — версионируемые правила
 legacy/                 черновики прошлых редакций — для истории
 ```
+
+Состояние приложения — в `~/.local/share/coach-app` (путь задаётся
+`COACH_APP_DATA`), не в репозитории.
 
 ## Сборка
 
@@ -41,15 +45,32 @@ python3 tools/build.py
 Отдельные шаги:
 
 ```
-python3 tools/build_logical_md.py    # logical.json → specs/logical/LOGICAL.md
-python3 tools/build_design_md.py     # specs/design/*.md → specs/design/DESIGN.md
-python3 tools/render_spec.py         # MD → HTML
-python3 tools/count_spec.py DOMAIN-SPEC.html specs/domain/DOMAIN-SPEC.md
-python3 tools/check_storage_leaks.py
+.venv/bin/python tools/build_logical_md.py    # logical.json → specs/logical/LOGICAL.md
+.venv/bin/python tools/build_design_md.py     # specs/design/*.md → specs/design/DESIGN.md
+.venv/bin/python tools/render_spec.py         # MD → HTML
+.venv/bin/python tools/count_spec.py DOMAIN-SPEC.html specs/domain/DOMAIN-SPEC.md
+.venv/bin/python tools/check_storage_leaks.py
+.venv/bin/python tools/check_invariant_coverage.py
+.venv/bin/python tools/check_docs_vs_code.py  # документы не врут о коде
 ```
 
 `tools/html2md.py` — разовая односторонняя конвертация, чтобы перевернуть спецификацию
 с HTML-источника на MD. Дальше не нужен.
+
+## Тесты
+
+```
+.venv/bin/python -m pytest        # Python-часть
+npm test                           # клиент
+.venv/bin/python -m mypy app      # strict
+.venv/bin/python -m ruff check app tests
+```
+
+Число тестов намеренно не зафиксировано в документах: оно меняется с каждой
+правкой, а проверяется прогоном. `npm test` гоняется через hook
+`tests/client/helpers/register.mjs` — голый `node --test tests/client/` роняет
+UI-тесты на `EventSource is not defined`, это неподключённый hook, а не дефект
+приложения.
 
 ## Правила
 
@@ -96,7 +117,23 @@ Service worker работает только на **HTTPS** или на `localho
 
 ## Состояние
 
-База работает: домен, хранилище, сервисы, BFF, клиент. Открыто:
+База работает: домен, хранилище, сервисы, BFF, клиент. Факт на 01.11.2026:
+
+| Что | Состояние |
+|---|---|
+| Домен | 21 сущность, 44 инварианта, все покрыты тестами |
+| Планировщик недели | работает по правилам Дэниэлса: качественная работа, раскладка по слотам, висяки |
+| Garmin | подключён: `pull_fact`, `import_fit` (разбор тренировки), `link_actual` |
+| BFF | 12 маршрутов, ETag, SSE, команды, батч |
+| Клиент | 5 разделов, неделя, сезон, план против факта, закрытие, разбор тренировки, очередь команд |
+| Макро-план сезона | 28 недель из 49 — приходит импортом из пайплайна |
+| Связь план↔факт | ставится руками; в данных закрытой недели 8 связей из 9 тренировок |
+
+Открыто:
 - правило роста формы — заглушка, вердикт «не могу оценить»;
-- Garmin не подключён — `pull_fact` отвечает `degraded`;
-- шаблоны тренировок из Дэниэлса не разобраны (этап 3б).
+- переплан остатка недели — принимает команду, но новых тренировок не строит;
+- `place_unplaced`, `unplace_request`, `edit_actual`, `set_slots`, `set_plan`,
+  `set_goal`, `update_athlete`, `set_equipment`, `override_slots`,
+  `set_gate_result`, `decide_gate`, `import_state` — команды объявлены в
+  контракте, но в BFF не реализованы;
+- миграций схемы нет: формат хранилища ещё не менялся.

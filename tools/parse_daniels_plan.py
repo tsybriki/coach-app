@@ -16,7 +16,6 @@ parse_daniels_plan.py — разбор Табл. 19.1 (Daniels' Running Formula)
     <фаза> <неделя> note <текст>
     MAP <фаза_сезона> <фаза_данiels> <первая_неделя> <последняя_неделя>
     FRONT <фаза,...> — фазы, в которые лишняя неделя встаёт в НАЧАЛО
-    SINGLE <фаза>:<неделя> — план лишней недели, когда она одна
 
 Тело тренировки: части через « + ».
     Nx(...)             — повтор группы (N или N-M)
@@ -230,7 +229,6 @@ def parse(text: str) -> dict[str, Any]:
     base_schedule: dict[str, Any] | None = None
     extra_phases: tuple[int, ...] = ()
     extra_plans: dict[int, tuple[int, ...]] = {}
-    extra_single: dict[int, int] = {}
     front_phases: tuple[int, ...] = ()
     program_weeks: dict[int, tuple[int, ...]] = {}
 
@@ -261,12 +259,6 @@ def parse(text: str) -> dict[str, Any]:
                 extra_plans[int(phase_token)] = tuple(
                     int(w) for w in weeks_list.split(",") if w
                 )
-            continue
-
-        if line.startswith("SINGLE "):
-            for item in line.split()[1:]:
-                phase_token, week = item.split(":")
-                extra_single[int(phase_token)] = int(week)
             continue
 
         if line.startswith("FRONT "):
@@ -400,7 +392,6 @@ def parse(text: str) -> dict[str, Any]:
         "base_schedule": base_schedule,
         "extra_phases": list(extra_phases),
         "extra_plans": {str(k): list(v) for k, v in extra_plans.items()},
-        "extra_single": {str(k): v for k, v in extra_single.items()},
         "front_phases": list(front_phases),
         "program_weeks": {str(k): list(v) for k, v in program_weeks.items()},
         "phases": phases,

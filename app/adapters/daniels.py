@@ -157,10 +157,6 @@ def load_plan(reference_dir: Path) -> MethodPlan:
             int(k): tuple(int(w) for w in v)
             for k, v in (data.get("extra_plans") or {}).items()
         },
-        extra_single={
-            int(k): int(v)
-            for k, v in (data.get("extra_single") or {}).items()
-        },
         front_phases=tuple(
             int(p) for p in data.get("front_phases", []) if p
         ),

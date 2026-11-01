@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -23,6 +24,7 @@ from app.services.week_proposal import (
     build_targets,
     is_race_week,
     macro_from_week,
+    plan_from_macro,
     propose_week,
     weeks_to_race,
 )
@@ -64,13 +66,15 @@ def _macro_weeks() -> list[MacroWeek]:
             phase_id=phase_id,
             focus="tempo",
             goal_text="Развиваем базу",
-            run_km=35.0,
-            total_h=6.24,
+            run_km=41.0,
+            total_h=6.62,
             sessions_target=7,
-            minutes_by_sport={"run": 170.0, "bike": 45.0},
-            long_min=80,
-            easy_min=90,
-            quality_min=0,
+            minutes_by_sport={
+                "run": 257.0, "bike": 60.0, "swim": 30.0, "ofp": 50.0,
+            },
+            long_min=56,
+            easy_min=159,
+            quality_min=42,
         ))
     return weeks
 
@@ -180,6 +184,17 @@ def current_week(make_week) -> Week:
 
 
 @pytest.fixture
+def templates() -> dict:
+    """Каталог шаблонов — из справочника пайплайна."""
+    import json
+    path = Path.home() / "coach" / "state" / "workout_templates.json"
+    if not path.exists():
+        pytest.skip(f"нет каталога шаблонов: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return data.get("templates", {})
+
+
+@pytest.fixture
 def planner() -> WeekPlanner:
     from app.adapters.daniels import load_paces, load_plan
 
@@ -262,8 +277,14 @@ def test_propose_keeps_non_run_workouts(season, current_week, planner):
 
 
 def test_propose_respects_zone_cap(season, current_week, planner):
-    """Объём в зоне за неделю — не больше предела правил."""
+    """Объём в зоне за неделю — не больше предела правил.
+
+    Предел считается от **недельного километража** — того, что в макро,
+    а не от километража, собранного в неделю.
+    """
     proposed = propose_week(season, current_week, planner)
+    macro = season.plans[0].macro_week(current_week.season_week)
+    assert macro is not None
     for zone in (ZONE_REPETITION, ZONE_THRESHOLD):
         total = sum(
             s.target_value
@@ -271,9 +292,12 @@ def test_propose_respects_zone_cap(season, current_week, planner):
             for s in w.steps
             if s.focus_value.get("daniels_zone") == zone
         )
-        # Предел R — 5 % от 35 км = 1,75 км; T ограничением не задан.
+        # Предел R — 5 % недельного километража; T ограничением не задан.
         if zone == ZONE_REPETITION:
-            assert total <= 1750.0 + 1
+            limit = macro.run_km * 1000.0 * 0.05
+            assert total <= limit + 1, (
+                f"работа в зоне R {total:.0f} м, предел {limit:.0f} м"
+            )
 
 
 def test_propose_workout_duration_equals_steps_sum(season, current_week, planner):
@@ -294,3 +318,154 @@ def test_propose_keeps_total_run_volume(season, current_week, planner):
     # Качество добавилось, но лёгкая часть уменьшилась на столько же:
     # суммарный бег остаётся в пределах прежнего плюс качество.
     assert run_minutes >= 170.0
+
+# ------------------------------------------------- планирование из макро
+
+
+def test_plan_from_macro_creates_week(season, planner):
+    """Неделя, которой нет в хранилище, собирается из макро-плана.
+
+    Это то, чем пользователь планирует следующую неделю с телефона:
+    кнопка «Спланировать неделю» не требует заранее созданной недели.
+    """
+    week = plan_from_macro(season, 7, planner)
+    assert week.season_week == 7
+    assert week.status is WeekStatus.PROPOSED
+    assert week.workouts, "неделя собралась пустой"
+    week.validate()
+
+
+def test_plan_from_macro_uses_macro_volume(season, planner):
+    """Объём недели — из макро-плана сезона.
+
+    Не из самой недели: при повторном propose объём брался из того, что
+    уже собрано, и неделя сжималась с каждым нажатием.
+    """
+    week = plan_from_macro(season, 7, planner)
+    run_minutes = sum(
+        w.duration_min for w in week.workouts if w.sport is Sport.RUN
+    )
+    macro = season.plans[0].macro_week(7)
+    assert macro is not None
+    # Разбивка макро: длинная + качественная + лёгкая.
+    expected = macro.long_min + macro.quality_min + macro.easy_min
+    assert run_minutes == pytest.approx(expected, abs=2.0), (
+        f"бег {run_minutes} мин, разбивка макро {expected} мин"
+    )
+
+
+def test_plan_from_macro_is_stable_on_repeat(season, planner):
+    """Повторное планирование даёт тот же объём.
+
+    Петля обратной связи: неделя собирается из макро, а не из себя.
+    """
+    first = plan_from_macro(season, 7, planner)
+    second = plan_from_macro(season, 7, planner)
+    assert first.load_target["hours"] == pytest.approx(
+        second.load_target["hours"])
+    assert len(first.workouts) == len(second.workouts)
+
+
+def test_long_run_capped_by_rule(season, planner):
+    """Длинный бег — не больше 1,5 часа: потолок правила Дэниэлса.
+
+    «25 % недельного километража или 1,5 часа — что меньше». Без
+    потолка длинный пробежек растёт с километражом недели.
+    """
+    week = plan_from_macro(season, 7, planner)
+    long_runs = [w for w in week.workouts if w.kind == "long"]
+    assert long_runs, "в неделе нет длинного бега"
+    for run in long_runs:
+        assert run.duration_min <= 90.0
+
+
+def test_easy_remainder_is_split_into_parts(season, planner):
+    """Лёгкий остаток делится на части, а не одна тренировка.
+
+    Правило Дэниэлса: «7 дней в неделю Л-темп». Одна тренировка
+    длиной в полнедели не влезает ни в одно окно.
+    """
+    week = plan_from_macro(season, 7, planner)
+    easy = [w for w in week.workouts if w.kind == "easy" and w.sport is Sport.RUN]
+    assert len(easy) >= 2, "лёгкий остаток не разделён"
+
+
+def test_placed_workout_has_a_time(season, planner):
+    """У размещённой тренировки есть время — из слота.
+
+    Клиент показывает время тренировки; без размещения его взять
+    неоткуда, и экран показывал пустое время. У висяка времени нет —
+    он не стоит ни в одном окне.
+    """
+    week = plan_from_macro(season, 7, planner)
+    hanging = {r.id for r in week.unplaced}
+    for workout in week.workouts:
+        if workout.request_id in hanging:
+            continue
+        assert workout.time, f"у тренировки {workout.id} нет времени"
+
+
+def test_other_sports_take_slots_before_run(season, planner):
+    """Вел, плавание и ОФП размещаются, а не уходят висяками.
+
+    Их объём известен точно, а бег забирает остаток — если вел и плавание
+    встанут после бега, им места не останется.
+    """
+    week = plan_from_macro(season, 7, planner)
+    sports = {w.sport for w in week.workouts}
+    assert Sport.BIKE in sports
+    assert Sport.SWIM in sports
+    # Висящими могут остаться только беговые тренировки: несколько
+    # тренировок в одном окне допустимы (утром пробежка, вечером вел).
+    hanging = {r.sport for r in week.unplaced}
+    assert hanging <= {Sport.RUN}, f"висяки не-беговые: {hanging}"
+
+
+def test_control_point_becomes_quality_work(season, planner, templates):
+    """Контрольная точка — качественная работа недели.
+
+    В неделе программы, где по правилам Дэниэлса качественной работы
+    нет, CP всё равно её создаёт: это проверка формы.
+    """
+    plan = season.plans[0]
+    macro = plan.macro_week(4)
+    assert macro is not None
+    macro.control_point = {
+        "id": "cp_test",
+        "kind": "quality",
+        "title": "3K time trial",
+        "session_goal": "Темповый тест 3К",
+        "test_type": "pace",
+        "distance_m": 3000,
+        "pace_min_per_km": "4:40",
+        "variant_id": "tt_pace",
+    }
+    week = plan_from_macro(season, 4, planner, templates)
+    quality = [w for w in week.workouts if w.kind == "quality"]
+    assert quality, "контрольная точка не стала качественной работой"
+    # Работа: 15 мин разминки + 3К на 4:40 + 12 мин заминки.
+    assert quality[0].duration_min == pytest.approx(15 + 14 + 12, abs=1.0)
+    assert quality[0].steps, "у тестовой сессии нет шагов"
+
+
+def test_control_point_is_inside_run_volume(season, planner, templates):
+    """Тестовая сессия — часть объёма бега, а не добавка к нему.
+
+    Иначе неделя раздувается на длительность теста.
+    """
+    plan = season.plans[0]
+    macro = plan.macro_week(4)
+    assert macro is not None
+    macro.control_point = {
+        "id": "cp_test", "kind": "quality", "title": "3K",
+        "distance_m": 3000, "pace_min_per_km": "4:40",
+        "variant_id": "tt_pace",
+    }
+    week = plan_from_macro(season, 4, planner, templates)
+    run_minutes = sum(
+        w.duration_min for w in week.workouts if w.sport is Sport.RUN
+    )
+    expected = macro.long_min + macro.quality_min + macro.easy_min
+    assert run_minutes <= expected + 2.0, (
+        f"бег {run_minutes} мин больше разбивки макро {expected} мин"
+    )

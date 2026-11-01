@@ -282,7 +282,6 @@ class MethodPlan:
     base_schedule: WeekSchedule | None = None
     extra_phases: tuple[int, ...] = ()
     extra_plans: dict[int, tuple[int, ...]] = field(default_factory=dict)
-    extra_single: dict[int, int] = field(default_factory=dict)
     front_phases: tuple[int, ...] = ()
     program_weeks: dict[int, tuple[int, ...]] = field(default_factory=dict)
 
@@ -324,8 +323,9 @@ class MethodPlan:
         2 в фазу III и 1 в фазу IV.
 
         План тренировки для лишней недели — с того края фазы, куда
-        вставлена лишняя неделя: одна лишняя неделя берёт `extra_single`,
-        две и больше — `extra_plans` по кругу.
+        вставлена лишняя неделя, всегда **по кругу из двух недель края**
+        (`extra_plans`). Отдельного правила для одной лишней недели нет:
+        одна лишняя неделя фазы 2 берёт 11-ю, фазы 3 — 17-ю, фазы 4 — 19-ю.
         """
         base = self.base_schedule
         assert base is not None
@@ -371,24 +371,22 @@ class MethodPlan:
                 phases[phase] = (*phases.get(phase, ()), *extras)
 
         # План лишней недели — с того края фазы, куда она вставлена.
-        # Сколько лишних недель у фазы, столько и ступеней: одна — из
-        # `extra_single`, две и больше — `extra_plans` по кругу.
+        # Отдельного правила для одной лишней недели нет: план всегда
+        # идёт по кругу из двух недель края (Кирилл), поэтому одна
+        # лишняя неделя фазы 2 берёт 11-ю, фазы 3 — 17-ю, фазы 4 — 19-ю.
         for phase, extras in extras_by_phase.items():
-            tail = self._tail_for(phase, len(extras))
+            tail = self._tail_for(phase)
             for position, program_week in enumerate(extras):
                 plans[program_week] = tail[position % len(tail)]
         return WeekSchedule(weeks=weeks_to_race, phases=phases, plans=plans)
 
-    def _tail_for(self, phase: int, extras_count: int) -> tuple[int, ...]:
+    def _tail_for(self, phase: int) -> tuple[int, ...]:
         """Край фазы — источник планов для лишних недель.
 
-        Одна лишняя неделя — `extra_single` (неделя с того края, куда
-        вставлена лишняя неделя). Две и больше — `extra_plans` по кругу.
+        Фазы 2 и 3 растут в конец — их край это последние две недели
+        фазы (11, 12 и 17, 18). Фаза 4 растёт в начало — её край это
+        первые две недели фазы (19, 20).
         """
-        if extras_count <= 1:
-            single = self.extra_single.get(phase)
-            if single:
-                return (single,)
         tail = self.extra_plans.get(phase) or ()
         if tail:
             return tail

@@ -135,6 +135,60 @@ def test_planner_respects_slot_capacity():
     assert week.assignments[0].slot_id == "sl-mon"
 
 
+def test_planner_takes_the_tightest_fitting_slot():
+    """Из подходящих окон берётся самое тесное.
+
+    Первое попавшееся окно отдавало широкое окно короткой тренировке, и
+    длинный бег уходил в висяк, хотя для него было другое окно: тренировка
+    в 30 минут занимает окно в 30 минут, а не в 90.
+    """
+    planner = make_planner()
+    week = planner.build(
+        1, WEEK_START, WEEK_END,
+        [
+            WeeklyTarget(sport=Sport.SWIM, duration_min=30),
+            WeeklyTarget(sport=Sport.RUN, duration_min=60),
+        ],
+        make_slots(),
+    )
+    placed = {a.request_id: a.slot_id for a in week.assignments}
+    swim = next(r for r in week.requests if r.sport is Sport.SWIM)
+    run = next(r for r in week.requests if r.sport is Sport.RUN)
+    assert placed.get(swim.id) == "sl-tue", "плавание должно занять узкое окно"
+    assert placed.get(run.id) == "sl-mon", "бегу осталось широкое окно"
+    assert not week.unplaced
+
+
+def test_planner_leaves_wide_slot_for_long_session():
+    """Широкое окно достаётся тренировке, которая в него влезает.
+
+    Недельный объём бега делится на части — их может быть несколько,
+    и висяком остаётся та часть, для которой окна не нашлось.
+    """
+    planner = make_planner()
+    slots = [
+        Slot(id="sl-mon", day=0, start="18:45", end="20:15", capacity_min=90),
+        Slot(id="sl-tue", day=1, start="09:00", end="09:30", capacity_min=30),
+    ]
+    week = planner.build(
+        1, WEEK_START, WEEK_END,
+        [
+            WeeklyTarget(sport=Sport.SWIM, duration_min=30),
+            WeeklyTarget(sport=Sport.RUN, duration_min=120),
+        ],
+        slots,
+    )
+    swim = next(r for r in week.requests if r.sport is Sport.SWIM)
+    placed = {a.request_id: a.slot_id for a in week.assignments}
+    assert placed.get(swim.id) == "sl-tue", "плавание должно занять узкое окно"
+    # Часть бега, которая влезла в широкое окно, размещена; висяком
+    # осталась та, для которой окна не нашлось.
+    assert len(week.assignments) == 2
+    assert len(week.unplaced) == 1
+    hanging = week.unplaced[0]
+    assert hanging.sport is Sport.RUN
+
+
 def test_planner_skips_slot_with_wrong_equipment():
     """Слот без нужного оборудования не берётся."""
     planner = make_planner()
