@@ -783,6 +783,43 @@ test('день недели — название, даже если пришёл
   assert.equal(first.dataset.slot, 'w-1', 'тренировка уехала из своего дня');
 });
 
+test('кнопка «обновить» обновляет и код, а не только данные', async () => {
+  // Тест последний: он перезагружает приложение, а состояние общее.
+  await loadApp();
+
+  // Считаем переходы страницы: `updateShell` переоткрывает её с новым
+  // параметром `v`, чтобы браузерный кэш не отдал старый app.js.
+  //
+  // `location` в jsdom — read-only, поэтому подменяем объект целиком
+  // через defineProperty (как это делает setupDom).
+  const replaced = [];
+  const original = globalThis.location;
+  Object.defineProperty(globalThis, 'location', {
+    value: {
+      ...original,
+      href: original.href,
+      origin: original.origin,
+      replace: (url) => replaced.push(String(url)),
+    },
+    writable: true,
+    configurable: true,
+    enumerable: true,
+  });
+  try {
+    click(document.querySelector('#refresh'));
+    await waitFor(() => replaced.length > 0, 2000);
+    assert.equal(replaced.length, 1, 'страница не переоткрыта');
+    assert.match(replaced[0], /[?&]v=\d+/, 'в адресе нет метки новой версии');
+  } finally {
+    Object.defineProperty(globalThis, 'location', {
+      value: original,
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
+  }
+});
+
 test('без окон тренировок карточка атлета не ломается', async () => {
   // Тест последний: он перезагружает приложение, а состояние общее.
   await loadApp({slots: []});

@@ -904,3 +904,20 @@ def test_static_is_compressed(client: TestClient):
     response = client.get("/app.js", headers={"Accept-Encoding": "gzip"})
     assert response.status_code == 200
     assert response.headers.get("content-encoding") == "gzip"
+
+
+def test_static_is_not_cached_stale(client: TestClient):
+    """Статика отдаётся с запретом кэширования.
+
+    На обычном HTTP service worker не работает (только HTTPS/localhost),
+    и телефон держит `app.js` в браузерном кэше: без `Cache-Control`
+    правка в коде есть, а на экране её нет.
+    """
+    for path in ("/app.js", "/api.js", "/style.css", "/sw.js", "/"):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        cache_control = response.headers.get("cache-control", "")
+        assert "no-cache" in cache_control, (
+            f"{path}: Cache-Control={cache_control!r} — телефон будет "
+            f"показывать старую версию"
+        )

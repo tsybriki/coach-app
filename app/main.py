@@ -14,7 +14,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
+from starlette.staticfiles import PathLike
+from starlette.types import Scope
 
 from app.api.dependencies import build_container
 from app.api.routes import router
@@ -69,7 +72,31 @@ def create_app() -> FastAPI:
     client_path = os.path.join(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))), CLIENT_DIR)
     if os.path.isdir(client_path):
-        app.mount("/", StaticFiles(directory=client_path, html=True), name="client")
+        # Статика — с запретом кэширования.
+        #
+        # Без этого заголовка телефон по обычному HTTP (service worker
+        # работает только на HTTPS) держит браузерный кэш и показывает
+        # старую версию клиента: правка в коде есть, а на экране её нет.
+        # Версию кэша оболочки service worker'а это не чинит — он на телефоне
+        # не регистрируется.
+        #
+        # `no-cache` — не «не хранить», а «уточни у сервера перед
+        # использованием»: ETag и Last-Modified остаются, трафик не растёт.
+        class NoCacheStaticFiles(StaticFiles):
+            def file_response(
+                self,
+                full_path: PathLike,
+                stat_result: os.stat_result,
+                scope: Scope,
+                status_code: int = 200,
+            ) -> Response:
+                response = super().file_response(
+                    full_path, stat_result, scope, status_code)
+                response.headers["Cache-Control"] = "no-cache"
+                return response
+
+        app.mount("/", NoCacheStaticFiles(directory=client_path, html=True),
+                  name="client")
 
     return app
 

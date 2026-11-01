@@ -7,7 +7,7 @@
  * Ответы команд и ошибки не кэшируются никогда.
  */
 
-const CACHE = 'coach-app-shell-v15';
+const CACHE = 'coach-app-shell-v16';
 const SHELL = ['/', '/index.html', '/app.js', '/api.js', '/store.js', '/link.js',
                '/chart.js', '/structure.js', '/style.css', '/manifest.json'];
 
@@ -38,7 +38,12 @@ self.addEventListener('fetch', (event) => {
   // API и события — всегда в сеть
   if (url.pathname.startsWith('/api/')) return;
 
-  // оболочка — из кэша, обновление в фоне
+  // Сам service worker — всегда из сети. Иначе он обслуживает себя из
+  // своего же кэша, новая версия никогда не устанавливается, и оболочка
+  // навсегда остаётся старой.
+  if (url.pathname === '/sw.js') return;
+
+  // Оболочка — из кэша, обновление в фоне
   event.respondWith(
     caches.match(request).then((cached) => {
       const network = fetch(request)

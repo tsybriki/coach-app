@@ -1468,6 +1468,9 @@ document.addEventListener('click', async (event) => {
     await load();
     await flushOutbox();
     render();
+    // Код тоже мог устареть: телефон по обычному HTTP держит браузерный
+    // кэш, и перезагрузка данных новую версию клиента не принесёт.
+    await updateShell();
     return;
   }
 
@@ -1732,6 +1735,47 @@ api.subscribe((event) => {
   if (state.busy) return;
   load();
 });
+
+/* Обновить оболочку приложения: код, а не только данные.
+ *
+ * Три уровня устаревания, и каждый надо пройти:
+ *
+ * 1. **Service worker** — на HTTPS он держит оболочку в своём кэше.
+ *    `registration.update()` проверяет новую версию `sw.js`; если версия
+ *    изменилась, новый worker встанет и заберёт свежие файлы.
+ * 2. **Браузерный кэш** — на обычном HTTP service worker не работает, и
+ *    телефон держит `app.js` сам. `reload()` с `cache: 'reload'` просит
+ *    сервер заново.
+ * 3. **Открытая страница** — старый `app.js` уже в памяти, поэтому после
+ *    перезагрузки файлов страницу надо переоткрыть.
+ *
+ * Без этого «обновить» обновляет только цифры, а правка в коде на экране
+ * не появляется — и выглядит как «приложение сломано».
+ */
+async function updateShell() {
+  try {
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (registration) {
+        await registration.update();
+        // Ждём, пока новый worker возьмёт управление, и только потом
+        // переоткрываем страницу: иначе загрузится старый кэш.
+        await navigator.serviceWorker.ready;
+      }
+    }
+  } catch (error) {
+    /* service worker недоступен — идём дальше, браузерный кэш обновим */
+  }
+
+  try {
+    // Просим сервер заново, минуя кэш браузера.
+    const url = new URL(location.href);
+    url.searchParams.set('v', String(Date.now()));
+    location.replace(url.toString());
+  } catch (error) {
+    /* переход не удался — показываем старую версию, это не ошибка */
+  }
+}
 
 /* Service worker: оболочка кэшируется, приложение открывается без сети. */
 if ('serviceWorker' in navigator) {
