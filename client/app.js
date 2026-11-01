@@ -35,6 +35,7 @@ const state = {
   weeks: [],
   summary: null,
   seasonPlan: null,      // макро-план сезона: фазы и недели целиком
+  slots: [],            // окна тренировок: расписание среды, куда попадает неделя
   stale: false,
   cachedAt: null,
   online: navigator.onLine,
@@ -128,7 +129,11 @@ function screenTitle() {
 
 function screenSubtitle() {
   if (state.screen === 'week' && state.week) {
-    return `${state.week.start.slice(5)} — ${state.week.end.slice(5)}`;
+    // Диапазон недели: даты по-русски, иначе «11-01 — 11-07».
+    const from = formatDate(state.week.start);
+    const to = formatDate(state.week.end);
+    if (!from || !to) return `${state.week.start.slice(5)} — ${state.week.end.slice(5)}`;
+    return `${from} — ${to}`;
   }
   if (state.screen === 'fact' && state.week) {
     return `${state.actual.length} сессий в факте`;
@@ -240,13 +245,31 @@ const ROLE_RU = {
 /* Порядок дней тренировочной недели: вс→сб. */
 const DAY_ORDER = ['ВС', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ'];
 
-/* Плашка тренировки в списке недели. По нажатию — детали. */
+/* Месяцы коротко — для дат в плашке тренировки. */
+const MONTHS_SHORT = [
+  'янв', 'фев', 'мар', 'апр', 'мая', 'июн',
+  'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
+];
+
+/* Плашка тренировки в списке недели. По нажатию — детали.
+ *
+ * В шапке — день недели, дата и время: без них тренировку нельзя
+ * положить в календарь. Дата приходит из окна, в которое попала
+ * тренировка (сервер считает), клиент её только показывает.
+ */
 function slotButton(workout, actual) {
   const objective = workout.objective || {};
   const title = objective.name || workout.kind;
-  const day = objective.day || '';
+  const day = dayName(objective.day || workout.day);
+  const date = objective.date || workout.date || '';
   const focus = workout.focus && workout.focus !== 'core' ? workout.focus : '';
   const done = actual ? ' <span class="done-mark">✓</span>' : '';
+
+  const when = [
+    day,
+    date ? `<span class="date">${escapeHtml(formatDate(date))}</span>` : '',
+    workout.time || '',
+  ].filter((part) => part).join(' · ');
 
   const actualLine = actual
     ? `<div class="done-line">${((actual.distance_m || 0) / 1000).toFixed(1)} км · ${formatDuration(actual.duration_min)}${actual.hr_avg ? ` · HR ${actual.hr_avg}` : ''}</div>`
@@ -255,7 +278,7 @@ function slotButton(workout, actual) {
   return `<button class="slot${actual ? ' done' : ''}" data-slot="${escapeHtml(workout.id)}">
       <div class="slot-head">
         <span class="ico">${KIND_ICON[workout.sport] || '🎯'}</span>
-        <span class="day">${escapeHtml(day)} · ${escapeHtml(workout.time || '')}</span>
+        <span class="day">${when}</span>
         <span class="dur">${formatDuration(workout.duration_min)}${done}</span>
       </div>
       <div class="name">${escapeHtml(title)}</div>
@@ -264,11 +287,44 @@ function slotButton(workout, actual) {
     </button>`;
 }
 
-/* Тренировки в порядке дней недели, внутри дня — по времени. */
+/* День недели по-русски. Приходит либо названием («ПН»), либо номером
+ * (0 — воскресенье): на экране нужен один вид, а не два. */
+function dayName(value) {
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value === 'number') {
+    return DAY_ORDER[value] || '';
+  }
+  const text = String(value);
+  if (/^\d+$/.test(text)) {
+    return DAY_ORDER[Number(text)] || '';
+  }
+  return text;
+}
+
+/* Дата недели — компактно: «5 ноя» или «5 ноя 2027», если год другой. */
+function formatDate(iso) {
+  if (!iso) return '';
+  const parts = String(iso).split('-');
+  if (parts.length !== 3) return '';
+  const month = MONTHS_SHORT[Number(parts[1]) - 1];
+  if (!month) return '';
+  const year = Number(parts[0]);
+  const current = new Date().getFullYear();
+  return year === current
+    ? `${Number(parts[2])} ${month}`
+    : `${Number(parts[2])} ${month} ${year}`;
+}
+
+/* Тренировки в порядке дней недели, внутри дня — по времени.
+ *
+ * День сравнивается по названию («ВС»…«СБ»), а не по тому, что пришло:
+ * в данных это может быть и номер, и название, а порядок должен быть
+ * один. Иначе тренировка с номером дня уезжает в конец списка.
+ */
 function sortedWorkouts(workouts) {
   return [...workouts].sort((a, b) => {
-    const dayA = DAY_ORDER.indexOf((a.objective || {}).day || '');
-    const dayB = DAY_ORDER.indexOf((b.objective || {}).day || '');
+    const dayA = DAY_ORDER.indexOf(dayName((a.objective || {}).day || a.day));
+    const dayB = DAY_ORDER.indexOf(dayName((b.objective || {}).day || b.day));
     if (dayA !== dayB) return (dayA < 0 ? 99 : dayA) - (dayB < 0 ? 99 : dayB);
     const timeA = String(a.time || '99:99');
     const timeB = String(b.time || '99:99');
@@ -666,6 +722,37 @@ function screenAthlete() {
       <ul class="plain" style="margin-top:10px">
         <li><div class="row"><span>Вес</span><span class="num">${a.weight_kg || '—'} кг</span></div></li>
         <li><div class="row"><span>Состояние</span><span class="num">${escapeHtml(a.form || '—')}</span></div></li>
+      </ul>
+    </div>
+    ${slotsBlock()}`;
+}
+
+/* Окна тренировок — расписание, в которое раскладывается неделя.
+ *
+ * Окна повторяются каждую неделю, поэтому они и живут в карточке
+ * атлета, а не в неделе: это часть среды, а не плана.
+ */
+function slotsBlock() {
+  const slots = state.slots || [];
+  if (!slots.length) return '';
+  const totalMin = slots.reduce((sum, s) => sum + (s.capacity_min || 0), 0);
+  const rows = [...slots]
+    .sort((a, b) => (a.day - b.day) || String(a.start).localeCompare(String(b.start)))
+    .map((slot) => {
+      const time = slot.start && slot.end ? `${slot.start}–${slot.end}` : (slot.start || '');
+      const cap = slot.capacity_min ? `${slot.capacity_min} мин` : '';
+      return `<li><div class="row win-row">
+          <span class="win-day">${escapeHtml(slot.day_name || '')}</span>
+          <span class="win-time">${escapeHtml(time)}</span>
+          <span class="num">${escapeHtml(cap)}</span>
+        </div></li>`;
+    })
+    .join('');
+  return `<div class="card">
+      <div class="chead">Окна тренировок</div>
+      <ul class="plain win-list">${rows}</ul>
+      <ul class="plain" style="margin-top:8px">
+        <li><div class="row"><span>Всего в неделю</span><span class="num">${formatHours(totalMin)} ч</span></div></li>
       </ul>
     </div>`;
 }
@@ -1156,11 +1243,12 @@ async function load() {
   try {
     // Запросы идут параллельно, а не по очереди: пять последовательных
     // round-trip'ов на телефоне — это и есть «несколько секунд».
-    const [snapshot, weeks, current, seasonPlan] = await Promise.all([
+    const [snapshot, weeks, current, seasonPlan, slotsResponse] = await Promise.all([
       api.getSnapshot(),
       api.getWeeks().catch(() => null),
       api.getCurrentWeek().catch(() => null),
       api.getSeason().catch(() => null),
+      api.getSlots().catch(() => null),
     ]);
 
     state.version = snapshot.version;
@@ -1171,6 +1259,14 @@ async function load() {
     // Кэш пишем после отрисовки: IndexedDB на телефоне медленный, и
     // ждать его перед показом экрана незачем.
     cacheWrites.push(putCache('snapshot', snapshot.data, snapshot.version));
+
+    // Окна тренировок — часть среды, повторяются каждую неделю.
+    if (slotsResponse) {
+      state.slots = slotsResponse.data.slots || [];
+      cacheWrites.push(putCache('slots', state.slots, snapshot.version));
+    } else {
+      state.slots = (await getCache('slots'))?.value || [];
+    }
 
     if (seasonPlan) {
       state.seasonPlan = seasonPlan.data;
@@ -1256,6 +1352,11 @@ async function loadFromCache() {
     const weeks = await getCache('weeks');
     if (weeks) state.weeks = weeks.value;
   } catch (error) { /* списка недель в кэше нет */ }
+
+  try {
+    const slots = await getCache('slots');
+    if (slots) state.slots = slots.value;
+  } catch (error) { /* окон тренировок в кэше нет */ }
 
   state.stale = true;
 }

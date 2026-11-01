@@ -1513,3 +1513,41 @@ p.lead {
   font-size: 15px;
   font-weight: 600;
 }
+
+/* Дата в шапке тренировки: строчными, чтобы не спорить с днём недели. */
+.slot .day .date {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Окна тренировок — карточка атлета.
+ *
+ * Список окон — не список тренировок: здесь день, время и вместимость
+ * окна. Строки идут плотно, без карточек: их много, и каждая — одна
+ * строка факта.
+ */
+.win-list {
+  margin-top: 4px;
+}
+
+.win-list li + li {
+  margin-top: 5px;
+}
+
+.win-row {
+  align-items: baseline;
+}
+
+.win-day {
+  flex: 0 0 30px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent2);
+}
+
+.win-time {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+}

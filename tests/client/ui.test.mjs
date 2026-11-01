@@ -38,7 +38,11 @@ const WEEK = {
       sport: 'run',
       kind: 'quality',
       focus: 'Z6',
-      objective: {name: 'Качественная: VO2max', day: 'ПН', time: '18:45'},
+      objective: {name: 'Качественная: VO2max', day: 'ПН', date: '2026-10-26'},
+      day: 'ПН',
+      date: '2026-10-26',
+      slot_id: 'win-ПН-1',
+      time: '18:45',
       duration_min: 51,
       status: 'planned',
       actual_id: 'a-1',
@@ -76,7 +80,11 @@ const WEEK = {
       sport: 'ofp',
       kind: 'ofp',
       focus: 'core',
-      objective: {name: 'Core 25мин', day: 'ПН', time: '06:30'},
+      objective: {name: 'Core 25мин', day: 'СР', date: '2026-10-28'},
+      day: 'СР',
+      date: '2026-10-28',
+      slot_id: 'win-СР-1',
+      time: '17:00',
       duration_min: 25,
       status: 'planned',
       actual_id: null,
@@ -117,6 +125,18 @@ const SNAPSHOT = {
     hr_max: 182, rhr: 54, lth: 164, weight_kg: 101.7, injuries: [], form: '—',
   },
 };
+
+/* Окна тренировок — как их отдаёт сервер. */
+const SLOTS = [
+  {id: 'win-ВС-1', day: 0, day_name: 'ВС', start: '11:00', end: '13:00', capacity_min: 120},
+  {id: 'win-ПН-1', day: 1, day_name: 'ПН', start: '18:45', end: '20:15', capacity_min: 90},
+  {id: 'win-ВТ-1', day: 2, day_name: 'ВТ', start: '09:00', end: '09:30', capacity_min: 30},
+  {id: 'win-ВТ-2', day: 2, day_name: 'ВТ', start: '18:30', end: '19:45', capacity_min: 75},
+  {id: 'win-СР-1', day: 3, day_name: 'СР', start: '17:00', end: '19:00', capacity_min: 120},
+  {id: 'win-ЧТ-1', day: 4, day_name: 'ЧТ', start: '10:30', end: '11:15', capacity_min: 45},
+  {id: 'win-ПТ-1', day: 5, day_name: 'ПТ', start: '18:00', end: '19:00', capacity_min: 60},
+  {id: 'win-СБ-1', day: 6, day_name: 'СБ', start: '10:00', end: '11:00', capacity_min: 60},
+];
 
 /* ------------------------------------------------------------------ окружение */
 
@@ -162,9 +182,10 @@ async function loadApp(overrides = {}) {
     version: 42,
     seasonWeek: 3,
     snapshot: SNAPSHOT,
-    week: WEEK,
-    actual: ACTUAL,
+    week: overrides.week || WEEK,
+    actual: overrides.actual || ACTUAL,
     weeks: [],
+    slots: overrides.slots || SLOTS,
     details: overrides.details || {},
     onCommand: overrides.onCommand,
   };
@@ -208,6 +229,64 @@ test('главный экран: плашки тренировок и прогр
   assert.equal(slots.length, 2);
   assert.ok(document.querySelector('.progress'), 'нет блока прогресса');
   assert.match(document.querySelector('.progress').textContent, /из/);
+});
+
+test('плашка тренировки: день недели, дата и время', () => {
+  openWeek();
+  const slot = document.querySelectorAll('.slot')[0];
+  const when = slot.querySelector('.slot-head .day');
+  assert.ok(when, 'в плашке нет блока с днём');
+  const text = when.textContent;
+  assert.match(text, /ПН/, 'нет дня недели');
+  assert.match(text, /26\s+окт/, 'нет даты');
+  assert.match(text, /18:45/, 'нет времени');
+});
+
+test('дата тренировки — из данных, а не из соседних', () => {
+  openWeek();
+  const slots = [...document.querySelectorAll('.slot')];
+  const first = slots[0].querySelector('.slot-head .day').textContent;
+  const second = slots[1].querySelector('.slot-head .day').textContent;
+  assert.match(first, /26\s+окт/);
+  assert.match(second, /28\s+окт/);
+  assert.notEqual(first, second, 'у разных тренировок одна и та же дата');
+});
+
+test('шапка недели: даты по-русски, а не «11-01»', () => {
+  openWeek();
+  const sub = document.getElementById('appbar').textContent;
+  assert.match(sub, /25 окт/, 'в шапке нет даты по-русски');
+  assert.match(sub, /31 окт/, 'в шапке нет конца недели');
+  assert.doesNotMatch(sub, /\d\d-\d\d/, 'в шапке остались числовые даты');
+});
+
+test('карточка атлета: окна тренировок видны', () => {
+  click(document.querySelector('#nav [data-screen="athlete"]'));
+  const picker = document.getElementById('picker');
+  assert.match(picker.textContent, /Окна тренировок/, 'нет блока окон тренировок');
+  const rows = picker.querySelectorAll('.win-row');
+  assert.equal(rows.length, SLOTS.length, 'не все окна показаны');
+  const text = picker.textContent;
+  assert.match(text, /ВС/, 'нет дня недели окна');
+  assert.match(text, /11:00/, 'нет времени окна');
+  assert.match(text, /120\s+мин/, 'нет вместимости окна');
+});
+
+test('окна тренировок идут по порядку дней недели', () => {
+  click(document.querySelector('#nav [data-screen="athlete"]'));
+  const days = [...document.querySelectorAll('.win-row .win-day')]
+    .map((node) => node.textContent.trim());
+  assert.deepEqual(days, ['ВС', 'ПН', 'ВТ', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ']);
+});
+
+test('карточка атлета: окна идут по дням недели, а не как попало', () => {
+  click(document.querySelector('#nav [data-screen="athlete"]'));
+  const rows = [...document.querySelectorAll('.win-row')];
+  const ВТ = rows.filter((row) => row.querySelector('.win-day').textContent.trim() === 'ВТ');
+  assert.equal(ВТ.length, 2, 'вторника два окна, но показаны не оба');
+  const times = ВТ.map((row) => row.querySelector('.win-time').textContent);
+  assert.ok(times[0].startsWith('09:00'), 'утреннее окно вторника не первое');
+  assert.ok(times[1].startsWith('18:30'), 'вечернее окно вторника не второе');
 });
 
 test('все пять экранов открываются и не падают', () => {
@@ -683,4 +762,33 @@ test('медленный сервер не задерживает переклю
   assert.match(document.getElementById('appbar').textContent, /Сезон/);
   assert.equal(globalThis.__fixture.snapshotCalls || 0, callsBefore,
     'переключение экрана пошло на сервер — на медленном канале это секунды');
+});
+
+test('день недели — название, даже если пришёл номером', async () => {
+  // В данных `objective.day` лежит номер (0 — воскресенье): на экране
+  // должен быть «ВС», а не «0».
+  const week = JSON.parse(JSON.stringify(WEEK));
+  week.workouts[0].objective.day = 0;
+  week.workouts[0].day = 0;
+  await loadApp({week});
+  openWeek();
+  // Ищем по id, а не по позиции: сортировка по дню тоже должна работать.
+  const slot = document.querySelector('.slot[data-slot="w-1"]');
+  assert.ok(slot, 'тренировка w-1 не найдена');
+  const text = slot.querySelector('.slot-head .day').textContent;
+  assert.match(text, /ВС/, `день показан как «${text.trim()}», а не «ВС»`);
+  assert.doesNotMatch(text, /\b0\b/, 'показан номер дня');
+  // И осталась на месте по порядку дней: вс — первый день недели.
+  const first = document.querySelectorAll('.slot')[0];
+  assert.equal(first.dataset.slot, 'w-1', 'тренировка уехала из своего дня');
+});
+
+test('без окон тренировок карточка атлета не ломается', async () => {
+  // Тест последний: он перезагружает приложение, а состояние общее.
+  await loadApp({slots: []});
+  click(document.querySelector('#nav [data-screen="athlete"]'));
+  const picker = document.getElementById('picker');
+  assert.ok(picker.innerHTML.length > 0, 'экран атлета пуст');
+  assert.ok(!picker.innerHTML.includes('undefined'), 'экран содержит undefined');
+  assert.doesNotMatch(picker.textContent, /Окна тренировок/);
 });

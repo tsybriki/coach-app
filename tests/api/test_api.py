@@ -16,12 +16,14 @@ from fastapi.testclient import TestClient
 from app.adapters.storage.files import FileStorage
 from app.domain.entities import (
     Assignment,
+    Athlete,
     Goal,
     MacroWeek,
     Phase,
     Plan,
     Request,
     Season,
+    Slot,
     Step,
     Week,
     WeekSummary,
@@ -78,11 +80,14 @@ def seed_week(root: Path) -> int:
         assignments=[Assignment(request_id="r1", slot_id="s1", start="18:45",
                                 duration_min=60)],
         workouts=[Workout(id="w1", request_id="r1", sport=Sport.RUN, kind="easy",
-                          focus="base", steps=[step], duration_min=60.0)],
+                          focus="base", steps=[step], duration_min=60.0,
+                          time="18:45")],
     )
     storage.save(
         Season(id="S1", horizon_start=date(2026, 10, 11),
-               horizon_end=date(2027, 9, 12), season_week_count=49, plans=[]),
+               horizon_end=date(2027, 9, 12), season_week_count=49, plans=[],
+               slots=[Slot(id="s1", day=1, start="18:45", end="20:15",
+                           capacity_min=90)]),
         expected_version=0,
     )
     return storage.put_week(week, expected_version=1)
@@ -192,6 +197,111 @@ def test_week_returns_data(client: TestClient, data_root: Path):
     assert week["status"] == "proposed"
     assert len(week["workouts"]) == 1
     assert len(week["workouts"][0]["steps"]) == 1
+
+
+def test_workout_has_day_and_date_from_its_slot(client: TestClient, data_root: Path):
+    """У тренировки есть день недели и дата — из окна, в которое она попала.
+
+    Неделя начинается в воскресенье: 11.10.2026 — W1. Окно `s1` стоит в
+    понедельник (day=1), значит тренировка в ПН, 12.10.2026.
+    """
+    seed_week(data_root)
+    response = client.get("/api/v1/week/1")
+    assert response.status_code == 200
+    workout = response.json()["data"]["workouts"][0]
+    assert workout["day"] == "ПН"
+    assert workout["date"] == "2026-10-12"
+    assert workout["slot_id"] == "s1"
+    # То же самое в objective: клиент берёт день и дату оттуда.
+    assert workout["objective"]["day"] == "ПН"
+    assert workout["objective"]["date"] == "2026-10-12"
+
+
+def test_workout_without_slot_has_no_day(client: TestClient, data_root: Path):
+    """Висяк (тренировка без окна) не получает чужой день и дату.
+
+    Окна нет — значит и дня нет: показывать дату, выдуманную по умолчанию,
+    хуже, чем не показывать ничего.
+    """
+    seed_week(data_root)
+    storage = FileStorage(data_root)
+    week = storage.week(1)
+    assert week is not None
+    # Убираем размещение: тренировка остаётся, окна у неё больше нет.
+    week.assignments = []
+    storage.put_week(week, expected_version=storage.version())
+
+    response = client.get("/api/v1/week/1")
+    assert response.status_code == 200
+    workout = response.json()["data"]["workouts"][0]
+    assert workout["day"] == ""
+    assert workout["date"] == ""
+    assert workout["slot_id"] == ""
+
+
+def test_slots_endpoint_lists_training_windows(client: TestClient, data_root: Path):
+    """Окна тренировок отдаются отдельным маршрутом — для карточки атлета."""
+    seed_week(data_root)
+    response = client.get("/api/v1/slots")
+    assert response.status_code == 200
+    slots = response.json()["data"]["slots"]
+    assert len(slots) == 1
+    slot = slots[0]
+    assert slot["id"] == "s1"
+    assert slot["day"] == 1
+    assert slot["day_name"] == "ПН"
+    assert slot["start"] == "18:45"
+    assert slot["end"] == "20:15"
+    assert slot["capacity_min"] == 90
+
+
+def test_numeric_day_in_objective_is_normalised(client: TestClient, data_root: Path):
+    """`objective.day` с номером дня нормализуется в название.
+
+    В данных `objective.day` лежит номер (0 — воскресенье): на экране нужен
+    «ВС», а не «0». Нормализует API — на границе, где внешние данные
+    превращаются в доменные.
+    """
+    seed_week(data_root)
+    storage = FileStorage(data_root)
+    week = storage.week(1)
+    assert week is not None
+    week.workouts[0].objective = {"name": "Вел 60мин", "day": 2}
+    storage.put_week(week, expected_version=storage.version())
+
+    response = client.get("/api/v1/week/1")
+    assert response.status_code == 200
+    workout = response.json()["data"]["workouts"][0]
+    assert workout["objective"]["day"] == "ВТ"
+    assert workout["day"] == "ПН"
+
+
+def test_slots_endpoint_without_slots_is_empty(client: TestClient):
+    """Без окон ответ — пустой список, а не ошибка."""
+    response = client.get("/api/v1/slots")
+    assert response.status_code == 200
+    assert response.json()["data"]["slots"] == []
+
+
+def test_athlete_form_is_translated(client: TestClient, data_root: Path):
+    """Состояние атлета — по-русски, а не кодом из пайплайна.
+
+    `recovering_after_back_injury` на экране читается как ошибка, а не как
+    состояние. Код остаётся рядом, в `form_code`.
+    """
+    storage = FileStorage(data_root)
+    storage.update_athlete(Athlete(
+        vdot=51.0,
+        hr_zones={"Z1": (100, 118), "Z2": (118, 135)},
+        hr_max=182, rhr=54, lth=164, weight_kg=101.7,
+        form="recovering_after_back_injury",
+    ))
+
+    response = client.get("/api/v1/athlete")
+    assert response.status_code == 200
+    athlete = response.json()["data"]
+    assert athlete["form"] == "Восстановление после травмы спины"
+    assert athlete["form_code"] == "recovering_after_back_injury"
 
 
 def test_etag_present(client: TestClient):

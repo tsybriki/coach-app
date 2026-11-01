@@ -62,6 +62,14 @@ export function getSeason() {
   return Promise.resolve({version: f.version ?? 42, data: f.seasonPlan || {}});
 }
 
+export function getSlots() {
+  const f = fixture();
+  return Promise.resolve({
+    version: f.version ?? 42,
+    data: {slots: f.slots || []},
+  });
+}
+
 export function sendCommand(command) {
   const f = fixture();
   const handler = f.onCommand;

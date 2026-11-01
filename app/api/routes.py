@@ -154,7 +154,8 @@ def week(season_week: int, container: AppContainer = Depends(get_container)) -> 
         return fail(container, "not_found", f"неделя W{season_week} не найдена",
                     status=404)
     sessions = container.fact_repo.list_for_week(season_week)
-    return ok(container, _week_dict(found, sessions))
+    loaded = container.season_repo.load()
+    return ok(container, _week_dict(found, sessions, loaded.slots))
 
 
 @router.get("/actual/{season_week}")
@@ -220,6 +221,18 @@ def detail(actual_id: str,
 def athlete(container: AppContainer = Depends(get_container)) -> JSONResponse:
     """Профиль атлета."""
     return ok(container, _athlete_dict(container))
+
+
+@router.get("/slots")
+def slots(container: AppContainer = Depends(get_container)) -> JSONResponse:
+    """Окна тренировок — расписание, в которое раскладывается неделя.
+
+    Окна принадлежат среде, а не конкретной неделе: одно и то же окно
+    повторяется каждую неделю. Карточка атлета показывает их, чтобы было
+    видно, куда вообще можно попасть.
+    """
+    loaded = container.season_repo.load()
+    return ok(container, {"slots": [_slot_dict(s) for s in loaded.slots]})
 
 
 @router.get("/season")
@@ -574,7 +587,13 @@ def events(container: AppContainer = Depends(get_container)) -> StreamingRespons
 def _week_dict(
     week: Week,
     sessions: list[ActualSession] | None = None,
+    slots: list[Any] | None = None,
 ) -> dict[str, Any]:
+    # Окно тренировки: слот. Тренировка знает свой слот через размещение
+    # запроса, а не напрямую.
+    slot_by_id = {s.id: s for s in (slots or [])}
+    assignment_by_request = {a.request_id: a for a in week.assignments}
+
     data: dict[str, Any] = {
         "id": week.id,
         "season_week": week.season_week,
@@ -599,37 +618,7 @@ def _week_dict(
             for r in week.unplaced
         ],
         "workouts": [
-            {
-                "id": w.id,
-                "request_id": w.request_id,
-                "sport": w.sport.value,
-                "kind": w.kind,
-                "focus": w.focus,
-                "objective": w.objective,
-                "location": w.location,
-                "time": w.time,
-                "rationale": w.rationale,
-                "duration_min": w.duration_min,
-                "status": w.status.value,
-                "actual_id": w.actual_id,
-                "steps": [
-                    {
-                        "id": s.id,
-                        "role": s.role.value,
-                        "sport": s.sport.value,
-                        "target_type": s.target_type.value,
-                        "target_value": s.target_value,
-                        "focus": s.focus.value,
-                        "focus_value": s.focus_value,
-                        "duration_min": s.duration_min,
-                        "label": s.label,
-                        "notes": s.notes,
-                        "group": s.group,
-                        "round": s.round,
-                    }
-                    for s in w.steps
-                ],
-            }
+            _workout_dict(w, week, slot_by_id, assignment_by_request)
             for w in week.workouts
         ],
         "summary": _summary_dict(week.summary) if week.summary else None,
@@ -716,6 +705,69 @@ def _detail_dict(detail: WorkoutDetail) -> dict[str, Any]:
     }
 
 
+def _workout_dict(
+    workout: Any,
+    week: Week,
+    slot_by_id: dict[str, Any],
+    assignment_by_request: dict[str, Any],
+) -> dict[str, Any]:
+    """Тренировка недели — с днём и датой.
+
+    День и дата берутся из окна, в которое тренировка попала: окно
+    принадлежит среде, и тренировка без окна (висяк) дня не имеет.
+    """
+    assignment = assignment_by_request.get(workout.request_id)
+    slot = slot_by_id.get(assignment.slot_id) if assignment else None
+    day_name, date_iso = _workout_day_date(
+        week.start,
+        slot.day if slot else None,
+        workout.time,
+    )
+    objective = dict(workout.objective or {})
+    # `objective.day` в данных — номер дня (0 — воскресенье). На экране
+    # нужен день по-русски, поэтому нормализуем здесь, на границе API.
+    objective_day = objective.get("day")
+    if isinstance(objective_day, int):
+        objective["day"] = _weekday_name(objective_day)
+    objective.setdefault("day", day_name)
+    objective.setdefault("date", date_iso)
+    objective.setdefault("slot_id", slot.id if slot else "")
+    return {
+        "id": workout.id,
+        "request_id": workout.request_id,
+        "sport": workout.sport.value,
+        "kind": workout.kind,
+        "focus": workout.focus,
+        "objective": objective,
+        "location": workout.location,
+        "time": workout.time,
+        "day": day_name,
+        "date": date_iso,
+        "slot_id": slot.id if slot else "",
+        "rationale": workout.rationale,
+        "duration_min": workout.duration_min,
+        "status": workout.status.value,
+        "actual_id": workout.actual_id,
+        "steps": [
+            {
+                "id": s.id,
+                "role": s.role.value,
+                "sport": s.sport.value,
+                "target_type": s.target_type.value,
+                "target_value": s.target_value,
+                "focus": s.focus.value,
+                "focus_value": s.focus_value,
+                "duration_min": s.duration_min,
+                "label": s.label,
+                "notes": s.notes,
+                "group": s.group,
+                "round": s.round,
+            }
+            for s in workout.steps
+        ],
+    }
+
+
 def _athlete_dict(container: AppContainer) -> dict[str, Any]:
     profile = container.athlete_repo.get()
     return {
@@ -729,5 +781,70 @@ def _athlete_dict(container: AppContainer) -> dict[str, Any]:
         "lth": profile.lth,
         "weight_kg": profile.weight_kg,
         "injuries": profile.injuries,
-        "form": profile.form,
+        "form": _form_text(profile.form),
+        "form_code": profile.form or "",
     }
+
+
+# Дни недели по-русски. Неделя сезона начинается с воскресенья (вс→сб),
+# поэтому `slot.day` = 0 — это воскресенье.
+DAY_NAMES = ("ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ")
+
+# Состояние атлета — кодом из пайплайна. На экране нужен текст:
+# «recovering_after_back_injury» читается как ошибка, а не как состояние.
+FORM_NAMES = {
+    "recovering_after_back_injury": "Восстановление после травмы спины",
+    "fresh": "Форма хорошая",
+    "peaking": "Форма на пике",
+    "tired": "Усталость",
+    "injured": "Травма",
+    "unknown": "—",
+}
+
+
+def _form_text(form: str | None) -> str:
+    """Состояние атлета по-русски."""
+    if not form:
+        return "—"
+    return FORM_NAMES.get(form, form)
+
+
+def _slot_dict(slot: Any) -> dict[str, Any]:
+    """Окно тренировки — для карточки атлета."""
+    day = int(slot.day)
+    return {
+        "id": slot.id,
+        "day": day,
+        "day_name": DAY_NAMES[day] if 0 <= day < len(DAY_NAMES) else "",
+        "start": slot.start,
+        "end": slot.end,
+        "capacity_min": slot.capacity_min,
+        "equipment_ids": list(slot.equipment_ids),
+        "note": slot.note,
+    }
+
+
+def _weekday_name(day: int) -> str:
+    """День недели по-русски из номера (0 — воскресенье)."""
+    return DAY_NAMES[day] if 0 <= day < len(DAY_NAMES) else ""
+
+
+def _workout_day_date(
+    week_start: date,
+    slot_day: int | None,
+    slot_start: str | None,
+) -> tuple[str, str]:
+    """День недели и дата тренировки — по её окну.
+
+    Окно задаёт и день, и время: тренировка без окна (висяк) дня не
+    имеет, и показывать ей чужую дату нельзя.
+    """
+    if slot_day is None or slot_start is None:
+        return ("", "")
+    day = int(slot_day)
+    if not 0 <= day < len(DAY_NAMES):
+        return ("", "")
+    # Неделя начинается с воскресенья: смещение дня — это сам номер дня.
+    offset = day
+    day_date = week_start + timedelta(days=offset)
+    return (_weekday_name(day), day_date.isoformat())

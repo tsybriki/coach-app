@@ -63,6 +63,10 @@ export async function getAthlete() {
   return request('/api/v1/athlete');
 }
 
+export async function getSlots() {
+  return request('/api/v1/slots');
+}
+
 export async function getSeason() {
   return request('/api/v1/season');
 }
