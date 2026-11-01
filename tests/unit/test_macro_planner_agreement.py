@@ -1,21 +1,23 @@
 """Согласие макро-плана сезона с планировщиком Дэниэлса.
 
-Правило (зафиксировано Кириллом 31.10.2026):
+Правило (зафиксировано Кириллом 31.10.2026, уточнено 01.11.2026):
 
 - **горизонт один на весь сезон** — от даты старта сезона до даты гонки,
   считается один раз и подставляется в расписание программы для всех недель;
-- **горизонт включает неделю гонки**: план покрывает N недель сезона, а
-  гонка в последней, значит `schedule_for(N)`, а не `schedule_for(N-1)` плюс
-  дописанная вручную неделя;
+- **горизонт — недели ДО гонки**: расписание покрывает `schedule_for(N)`,
+  где N — недель до гонки, а не N+1;
+- **неделя гонки в макро-плана НЕТ**: гонка — событие, а не тренировка, и
+  планировать её не нужно (Кирилл, 01.11.2026). Макро покрывает W1..W(N),
+  где N — недель до гонки;
 - **неделя сезона и неделя программы — разные числа**: неделя W4 сезона
   стоит на 4-й неделе программы, а не на 13-й.
 
-Нарушение любого из трёх пунктов даёт план, который показывает одни недели,
+Нарушение любого из пунктов даёт план, который показывает одни недели,
 а собранная неделя содержит другие. Расхождение не видно ни в guard'е, ни
 в артефактах — его ловит только сверка по всем неделям сразу.
 
 Тест проверяет **живое состояние сезона** (`~/coach/state/season_plan.json`):
-макро и планировщик обязаны совпадать на каждой неделе, включая неделю гонки.
+макро и планировщик обязаны совпадать на каждой неделе.
 """
 from __future__ import annotations
 
@@ -81,9 +83,9 @@ def _race(season_plan: dict[str, Any]) -> tuple[date, str]:
 def _horizon(season_plan: dict[str, Any]) -> int:
     """Горизонт расписания программы: недели сезона **до** гонки.
 
-    Неделя гонки — часть четвёртой фазы, но у неё нет недели программы:
-    гонка — событие, а не тренировка. Поэтому расписание программы
-    покрывает N-1 недель, а неделя гонки добавляется в конец фазы IV.
+    Неделя гонки в макро-плана НЕТ (событие, а не тренировка), поэтому
+    расписание программы покрывает ровно N недель, где N — недель до
+    гонки, и макро заканчивается на неделе N.
     """
     start = date.fromisoformat(season_plan["season_start_date"])
     race_date, _ = _race(season_plan)
@@ -91,7 +93,11 @@ def _horizon(season_plan: dict[str, Any]) -> int:
 
 
 def _race_week(season_plan: dict[str, Any]) -> int:
-    """Номер недели гонки в сезоне."""
+    """Номер недели гонки в сезоне.
+
+    Недели гонки в макро-плана нет: это номер недели, в которую попадает
+    дата гонки, а не строка макро.
+    """
     return _horizon(season_plan) + 1
 
 
@@ -103,9 +109,9 @@ def _season_week_start(season_plan: dict[str, Any], season_week: int) -> date:
 def test_horizon_is_weeks_before_race(season_plan: dict[str, Any]) -> None:
     """Горизонт — недели сезона до гонки.
 
-    Неделя гонки — часть четвёртой фазы, но у неё нет недели программы:
-    гонка — событие, а не тренировка. Расписание программы покрывает
-    недели до гонки, а неделя гонки добавляется в конец фазы IV.
+    Неделя гонки в макро-плана НЕТ: гонка — событие, а не тренировка.
+    Расписание программы покрывает недели до гонки, и макро заканчивается
+    на последней из них.
     """
     start = date.fromisoformat(season_plan["season_start_date"])
     race_date, _ = _race(season_plan)
@@ -117,11 +123,42 @@ def test_horizon_is_weeks_before_race(season_plan: dict[str, Any]) -> None:
 
 
 def test_macro_covers_all_plan_weeks(season_plan: dict[str, Any]) -> None:
-    """Макро покрывает все недели плана — от первой до недели гонки."""
-    race_week = _race_week(season_plan)
+    """Макро покрывает все недели плана — до последней недели перед гонкой."""
+    horizon = _horizon(season_plan)
     weeks = {w["season_week"] for w in season_plan.get("weekly_macro") or []}
-    missing = sorted(set(range(1, race_week + 1)) - weeks)
+    missing = sorted(set(range(1, horizon + 1)) - weeks)
     assert not missing, f"в макро нет недель: {missing}"
+
+
+def test_macro_has_no_extra_weeks(season_plan: dict[str, Any]) -> None:
+    """В макро нет недель сверх горизонта.
+
+    Неделя гонки не планируется (Кирилл, 01.11.2026): макро заканчивается
+    на последней неделе перед гонкой, а лишних строк быть не должно.
+    """
+    horizon = _horizon(season_plan)
+    weeks = {w["season_week"] for w in season_plan.get("weekly_macro") or []}
+    extra = sorted(w for w in weeks if w > horizon)
+    assert not extra, f"в макро есть недели сверх горизонта: {extra}"
+
+
+def test_race_week_is_not_planned(
+    season_plan: dict[str, Any], daniels_plan: MethodPlan
+) -> None:
+    """Неделя гонки — вне макро и вне расписания программы.
+
+    Гонка — событие, а не тренировка: своей недели программы у неё нет, и
+    в макро она не планируется.
+    """
+    horizon = _horizon(season_plan)
+    race_week = _race_week(season_plan)
+    macro = {w["season_week"]: w for w in season_plan.get("weekly_macro") or []}
+    assert race_week not in macro, (
+        f"неделя {race_week} (гонка) не должна быть в макро — её не планируют"
+    )
+    assert daniels_plan.plan_week(horizon, race_week - 1) is None, (
+        f"неделя {race_week} (гонка) не должна быть в расписании программы"
+    )
 
 
 def test_every_week_has_a_program_week(
@@ -141,20 +178,6 @@ def test_every_week_has_a_program_week(
         )
 
 
-def test_race_week_has_no_program_week(
-    season_plan: dict[str, Any], daniels_plan: MethodPlan
-) -> None:
-    """Неделя гонки — вне расписания программы.
-
-    Гонка — событие, а не тренировка: своей недели программы у неё нет.
-    """
-    horizon = _horizon(season_plan)
-    race_week = _race_week(season_plan)
-    assert daniels_plan.plan_week(horizon, race_week - 1) is None, (
-        f"неделя {race_week} (гонка) не должна быть в расписании программы"
-    )
-
-
 def test_macro_and_planner_agree_on_every_week(
     season_plan: dict[str, Any], daniels_plan: MethodPlan
 ) -> None:
@@ -167,8 +190,6 @@ def test_macro_and_planner_agree_on_every_week(
     horizon = _horizon(season_plan)
     macro = {w["season_week"]: w for w in season_plan.get("weekly_macro") or []}
     mismatches: list[str] = []
-
-    race_week = _race_week(season_plan)
 
     for season_week in range(1, horizon + 1):
         entry = macro.get(season_week)
@@ -199,22 +220,6 @@ def test_macro_and_planner_agree_on_every_week(
                 f"у планировщика {plan_week}"
             )
 
-    # Неделя гонки — часть четвёртой фазы. Своей недели программы у неё
-    # нет: гонка — событие, а не тренировка.
-    race_entry = macro.get(race_week)
-    assert race_entry is not None, f"в макро нет недели гонки {race_week}"
-    race_recorded = race_entry.get("_daniels") or {}
-    if race_recorded.get("daniels_phase") != 4:
-        mismatches.append(
-            f"неделя {race_week} (гонка): фаза Дэниэлса "
-            f"{race_recorded.get('daniels_phase')}, ожидалась 4"
-        )
-    if race_recorded.get("program_week") is not None:
-        mismatches.append(
-            f"неделя {race_week} (гонка): программной недели нет, "
-            f"а в макро {race_recorded.get('program_week')}"
-        )
-
     assert not mismatches, "макро и планировщик расходятся:\n" + "\n".join(
         mismatches
     )
@@ -231,8 +236,6 @@ def test_macro_phase_matches_daniels_phase(
     horizon = _horizon(season_plan)
     macro = {w["season_week"]: w for w in season_plan.get("weekly_macro") or []}
 
-    race_week = _race_week(season_plan)
-
     for season_week in range(1, horizon + 1):
         entry = macro[season_week]
         located = daniels_plan.plan_week(horizon, season_week - 1)
@@ -244,14 +247,6 @@ def test_macro_phase_matches_daniels_phase(
             f"у планировщика {expected} (Дэниэлс, фаза {daniels_phase})"
         )
 
-    # Неделя гонки — часть четвёртой фазы.
-    race_entry = macro.get(race_week)
-    assert race_entry is not None, f"в макро нет недели гонки {race_week}"
-    assert race_entry.get("phase") == DANIELS_PHASE_TO_SEASON[4], (
-        f"неделя {race_week} (гонка): фаза сезона "
-        f"{race_entry.get('phase')}, ожидалась {DANIELS_PHASE_TO_SEASON[4]}"
-    )
-
 
 def test_macro_phases_match_season_phase_boundaries(
     season_plan: dict[str, Any], daniels_plan: MethodPlan
@@ -262,7 +257,6 @@ def test_macro_phases_match_season_phase_boundaries(
     W13», а макро раскладывает по-другому.
     """
     horizon = _horizon(season_plan)
-    race_week = _race_week(season_plan)
 
     expected_bounds: dict[str, tuple[int, int]] = {}
     for season_week in range(1, horizon + 1):
@@ -274,10 +268,6 @@ def test_macro_phases_match_season_phase_boundaries(
         else:
             first, _ = expected_bounds[phase]
             expected_bounds[phase] = (first, season_week)
-    # Неделя гонки дописывается в конец четвёртой фазы.
-    fourth = DANIELS_PHASE_TO_SEASON[4]
-    first, _ = expected_bounds[fourth]
-    expected_bounds[fourth] = (first, race_week)
 
     for phase in season_plan.get("phases") or []:
         phase_id = phase.get("id")
@@ -305,8 +295,6 @@ def test_macro_work_matches_program_week(
     («R — не более 5 % недельного километража») применяет планировщик при
     сборке недели, а не макро. Проверка предела — в тестах планировщика
     (`test_planner_respects_zone_cap`).
-
-    Неделя гонки — исключение: её объём задаёт гонка, а не программа.
     """
     horizon = _horizon(season_plan)
     macro = {w["season_week"]: w for w in season_plan.get("weekly_macro") or []}
@@ -316,10 +304,6 @@ def test_macro_work_matches_program_week(
         located = daniels_plan.plan_week(horizon, season_week - 1)
         assert located is not None
         daniels_phase, _program_week, plan_week = located
-
-        # Неделя гонки: объём задаёт гонка, а не программа.
-        if season_week == horizon:
-            continue
 
         program_entry = daniels_plan.week(daniels_phase, plan_week)
         assert program_entry is not None
