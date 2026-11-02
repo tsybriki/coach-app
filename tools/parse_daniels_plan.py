@@ -221,6 +221,41 @@ def segment_label(segment: dict[str, Any]) -> str:
 # ------------------------------------------------------------------ сборка
 
 
+def _parse_phase_line(line: str) -> dict[str, dict[str, Any]]:
+    """'PHASE 1 SHAPE | runs=7 ...' → форма фазы 1.
+
+    Форма недели — это сколько тренировок и с какой структурой, а не
+    содержание: километраж приходит из макро-плана сезона.
+    """
+    parts = line.split()
+    if len(parts) < 3 or parts[2] != "SHAPE":
+        raise ValueError(f"строка фазы без SHAPE: {line!r}")
+    phase = int(parts[1])
+    body = line.split("|", 1)[1] if "|" in line else ""
+    values: dict[str, Any] = {"phase": phase}
+    for token in body.split():
+        if "=" not in token:
+            continue
+        key, _, raw = token.partition("=")
+        values[key] = _parse_shape_value(key, raw)
+    return {str(phase): values}
+
+
+def _parse_shape_value(key: str, raw: str) -> Any:
+    """Значение формы: число, диапазон «6-8» или строка."""
+    if "-" in raw and key == "stride_reps":
+        low, _, high = raw.partition("-")
+        return {"min": int(low), "max": int(high)}
+    try:
+        return int(raw)
+    except ValueError:
+        pass
+    try:
+        return float(raw)
+    except ValueError:
+        return raw
+
+
 def parse(text: str) -> dict[str, Any]:
     weeks: dict[str, dict[str, Any]] = {}
     phase_map: list[dict[str, Any]] = []
@@ -231,10 +266,15 @@ def parse(text: str) -> dict[str, Any]:
     extra_plans: dict[int, tuple[int, ...]] = {}
     front_phases: tuple[int, ...] = ()
     program_weeks: dict[int, tuple[int, ...]] = {}
+    shapes: dict[str, dict[str, Any]] = {}
 
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
+            continue
+
+        if line.startswith("PHASE "):
+            shapes.update(_parse_phase_line(line))
             continue
 
         if line.startswith("MAP "):
@@ -394,6 +434,7 @@ def parse(text: str) -> dict[str, Any]:
         "extra_plans": {str(k): list(v) for k, v in extra_plans.items()},
         "front_phases": list(front_phases),
         "program_weeks": {str(k): list(v) for k, v in program_weeks.items()},
+        "phase_shapes": shapes,
         "phases": phases,
     }
 

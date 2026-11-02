@@ -17,7 +17,7 @@ from app.domain.entities import (
     Week,
     Workout,
 )
-from app.domain.enums import PlanStatus, Sport, WeekStatus
+from app.domain.enums import PlanStatus, Sport, TargetType, WeekStatus
 from app.domain.methodology import ZONE_REPETITION, ZONE_THRESHOLD
 from app.services.week_planner import WeekPlanner
 from app.services.week_proposal import (
@@ -449,9 +449,11 @@ def test_control_point_becomes_quality_work(season, planner, templates):
 
 
 def test_control_point_is_inside_run_volume(season, planner, templates):
-    """Тестовая сессия — часть объёма бега, а не добавка к нему.
+    """Тестовая сессия — часть недельного километража, а не добавка к нему.
 
-    Иначе неделя раздувается на длительность теста.
+    Иначе неделя раздувается на дистанцию теста. Проверяем по
+    километражу: в фазе I недельный бег задан формой недели (55-57 км),
+    и тест входит в эти километры, а не добавляется сверху.
     """
     plan = season.plans[0]
     macro = plan.macro_week(4)
@@ -462,10 +464,13 @@ def test_control_point_is_inside_run_volume(season, planner, templates):
         "variant_id": "tt_pace",
     }
     week = plan_from_macro(season, 4, planner, templates)
-    run_minutes = sum(
-        w.duration_min for w in week.workouts if w.sport is Sport.RUN
-    )
-    expected = macro.long_min + macro.quality_min + macro.easy_min
-    assert run_minutes <= expected + 2.0, (
-        f"бег {run_minutes} мин больше разбивки макро {expected} мин"
+    run_km = sum(
+        float(step.target_value)
+        for workout in week.workouts
+        if workout.sport is Sport.RUN
+        for step in workout.steps
+        if step.target_type == TargetType.DISTANCE
+    ) / 1000.0
+    assert 55.0 <= run_km <= 57.0, (
+        f"бег {run_km:.1f} км — форма фазы требует 55-57 км"
     )

@@ -76,6 +76,27 @@
   4
  ],
  "phase_map": [],
+ "phase_shapes": {
+  "1": {
+   "easy_zone": "E",
+   "km_max": 57,
+   "km_min": 55,
+   "long_from_week": 4,
+   "ofp_minutes": 15,
+   "ofp_runs": 3,
+   "phase": 1,
+   "runs": 7,
+   "stride_distance_m": 100,
+   "stride_from_week": 4,
+   "stride_recovery_m": 100,
+   "stride_reps": {
+    "max": 8,
+    "min": 6
+   },
+   "stride_runs": 4,
+   "stride_zone": "R"
+  }
+ },
  "phases": {
   "1": [
    {

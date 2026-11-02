@@ -13,6 +13,7 @@ from app.domain.methodology import (
     DanielsPaces,
     MethodPlan,
     PaceRow,
+    PhaseShape,
     PhaseWeek,
     RecipeSegment,
     RecipeSet,
@@ -164,6 +165,37 @@ def load_plan(reference_dir: Path) -> MethodPlan:
             int(k): tuple(int(w) for w in v)
             for k, v in (data.get("program_weeks") or {}).items()
         },
+        phase_shapes={
+            int(k): _shape_from_dict(v)
+            for k, v in (data.get("phase_shapes") or {}).items()
+        },
+    )
+
+
+def _shape_from_dict(data: dict[str, Any]) -> PhaseShape:
+    """Форма фазы — из разобранных данных справочника."""
+    reps = data.get("stride_reps") or {}
+    if isinstance(reps, dict):
+        reps_min = int(reps.get("min", 0))
+        reps_max = int(reps.get("max", reps_min))
+    else:
+        reps_min = reps_max = int(reps or 0)
+    return PhaseShape(
+        phase=int(data.get("phase", 0)),
+        runs_per_week=int(data.get("runs", 0) or 0),
+        easy_zone=str(data.get("easy_zone", "E")),
+        long_from_week=int(data.get("long_from_week", 1) or 1),
+        stride_runs=int(data.get("stride_runs", 0) or 0),
+        stride_reps_min=reps_min,
+        stride_reps_max=reps_max,
+        stride_distance_m=int(data.get("stride_distance_m", 100) or 100),
+        stride_recovery_m=int(data.get("stride_recovery_m", 100) or 100),
+        stride_zone=str(data.get("stride_zone", "R")),
+        stride_from_week=int(data.get("stride_from_week", 1) or 1),
+        ofp_runs=int(data.get("ofp_runs", 0) or 0),
+        ofp_minutes=int(data.get("ofp_minutes", 0) or 0),
+        weekly_km_min=float(data.get("km_min", 0.0) or 0.0),
+        weekly_km_max=float(data.get("km_max", 0.0) or 0.0),
     )
 
 

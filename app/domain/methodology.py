@@ -217,6 +217,58 @@ class ZoneCap:
 
 
 @dataclass(frozen=True)
+class PhaseShape:
+    """Форма недели фазы: сколько тренировок и с какой структурой.
+
+    Правило Дэниэлса для фазы I читается так: 7 тренировок в неделю в
+    лёгкой зоне, к четырём из них (не к длинной) — короткие быстрые
+    отрезки, к трём из семи — ОФП в конце.
+
+    Это **форма**, а не содержание: сколько именно километражей — из
+    макро-плана сезона, а форма задаёт правила сборки недели.
+    """
+
+    phase: int
+    # Сколько пробежек в неделе (длинная входит в это число).
+    runs_per_week: int = 0
+    # Зона лёгкой пробежки.
+    easy_zone: str = ZONE_EASY
+    # С какой недели программы появляется длинный бег.
+    long_from_week: int = 1
+    # Отрезки: сколько пробежек недели с отрезками, сколько отрезков,
+    # какой длины и с каким отдыхом, с какой недели программы появляются.
+    stride_runs: int = 0
+    stride_reps_min: int = 0
+    stride_reps_max: int = 0
+    stride_distance_m: int = 100
+    stride_recovery_m: int = 100
+    stride_zone: str = ZONE_REPETITION
+    stride_from_week: int = 1
+    # ОФП в конце пробежки: сколько тренировок недели и по сколько минут.
+    ofp_runs: int = 0
+    ofp_minutes: int = 0
+    # Недельный километраж: ниже — не дотягиваем, выше — не превышаем.
+    weekly_km_min: float = 0.0
+    weekly_km_max: float = 0.0
+
+    def has_long(self, program_week: int) -> bool:
+        """Длинный бег в этой неделе программы есть."""
+        return program_week >= self.long_from_week
+
+    def has_strides(self, program_week: int) -> bool:
+        """Отрезки в этой неделе программы есть."""
+        return program_week >= self.stride_from_week
+
+    def clamp_km(self, km: float) -> float:
+        """Километраж недели — в границах формы."""
+        if self.weekly_km_min and km < self.weekly_km_min:
+            return self.weekly_km_min
+        if self.weekly_km_max and km > self.weekly_km_max:
+            return self.weekly_km_max
+        return km
+
+
+@dataclass(frozen=True)
 class PhaseWeek:
     """Неделя программы: какие тренировки и какие ограничения."""
 
@@ -284,6 +336,12 @@ class MethodPlan:
     extra_plans: dict[int, tuple[int, ...]] = field(default_factory=dict)
     front_phases: tuple[int, ...] = ()
     program_weeks: dict[int, tuple[int, ...]] = field(default_factory=dict)
+    # Форма недели по фазам: сколько тренировок и с какой структурой.
+    phase_shapes: dict[int, PhaseShape] = field(default_factory=dict)
+
+    def shape_for(self, phase: int) -> PhaseShape | None:
+        """Форма фазы — по номеру фазы программы."""
+        return self.phase_shapes.get(phase)
 
     def week(self, phase: int, week: int) -> PhaseWeek | None:
         for entry in self.weeks:
@@ -776,6 +834,110 @@ def build_steps(recipe: WorkoutRecipe,
         add_segment(segment, None, None, role)
 
     return steps
+
+
+def build_ofp_steps(minutes: int, athlete: Athlete) -> list[Step]:
+    """Шаги ОФП в конце пробежки.
+
+    Правило Дэниэлса для фазы I: к трём из семи тренировок — ОФП в
+    конце. ОФП — это упражнения, а не зоны пульса, поэтому шаг несёт
+    название упражнения и повторы.
+
+    Шаги ОФП — **внутри** тренировки, а не отдельная тренировка:
+    «к трём из семи тренировок добавить в конце ОФП» — это продолжение
+    пробежки, а не восьмая тренировка.
+    """
+    if minutes <= 0:
+        return []
+
+    warmup = min(3.0, minutes / 3.0)
+    cooldown = min(3.0, minutes / 3.0)
+    main = max(minutes - warmup - cooldown, 0.0)
+
+    exercises = (
+        ("Планка", "3×45с", "Отдых 30с."),
+        ("Медведи на коленях", "2×12/стор", "Отдых 30с."),
+        ("Bird-dog", "3×10/стор", "Отдых 30с."),
+        ("Glute bridge", "3×15", "Отдых 30с."),
+        ("Гиперэкстензия на полу", "2×15", "Отдых 30с."),
+    )
+    each = main / len(exercises) if exercises else 0.0
+
+    steps: list[Step] = [
+        Step(
+            id="ofp-s0",
+            role=StepRole.WARMUP,
+            sport=Sport.RUN,
+            target_type=TargetType.OPEN,
+            target_value=round(warmup, 2),
+            focus=FocusType.NONE,
+            focus_value={"ofp": True},
+            label="Мобилилити: hip openers, glute bridge 2×15.",
+            notes="Активация ядр и таза.",
+            duration_min=round(warmup, 2),
+        ),
+    ]
+    for index, (name, reps, notes) in enumerate(exercises, 1):
+        steps.append(Step(
+            id=f"ofp-s1-{index}",
+            role=StepRole.WORK,
+            sport=Sport.RUN,
+            target_type=TargetType.REPS,
+            target_value=float(index),
+            focus=FocusType.STRENGTH_PATTERN,
+            focus_value={"reps": reps, "ofp": True},
+            group="Core circuit",
+            round=index,
+            label=name,
+            notes=notes,
+            duration_min=round(each, 2),
+        ))
+    steps.append(Step(
+        id="ofp-s2",
+        role=StepRole.COOLDOWN,
+        sport=Sport.RUN,
+        target_type=TargetType.OPEN,
+        target_value=round(cooldown, 2),
+        focus=FocusType.NONE,
+        focus_value={"ofp": True},
+        label="Растяжка.",
+        notes="Без агрессии на грушевидную.",
+        duration_min=round(cooldown, 2),
+    ))
+    return steps
+
+
+def build_stride_steps(
+    shape: PhaseShape,
+    pace_by_zone: dict[str, float],
+    athlete: Athlete,
+    reps: int,
+) -> list[Step]:
+    """Шаги коротких быстрых отрезков: 100 м через 100 м бега трусцой.
+
+    Правило Дэниэлса для фазы I: «6-8 коротких быстрых отрезков в неделю
+    по меньшей мере к четырём Л-забегам». Отрезок идёт в повторном темпе,
+    отдых между ними — бег трусцой, то есть в лёгкой зоне.
+
+    Отрезки — **шаги тренировки**, а не отдельные тренировки: они идут
+    внутри пробежки, и карточка должна показывать структуру, а не
+    «8 тренировок по 100 метров».
+    """
+    if reps <= 0 or not pace_by_zone:
+        return []
+
+    stride = RecipeSegment(zone=shape.stride_zone,
+                           distance_m=float(shape.stride_distance_m))
+    recovery = RecipeSegment(zone=ZONE_EASY,
+                             distance_m=float(shape.stride_recovery_m))
+    label = f"{reps}×{shape.stride_distance_m}м через {shape.stride_recovery_m}м"
+    recipe = WorkoutRecipe(
+        kind="STRIDE",
+        label=label,
+        sets=(RecipeSet(reps_min=reps, reps_max=reps,
+                        segments=(stride, recovery), label=label),),
+    )
+    return build_steps(recipe, pace_by_zone, athlete)
 
 
 def build_progression_steps(recipe: WorkoutRecipe,

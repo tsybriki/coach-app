@@ -39,12 +39,21 @@ from app.domain.methodology import (
     ZONE_INTERVAL,
     DanielsPaces,
     MethodPlan,
+    PhaseShape,
     WorkoutRecipe,
     apply_week_caps,
+    athlete_zone_for,
+    build_ofp_steps,
     build_progression_steps,
     build_steps,
+    build_stride_steps,
     format_pace,
 )
+
+# Потолок длинного бега: «25 % недельного километража или 1,5 ч — что
+# меньше» (правило Дэниэлса). Без потолка длинный пробежек растёт с
+# километражом недели и перестаёт быть длинным пробежком.
+LONG_MAX_MIN = 90
 
 
 @dataclass
@@ -81,6 +90,10 @@ class WeekPlanInput:
     недель до старта: по этому сроку программа раскладывается по фазам.
     `run_km` — недельный километраж бега из макро: ограничения Дэниэлса
     заданы в его долях, без него предел не вычислить.
+
+    `reserved_km` и `reserved_runs` — сколько километражей и пробежек
+    недели уже занято (контрольная точка занимает и километраж, и слот
+    пробежки). Форма фазы считает остаток.
     """
 
     season_week: int
@@ -93,12 +106,17 @@ class WeekPlanInput:
     weeks_to_race: int = 0
     run_km: float = 0.0
     # Число лёгких пробежек недели — из макро. Задаёт разбивку лёгкого
-    # остатка, чтобы макро и собранная неделя называли одно число
+    # остатка, чтобы макро и собранная неделя называют одно число
     # тренировок.
     easy_runs: int = 0
     plan_id: str = ""
     phase_overrides: list[SlotOverride] | None = None
     week_overrides: list[SlotOverride] | None = None
+    # Километраж и число пробежек, занятые контрольной точкой.
+    reserved_km: float = 0.0
+    reserved_runs: int = 0
+    # Окна, занятые контрольной точкой: их нельзя отдавать под бег.
+    reserved_slots: tuple[str, ...] = ()
 
 
 @dataclass
@@ -107,6 +125,57 @@ class _PlannedSession:
 
     target: WeeklyTarget
     recipe: WorkoutRecipe | None = None
+    # Готовые шаги тренировки. Заданы, когда структура пришла из формы
+    # фазы (отрезки и ОФП внутри пробежки), а не из рецепта.
+    steps: list[Step] | None = None
+
+
+def shift_time(start: str, offset_minutes: int) -> str:
+    """Сдвинуть время начала окна на занятые минуты.
+
+    Вторую тренировку окна ставим сразу после первой: «18:45 + 60 мин»
+    — это «19:45», а не снова «18:45».
+    """
+    if offset_minutes <= 0:
+        return start
+    try:
+        hours, _, minutes = start.partition(":")
+        total = int(hours) * 60 + int(minutes) + offset_minutes
+        total %= 24 * 60
+        return f"{total // 60:02d}:{total % 60:02d}"
+    except ValueError:
+        return start
+
+
+def _split_easy_km(kilometers: float, runs: int) -> list[float]:
+    """Лёгкий километраж недели — на `runs` пробежек, поровну.
+
+    Километраж, а не минуты: длина пробежки задаёт объём, а время
+    считается по темпу зоны.
+    """
+    if kilometers <= 0:
+        return []
+    if runs <= 0:
+        runs = 1
+    if runs == 1:
+        return [kilometers]
+    each = kilometers / runs
+    return [each] * runs
+
+
+def _spread(count: int, total: int) -> set[int]:
+    """Индексы `count` пробежек из `total` — равномерно по неделе.
+
+    Добавки (отрезки, ОФП) не должны слипаться в начале: иначе половина
+    недели тяжелее, а вторая — нет. Раскладываем через равные интервалы.
+    """
+    if count <= 0 or total <= 0:
+        return set()
+    count = min(count, total)
+    if count == total:
+        return set(range(total))
+    step = total / count
+    return {min(total - 1, int(index * step)) for index in range(count)}
 
 
 def _split_easy(minutes: float, runs: int) -> list[int]:
@@ -208,6 +277,25 @@ class WeekPlanner:
         unplaced: list[Request] = []
         workouts: list[Workout] = []
 
+        # Размещение.
+        #
+        # Есть два правила, и они разные:
+        # - **с формой фазы** (правило Дэниэлса про семь пробежек):
+        #   пробежки — по кругу дней, по одной в день, окно вмещает две
+        #   тренировки;
+        # - **без формы**: каждая тренировка — в самое тесное подходящее
+        #   окно (тренировка в 30 минут занимает окно в 30 минут, а не в
+        #   90, иначе длинная тренировка уходит в висяк).
+        shape, _program_week = self._phase_shape(data)
+        if shape is not None and shape.runs_per_week > 0:
+            placed = self._place_sessions(
+                sessions, merged,
+                start_day=data.week_start.weekday(),
+                reserved_slots=data.reserved_slots,
+            )
+        else:
+            placed = self._place_tight(sessions, merged)
+
         for index, session in enumerate(sessions):
             target = session.target
             request = Request(
@@ -220,7 +308,7 @@ class WeekPlanner:
             )
             requests.append(request)
 
-            slot = self._pick_slot(merged, request, assignments)
+            slot, start = placed.get(index, (None, None))
             if slot is None:
                 # не разложилось — висяк, решение пользователя
                 unplaced.append(request)
@@ -231,12 +319,13 @@ class WeekPlanner:
                 Assignment(
                     request_id=request.id,
                     slot_id=slot.id,
-                    start=slot.start,
+                    start=start or slot.start,
                     duration_min=request.duration_min,
                     equipment_ids=slot.equipment_ids,
                 )
             )
-            workouts.append(self._build_workout(request, session, slot))
+            workouts.append(
+                self._build_workout(request, session, slot, start or slot.start))
 
         week = Week(
             id=f"W{data.season_week}",
@@ -375,6 +464,11 @@ class WeekPlanner:
         for target in run_targets:
             if not target.long_min:
                 continue
+            # При форме фазы длинный бег собирает сама форма: иначе в
+            # неделе окажется две длинные пробежки — длинная из макро и
+            # длинная из правила Дэниэлса.
+            if self._phase_shape(data)[0] is not None:
+                continue
             used_minutes += target.long_min
             sessions.append(_PlannedSession(
                 target=WeeklyTarget(
@@ -388,6 +482,19 @@ class WeekPlanner:
         for target in other_targets:
             sessions.append(_PlannedSession(target=target))
 
+        # Форма фазы — правило Дэниэлса о числе пробежек и их структуре.
+        # Если форма есть, она главнее: «7 дней в неделю Л-темп» — это
+        # семь пробежек, а не «сколько останется после деления».
+        #
+        # Форма задаёт и длинный бег: отдельный «длинный» из макро при
+        # форме был бы второй длинной пробежкой в неделе.
+        shape, _program_week = self._phase_shape(data)
+        shape_sessions = self._shape_runs(data)
+        if shape_sessions:
+            sessions.extend(shape_sessions)
+            used_minutes += sum(
+                s.target.duration_min for s in shape_sessions)
+
         # Лёгкий остаток — на столько пробежек, сколько задаёт макро.
         #
         # Пробежки раскладываются **последними**: окно занимает одна
@@ -395,8 +502,11 @@ class WeekPlanner:
         # спорта берут свои окна первыми. Число пробежек — из макро
         # (`easy_runs`): иначе макро и собранная неделя называют разное
         # число тренировок.
+        #
+        # Если форма фазы собрала пробежки сама — остаток не делится
+        # ещё раз: иначе неделя получает восьмую, девятую пробежку.
         remaining = max(run_minutes - used_minutes, 0)
-        if remaining > 0:
+        if remaining > 0 and not shape_sessions:
             runs = data.easy_runs
             if runs <= 0:
                 runs = _easy_runs_by_slots(remaining, available, set())
@@ -440,6 +550,209 @@ class WeekPlanner:
         steps = self._recipe_steps(recipe, pace_by_zone)
         return sum(step.duration_min for step in steps)
 
+    # ---------------------------------------------------------- форма фазы
+
+    def phase_shape_for(self, season_week: int,
+                        weeks_to_race: int) -> PhaseShape | None:
+        """Форма фазы для недели сезона — по горизонту до старта.
+
+        Фаза программы определяется тем же расписанием, что и неделя
+        программы: макро и планировщик обязаны считать одно.
+        """
+        if not weeks_to_race:
+            return None
+        located = self._plan.program_week(weeks_to_race, season_week - 1)
+        if located is None:
+            return None
+        phase, _program_week = located
+        return self._plan.shape_for(phase)
+
+
+    def _phase_shape(self, data: WeekPlanInput) -> tuple[PhaseShape | None, int]:
+        """Форма фазы и номер недели программы.
+
+        Форма — из правил Дэниэлса: сколько пробежек в неделе, с какими
+        отрезками и сколько ОФП. Недельный километраж — из макро-плана
+        сезона, форма его только ограничивает.
+        """
+        phase, program_week = self._program_position(data)
+        shape = self._plan.shape_for(phase)
+        if shape is None:
+            return None, program_week
+        return shape, program_week
+
+    def _shape_runs(self, data: WeekPlanInput) -> list[_PlannedSession]:
+        """Пробежки недели по форме фазы.
+
+        Правило Дэниэлса для фазы I: 7 тренировок в неделю в лёгкой
+        зоне; к четырём из них (не к длинной) — короткие быстрые
+        отрезки; к трём — ОФП в конце.
+
+        Каждая пробежка — отдельная тренировка со своей структурой:
+        отрезки и ОФП идут **внутри** пробежки, а не отдельными
+        тренировками. Иначе неделя показывает 20 тренировок вместо семи.
+        """
+        shape, program_week = self._phase_shape(data)
+        if shape is None or shape.runs_per_week <= 0:
+            return []
+
+        pace_by_zone = self._paces.pace_by_zone(self._athlete.vdot)
+        total_runs = shape.runs_per_week
+        # Контрольная точка занимает одну пробежку недели.
+        total_runs = max(total_runs - data.reserved_runs, 1)
+
+        has_long = shape.has_long(program_week)
+        long_min = self._shape_long_min(data, shape)
+        # Длинная пробежка — одна из семи, и **без отрезков**.
+        long_is_run = has_long and long_min > 0
+
+        # Отрезки — **в каждой** из четырёх пробежек, по 6-8 штук.
+        # «6-8 коротких быстрых отрезков в неделю по меньшей мере к
+        # четырём Л-забегам» читается так: к четырём пробежкам добавить
+        # по 6-8 отрезков, а не раздать 6-8 отрезков на всю неделю.
+        stride_runs = shape.stride_runs
+        if long_is_run:
+            stride_runs = min(stride_runs, max(total_runs - 1, 0))
+        stride_runs = min(stride_runs, total_runs)
+        # ОФП — к трём из семи.
+        ofp_runs = min(shape.ofp_runs, total_runs)
+        # Длинная не получает ОФП: «в конце пробежки» — к лёгким.
+        if long_is_run and ofp_runs > 0:
+            ofp_runs = min(ofp_runs, max(total_runs - 1, 0))
+
+        # Километраж недели — из макро, ограниченный формой фазы.
+        run_km = shape.clamp_km(data.run_km)
+        easy_runs = max(total_runs - (1 if long_is_run else 0), 1)
+        # Длинная пробежка — 25 % недельного километража или 1,5 ч, что
+        # меньше.
+        long_km = 0.0
+        if long_is_run:
+            long_km = min(run_km * 0.25, run_km)
+        # Лёгкий километраж — без длинной и без контрольной точки.
+        easy_km = max(run_km - long_km - data.reserved_km, 0.0)
+
+        # Пробежки с отрезками делятся на две группы: более короткие и
+        # более длинные. В более коротких — 8 отрезков, в более длинных —
+        # 6 («в более длинной тренировке 6, в более короткие 8»).
+        # Порядок по неделе: первая половина несущих отрезки пробежек —
+        # короткие, вторая — длинные.
+        stride_slots = _spread(stride_runs, easy_runs)
+        ofp_slots = _spread(ofp_runs, easy_runs)
+        ordered_stride = sorted(stride_slots)
+        half = len(ordered_stride) // 2
+        short_strides = set(ordered_stride[:half])
+
+        # Объём отрезков — часть недельного километража: каждый отрезок
+        # это 100 м работы плюс 100 м отдыха бегом.
+        stride_km = 0.0
+        reps_by_index: dict[int, int] = {}
+        if shape.has_strides(program_week) and stride_runs > 0:
+            for index in ordered_stride:
+                reps = (shape.stride_reps_max if index in short_strides
+                        else shape.stride_reps_min)
+                reps_by_index[index] = reps
+                stride_km += reps * (shape.stride_distance_m
+                                     + shape.stride_recovery_m) / 1000.0
+
+        # База для лёгких пробежек — без отрезков: иначе недельный
+        # объём выходит за потолок формы («55-57, но не больше»).
+        base_easy_km = max(easy_km - stride_km, 0.0)
+        # Две длины: короткие пробежки короче, длинные — длиннее.
+        weights = [1.0] * easy_runs
+        for index in ordered_stride:
+            weights[index] = 0.9 if index in short_strides else 1.1
+        total_weight = sum(weights) or 1.0
+        parts = [base_easy_km * weight / total_weight for weight in weights]
+
+        sessions: list[_PlannedSession] = []
+
+        for index, km in enumerate(parts):
+            with_strides = index in stride_slots
+            with_ofp = index in ofp_slots
+            steps = self._easy_run_steps(
+                km, pace_by_zone, shape,
+                with_strides=with_strides,
+                with_ofp=with_ofp,
+                program_week=program_week,
+                stride_reps=reps_by_index.get(index, 0),
+            )
+            if not steps:
+                continue
+            minutes = int(round(sum(step.duration_min for step in steps)))
+            sessions.append(_PlannedSession(
+                target=WeeklyTarget(
+                    sport=Sport.RUN,
+                    duration_min=minutes,
+                    focus="Лёгкий бег" + (" + отрезки" if with_strides else ""),
+                    kind="easy",
+                ),
+                steps=steps,
+            ))
+
+        if long_is_run:
+            long_steps = self._easy_run_steps(
+                long_km, pace_by_zone, shape,
+                with_strides=False, with_ofp=False,
+                program_week=program_week,
+            )
+            long_minutes = int(round(sum(step.duration_min for step in long_steps)))
+            sessions.append(_PlannedSession(
+                target=WeeklyTarget(
+                    sport=Sport.RUN,
+                    duration_min=long_minutes,
+                    focus="Длинный бег",
+                    kind="long",
+                ),
+                steps=long_steps,
+            ))
+        return sessions
+
+    def _shape_long_min(self, data: WeekPlanInput,
+                        shape: PhaseShape) -> int:
+        """Длинный бег — 25 % недельного километража или 1,5 ч, что меньше."""
+        run_km = shape.clamp_km(data.run_km)
+        return int(min(run_km * 0.25, LONG_MAX_MIN))
+
+    def _easy_run_steps(
+        self,
+        km: float,
+        pace_by_zone: dict[str, float],
+        shape: PhaseShape,
+        with_strides: bool,
+        with_ofp: bool,
+        program_week: int,
+        stride_reps: int = 0,
+    ) -> list[Step]:
+        """Шаги пробежки: лёгкий бег + отрезки + ОФП в конце."""
+        steps: list[Step] = []
+        if km > 0:
+            easy_pace = pace_by_zone.get(ZONE_EASY)
+            if easy_pace:
+                # Километраж — в километрах, темп — в секундах на км.
+                minutes = km * easy_pace / 60.0
+                steps.append(Step(
+                    id="run-easy",
+                    role=StepRole.WORK,
+                    sport=Sport.RUN,
+                    target_type=TargetType.DISTANCE,
+                    target_value=round(km * 1000.0, 1),
+                    focus=FocusType.HR,
+                    focus_value={
+                        "zone": athlete_zone_for(ZONE_EASY, self._athlete) or "Z2",
+                        "pace_min_per_km": format_pace(easy_pace),
+                    },
+                    duration_min=round(minutes, 2),
+                ))
+        if with_strides and shape.has_strides(program_week) and stride_reps > 0:
+            stride_steps = build_stride_steps(
+                shape, pace_by_zone, self._athlete, stride_reps)
+            for step in stride_steps:
+                steps.append(step)
+        if with_ofp and shape.ofp_minutes > 0:
+            for step in build_ofp_steps(shape.ofp_minutes, self._athlete):
+                steps.append(step)
+        return steps
+
     # ---------------------------------------------------------- внутреннее
 
     def _pick_slot(
@@ -447,33 +760,188 @@ class WeekPlanner:
         slots: list[Slot],
         request: Request,
         taken: list[Assignment],
-    ) -> Slot | None:
-        """Подобрать слот: помещается по времени, нет конфликта, доступно оборудование.
+    ) -> tuple[Slot | None, str | None]:
+        """Подобрать слот и время начала.
+
+        Помещается по времени, нет конфликта, доступно оборудование.
 
         Из подходящих берётся **самый тесный** — тот, в котором тренировка
         оставляет меньше всего запаса. Первое попавшееся окно отдавало
         широкое окно короткой тренировке, и длинный бег уходил в висяк,
         хотя для него было другое окно: тренировка в 30 минут занимает
         окно в 30 минут, а не в 90.
+
+        Окно может вместить **две тренировки**: «7 дней в неделю
+        Л-темп» плюс вел и плавание — это девять тренировок на семь дней
+        и восемь окон. Вторую тренировку окна ставим сразу после первой:
+        время начала считается от занятого, а не от начала окна.
         """
-        used = {a.slot_id for a in taken}
+        used_by_slot: dict[str, int] = {}
+        for assignment in taken:
+            used_by_slot[assignment.slot_id] = (
+                used_by_slot.get(assignment.slot_id, 0)
+                + int(assignment.duration_min)
+            )
+
         best: Slot | None = None
+        best_free = 0
         for slot in slots:
-            if slot.id in used:
-                continue
-            if slot.capacity_min < request.duration_min:
+            free = slot.capacity_min - used_by_slot.get(slot.id, 0)
+            if free < request.duration_min:
                 continue
             if request.sport in slot.forbidden_sports:
                 continue
             needed = set(request.equipment_required)
             if needed and not needed.issubset(set(slot.equipment_ids)):
                 continue
-            if best is None or slot.capacity_min < best.capacity_min:
+            if best is None or free < best_free:
                 best = slot
-        return best
+                best_free = free
+        if best is None:
+            return None, None
+        start = shift_time(best.start, used_by_slot.get(best.id, 0))
+        return best, start
+
+    def _place_tight(
+        self,
+        sessions: list[_PlannedSession],
+        slots: list[Slot],
+    ) -> dict[int, tuple[Slot, str]]:
+        """Разместить тренировки в самое тесное подходящее окно.
+
+        Тренировка в 30 минут занимает окно в 30 минут, а не в 90: иначе
+        длинная тренировка уходит в висяк, хотя для неё есть другое
+        окно. Каждое окно занимает одна тренировка.
+        """
+        used: set[str] = set()
+        placed: dict[int, tuple[Slot, str]] = {}
+
+        for index, session in enumerate(sessions):
+            target = session.target
+            best: Slot | None = None
+            for slot in slots:
+                if slot.id in used:
+                    continue
+                if slot.capacity_min < target.duration_min:
+                    continue
+                if target.sport in slot.forbidden_sports:
+                    continue
+                needed = set(target.equipment_required)
+                if needed and not needed.issubset(set(slot.equipment_ids)):
+                    continue
+                if best is None or slot.capacity_min < best.capacity_min:
+                    best = slot
+            if best is None:
+                continue
+            used.add(best.id)
+            placed[index] = (best, best.start)
+        return placed
+
+    def _place_sessions(
+        self,
+        sessions: list[_PlannedSession],
+        slots: list[Slot],
+        start_day: int = 0,
+        reserved_slots: tuple[str, ...] = (),
+    ) -> dict[int, tuple[Slot, str]]:
+        """Разместить тренировки по окнам.
+
+        Пробежки — **по кругу дней недели**, начиная с первого дня
+        недели: правило Дэниэлса требует «7 дней в неделю Л-темп», то
+        есть пробежка в каждый день. Из семи дней недели в среде есть
+        восемь окон плюс вел и плавание, поэтому одно окно вмещает две
+        тренировки (утром пробежка, вечером вел), а вторую ставим сразу
+        после первой.
+
+        Остальные виды спорта — после пробежек, в самое вместительное
+        из оставшихся окон: их объём известен точно, а бег забирает
+        остаток.
+        """
+        used_by_slot: dict[str, int] = {}
+        placed: dict[int, tuple[Slot, str]] = {}
+
+        def occupy(slot: Slot, minutes: int) -> None:
+            used_by_slot[slot.id] = used_by_slot.get(slot.id, 0) + minutes
+
+        def fits(slot: Slot, sport: Sport, minutes: int,
+                 equipment: tuple[str, ...]) -> bool:
+            free = slot.capacity_min - used_by_slot.get(slot.id, 0)
+            if free < minutes:
+                return False
+            if sport in slot.forbidden_sports:
+                return False
+            needed = set(equipment)
+            return not needed or needed.issubset(set(slot.equipment_ids))
+
+        runs = [index for index, session in enumerate(sessions)
+                if session.target.sport is Sport.RUN]
+        others = [index for index, session in enumerate(sessions)
+                  if session.target.sport is not Sport.RUN]
+
+        # Пробежки: от длинной к короткой, по кругу дней.
+        # Слоты нумеруют дни как 0 — воскресенье, а `date.weekday()`
+        # считает 0 — понедельник. Переводим в нумерацию слотов.
+        start_slot_day = (start_day + 1) % 7
+        day_order = [(start_slot_day + offset) % 7 for offset in range(7)]
+        cursor = 0
+        for index in sorted(
+            runs,
+            key=lambda i: (-sessions[i].target.duration_min, i),
+        ):
+            target = sessions[index].target
+            chosen: Slot | None = None
+            chosen_day = -1
+            for offset in range(len(day_order)):
+                position = (cursor + offset) % len(day_order)
+                day = day_order[position]
+                candidates = [
+                    slot for slot in slots
+                    if slot.day == day
+                    and slot.id not in reserved_slots
+                    and fits(slot, target.sport, target.duration_min,
+                             target.equipment_required)
+                ]
+                if not candidates:
+                    continue
+                chosen = max(candidates, key=lambda s: s.capacity_min)
+                chosen_day = position
+                break
+            if chosen is None or chosen_day < 0:
+                continue
+            occupy(chosen, target.duration_min)
+            placed[index] = (
+                chosen,
+                shift_time(chosen.start,
+                            used_by_slot[chosen.id] - target.duration_min),
+            )
+            cursor = (chosen_day + 1) % len(day_order)
+
+        # Остальные виды спорта — в самое вместительное из оставшихся.
+        for index in sorted(
+            others,
+            key=lambda i: (-sessions[i].target.duration_min, i),
+        ):
+            target = sessions[index].target
+            candidates = [
+                slot for slot in slots
+                if slot.id not in reserved_slots
+                and fits(slot, target.sport, target.duration_min,
+                         target.equipment_required)
+            ]
+            if not candidates:
+                continue
+            chosen = max(candidates, key=lambda s: s.capacity_min)
+            occupy(chosen, target.duration_min)
+            placed[index] = (
+                chosen,
+                shift_time(chosen.start,
+                            used_by_slot[chosen.id] - target.duration_min),
+            )
+        return placed
 
     def _build_workout(self, request: Request, session: _PlannedSession,
-                       slot: Slot | None) -> Workout:
+                       slot: Slot | None,
+                       start: str | None = None) -> Workout:
         """Тренировка из запроса: шаги по рецепту методики.
 
         Время — из слота: клиент показывает время тренировки, а без
@@ -487,7 +955,7 @@ class WeekPlanner:
             sport=request.sport,
             kind=request.kind,
             focus=request.focus,
-            time=slot.start if slot else None,
+            time=start or (slot.start if slot else None),
             steps=steps,
             duration_min=sum(s.duration_min for s in steps),
             rationale=f"{target.kind} · {target.focus}" if target.focus else target.kind,
@@ -500,6 +968,10 @@ class WeekPlanner:
         прогрессии темпа. Остальное — лёгкий бег: один шаг в лёгкой зоне.
         """
         pace_by_zone = self._paces.pace_by_zone(self._athlete.vdot)
+
+        # Готовые шаги — из формы фазы: пробежка с отрезками и ОФП.
+        if session.steps:
+            return session.steps
 
         if session.recipe is not None:
             return self._recipe_steps(session.recipe, pace_by_zone)
@@ -541,10 +1013,19 @@ class WeekPlanner:
         Число сессий — по фактическим тренировкам, а не по числу целей:
         одна цель может дать несколько тренировок (качество, длинный,
         лёгкий остаток), а висяки — ноль.
+
+        Километраж — **по собранным шагам**, а не из макро: форма фазы
+        задаёт свой недельный объём («55-57 км»), и макро-план с ним
+        разойдётся. Клиент показывает то, что в неделе.
         """
         minutes = float(sum(w.duration_min for w in week.workouts))
         sessions = float(len(week.workouts))
-        distance_m = float(week.load_target.get("distance_m", 0.0))
+        distance_m = sum(
+            float(step.target_value)
+            for workout in week.workouts
+            for step in workout.steps
+            if step.target_type == TargetType.DISTANCE
+        )
         return {
             "hours": minutes / 60.0,
             "minutes": minutes,
