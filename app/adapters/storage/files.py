@@ -653,6 +653,39 @@ def _detail_from_dict(data: dict[str, Any]) -> WorkoutDetail:
     )
 
 
+def _slot_to_dict(slot: Slot) -> dict[str, Any]:
+    """Окно — в JSON.
+
+    `forbidden_sports` — множество, а JSON его не умеет. Поэтому виды
+    спорта пишем списком строк, а при чтении собираем обратно.
+    """
+    data = asdict(slot)
+    data["forbidden_sports"] = sorted(s.value for s in slot.forbidden_sports)
+    data["equipment_ids"] = list(slot.equipment_ids)
+    return data
+
+
+def _slot_from_dict(data: dict[str, Any]) -> Slot:
+    """Окно — из JSON: множество запретов собираем обратно."""
+    raw_forbidden = data.get("forbidden_sports") or ()
+    forbidden = frozenset(
+        Sport(item) if not isinstance(item, Sport) else item
+        for item in raw_forbidden
+    )
+    return Slot(
+        id=data["id"],
+        day=int(data["day"]),
+        start=data["start"],
+        end=data["end"],
+        capacity_min=int(data["capacity_min"]),
+        equipment_ids=tuple(data.get("equipment_ids") or ()),
+        max_intensity=data.get("max_intensity"),
+        forbidden_sports=forbidden,
+        note=data.get("note"),
+        priority_hint=data.get("priority_hint"),
+    )
+
+
 def _season_to_dict(season: Season) -> dict[str, Any]:
     return {
         "id": season.id,
@@ -660,7 +693,7 @@ def _season_to_dict(season: Season) -> dict[str, Any]:
         "horizon_end": season.horizon_end.isoformat(),
         "season_week_count": season.season_week_count,
         "version": season.version,
-        "slots": [asdict(s) for s in season.slots],
+        "slots": [_slot_to_dict(s) for s in season.slots],
         "equipment": [asdict(e) for e in season.equipment],
         "plan_models": season.plan_models,
         "load_model_id": season.load_model_id,
@@ -675,7 +708,7 @@ def _season_from_dict(data: dict[str, Any]) -> Season:
         horizon_end=date.fromisoformat(data["horizon_end"]),
         season_week_count=int(data.get("season_week_count", 0)),
         version=int(data.get("version", 0)),
-        slots=[Slot(**s) for s in data.get("slots", [])],
+        slots=[_slot_from_dict(s) for s in data.get("slots", [])],
         equipment=[Equipment(**e) for e in data.get("equipment", [])],
         plan_models=data.get("plan_models", []),
         load_model_id=data.get("load_model_id"),

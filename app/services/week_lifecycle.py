@@ -13,6 +13,7 @@ from datetime import date
 from app.domain.derivations import is_today
 from app.domain.entities import (
     ActualSession,
+    Assignment,
     Command,
     InvariantViolationError,
     Week,
@@ -185,6 +186,95 @@ def close_week_is_forbidden_after_close(week: Week) -> None:
     """I23/I24: закрытая неделя не меняется; закрытие — только по команде."""
     if week.status is WeekStatus.CLOSED:
         raise TransitionError("неделя уже закрыта")
+
+
+def place_unplaced(week: Week, request_id: str, slot_id: str,
+                   start: str | None = None,
+                   day: int | None = None) -> Week:
+    """Привязать висяка к окну — вручную, без проверок.
+
+    Расписание мягкое: висяк — это тренировка, которой не нашлось окна,
+    и решение о её времени принимает пользователь, а не планировщик.
+    Поэтому здесь **нет** валидаций: ни «окно ли свободно», ни «влезает
+    ли тренировка по длительности», ни «тот ли это вид спорта».
+
+    Почему так: авто-привязка работает плохо, и любая проверка здесь —
+    это ещё один способ сказать пользователю «нельзя». Если он привязал
+    тренировку к окну, значит, он так решил.
+
+    Что делаем:
+      - запрос уходит из `unplaced` в `assignments` — он размещён;
+      - его тренировка получает день и время этого окна.
+    """
+    request = next((r for r in week.unplaced if r.id == request_id), None)
+    if request is None:
+        raise TransitionError(
+            f"в неделе {week.id} нет висяка {request_id}"
+        )
+    if not slot_id:
+        raise TransitionError("нужно указать окно для привязки")
+
+    updated = week.copy_with(
+        unplaced=[r for r in week.unplaced if r.id != request_id],
+        assignments=list(week.assignments) + [
+            Assignment(
+                request_id=request.id,
+                slot_id=slot_id,
+                start=start or "",
+                duration_min=request.duration_min,
+            )
+        ],
+    )
+
+    # Тренировка запроса получает день и время окна: карточка должна
+    # показать, в какой день тренировка теперь стоит. День — из нового
+    # окна: перенос в другой день обязан менять и день в карточке,
+    # иначе тренировка стоит в понедельнике, а подписана средой.
+    for workout in updated.workouts:
+        if workout.request_id != request_id:
+            continue
+        objective = dict(workout.objective or {})
+        objective["slot_id"] = slot_id
+        if day is not None:
+            objective["day"] = day
+        workout.objective = objective
+        if start:
+            workout.time = start
+
+    updated.validate()
+    return updated
+
+
+def unplace_request(week: Week, request_id: str) -> Week:
+    """Отвязать размещённый запрос: он снова становится висяком.
+
+    Обратная операция к `place_unplaced`: пользователь передумал и
+    вернул тренировку в список непривязанных.
+    """
+    assignment = next((a for a in week.assignments
+                       if a.request_id == request_id), None)
+    if assignment is None:
+        raise TransitionError(
+            f"в неделе {week.id} нет размещения для запроса {request_id}"
+        )
+    request = next((r for r in week.requests if r.id == request_id), None)
+    if request is None:
+        raise TransitionError(f"в неделе {week.id} нет запроса {request_id}")
+
+    updated = week.copy_with(
+        assignments=[a for a in week.assignments
+                     if a.request_id != request_id],
+        unplaced=list(week.unplaced) + [request],
+    )
+    for workout in updated.workouts:
+        if workout.request_id != request_id:
+            continue
+        objective = dict(workout.objective or {})
+        objective.pop("slot_id", None)
+        workout.objective = objective
+
+    updated.validate()
+    return updated
 
 
 def check_status_changed_by_command(week: Week, command: Command) -> None:

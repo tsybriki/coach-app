@@ -268,12 +268,20 @@ def test_weekly_km_within_shape(season, planner):
     assert 55.0 <= km <= 57.0, f"недельный километраж {km:.1f}, а нужно 55-57"
 
 
-def test_no_unplaced_in_phase_one(season, planner):
-    """Висяков нет: семь пробежек плюс вел и плавание влезают в неделю."""
+def test_every_session_is_unplaced(season, planner):
+    """Висят все: время тренировки выбирает пользователь.
+
+    Планировщик больше не раскладывает неделю по окнам — автоматическая
+    привязка работала плохо (вел вставал во вторник, где велосипеда нет).
+    """
     week = _week(season, planner, 4)
-    assert not week.unplaced, (
-        f"висяки: {[(u.kind, u.duration_min) for u in week.unplaced]}"
+    assert week.assignments == [], "планировщик не должен размещать ничего"
+    assert len(week.unplaced) == len(week.requests), (
+        "каждая тренировка недели — висяк: "
+        f"{len(week.unplaced)} висяков на {len(week.requests)} тренировок"
     )
+    for workout in week.workouts:
+        assert workout.time is None, "у висяка не должно быть времени"
 
 
 def test_stride_steps_are_in_workout_structure(season, planner):
@@ -304,7 +312,9 @@ def test_control_point_takes_one_of_seven_runs(season, planner):
     assert len(_runs(week)) == 7, (
         f"с контрольной точкой пробежек {len(_runs(week))}, а должно быть семь"
     )
-    assert len(week.unplaced) == 0
+    assert len(week.unplaced) == len(week.requests), (
+        "контрольная точка — тоже висяк: время теста выбирает пользователь"
+    )
 
 
 def test_phase_one_km_clamps_macro_volume(season, planner):

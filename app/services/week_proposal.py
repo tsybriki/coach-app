@@ -32,7 +32,6 @@ from app.services.week_planner import (
     WeeklyTarget,
     WeekPlanInput,
     WeekPlanner,
-    shift_time,
 )
 
 # Длинный бег: 25 % недельного километража или 1,5 часа, что меньше.
@@ -118,6 +117,13 @@ def build_targets(macro: MacroVolume, week: Week) -> list[WeeklyTarget]:
     Не беговые виды спорта (велосипед, плавание, ОФП) сюда не входят: их
     структуру задаёт не Дэниэлс, а макро и среда, поэтому они переносятся
     из текущей недели как есть — иначе они попали бы в план дважды.
+
+    Фокус цели недели (`week.focus`) сюда **не** копируется: это цель
+    недели, а не описание каждой тренировки. Иначе все пробежки недели
+    подписаны одной и той же строкой — «Проверяем форму на контрольной
+    точке» на лёгкой и на длинной, — и карточка тренировки врёт о том,
+    чем эта тренировка является. Описание тренировки задаёт планировщик
+    по её виду: «Лёгкий бег», «Длинный бег», «8К long tempo».
     """
     targets: list[WeeklyTarget] = []
 
@@ -134,7 +140,7 @@ def build_targets(macro: MacroVolume, week: Week) -> list[WeeklyTarget]:
         targets.append(WeeklyTarget(
             sport=Sport.RUN,
             duration_min=run_minutes,
-            focus=week.focus or "",
+            focus="",
             kind="easy",
             long_min=long_min or None,
         ))
@@ -288,6 +294,9 @@ def plan_from_macro(season: Season,
     if cp_workout is not None:
         planned = _merge_control_point(planned, cp_workout)
 
+    # Цель недели — из макро: она принадлежит неделе, а не тренировкам.
+    planned.focus = macro_week.goal_text or macro_week.focus
+
     planned.load_target = planner.load_target_for_week(planned)
     planned.validate()
     return planned
@@ -393,24 +402,59 @@ def _plan_control_point(macro: MacroWeek,
     ]
     total = warmup + work_min + cooldown
 
-    slot = _slot_for_sport(season, Sport.RUN, int(round(total)),
-                            set())
+    # Окно не выбираем: время тренировки назначает пользователь.
+    # Контрольная точка — тоже висяк, как и остальные тренировки недели.
+    objective: dict[str, Any] = {
+        "name": _cp_title(cp),
+        "session": cp,
+    }
     workout = Workout(
         id="w-control-point",
         request_id="r-control-point",
         sport=Sport.RUN,
         kind="quality",
-        focus=cp.get("session_goal") or cp.get("title") or "Контрольная точка",
-        objective={
-            "name": cp.get("title") or "Контрольная точка",
-            "session": cp,
-            "slot_id": slot.id if slot else "",
-        },
-        time=slot.start if slot else None,
+        focus=cp.get("session_goal") or _cp_title(cp),
+        objective=objective,
         steps=steps,
         duration_min=total,
     )
-    return workout, slot
+    return workout, None
+
+
+def _cp_title(cp: dict[str, Any]) -> str:
+    """Название контрольной точки — по-русски.
+
+    `title` из плана — внутренний код («3K time trial»), и в карточке он
+    читается как чужеродная метка. Читателю нужны характер теста и
+    дистанция: «Темповый тест 3К», «Тест на максимум 5К».
+    """
+    label = {
+        "pace": "Темповый тест",
+        "max": "Тест на максимум",
+        "sim": "Симуляция",
+        "metric": "Замер",
+    }.get(str(cp.get("test_type") or ""), "")
+
+    # Дистанция — в метрах: 3000 → «3К».
+    distance = cp.get("distance_m")
+    km = ""
+    try:
+        meters = float(distance or 0)
+    except (TypeError, ValueError):
+        meters = 0.0
+    if meters >= 1000:
+        value = meters / 1000.0
+        km = f"{value:.0f}К" if value == int(value) else f"{value:.1f}К"
+
+    if label and km:
+        return f"{label} {km}"
+    if label:
+        return label
+    # Запасной путь: название из цели сессии — оно уже по-русски.
+    session_goal = str(cp.get("session_goal") or "")
+    if session_goal:
+        return session_goal.split(":")[0].strip()
+    return str(cp.get("title") or "Контрольная точка")
 
 
 def _cp_variant(templates: dict[str, Any], variant_id: str | None) -> dict[str, Any] | None:
@@ -520,29 +564,25 @@ def _plan_other_sports(volume: MacroVolume, season: Season,
             Sport.SWIM: "Пул",
             Sport.OFP: "ОФП",
         }[sport]
+        # Описание тренировки — по-русски. Ключ вида спорта (`bike`,
+        # `swim`) в карточке ничего не значит.
+        focus_text = {
+            Sport.BIKE: "Велосипед",
+            Sport.SWIM: "Плавание",
+            Sport.OFP: "Общая физическая подготовка",
+        }[sport]
         for index, part in enumerate(parts):
             part_minutes = int(part)
             if part_minutes <= 0:
                 continue
-            slot = _slot_for_sport(
-                season, sport, part_minutes, used,
-                reserved=reserved or set(),
-                occupied=occupied,
-            )
-            if slot is None:
-                continue
-            used.add(slot.id)
-            occupied[slot.id] = occupied.get(slot.id, 0) + part_minutes
+            # Окно не выбираем: время тренировки назначает пользователь.
             workouts.append(Workout(
                 id=f"w-{sport.value}-{index + 1}",
                 request_id=f"r-{sport.value}-{index + 1}",
                 sport=sport,
                 kind=sport.value,
-                focus=sport.value,
-                objective={"name": f"{name} {part_minutes}мин",
-                           "day": slot.day,
-                           "slot_id": slot.id},
-                time=shift_time(slot.start, occupied[slot.id] - part_minutes),
+                focus=focus_text,
+                objective={"name": f"{name} {part_minutes}мин"},
                 steps=[_plain_step(sport, part_minutes)],
                 duration_min=float(part_minutes),
             ))
@@ -551,7 +591,7 @@ def _plan_other_sports(volume: MacroVolume, season: Season,
 
 def _merge_control_point(week: Week, workout: Workout) -> Week:
     """Добавить тестовую сессию контрольной точки к собранной неделе."""
-    from app.domain.entities import Assignment, Request
+    from app.domain.entities import Request
 
     request_id = f"r{week.season_week}-cp"
     requests = list(week.requests)
@@ -562,18 +602,12 @@ def _merge_control_point(week: Week, workout: Workout) -> Week:
         focus=workout.focus,
         duration_min=int(workout.duration_min),
     ))
-    assignments = list(week.assignments)
-    slot_id = str((workout.objective or {}).get("slot_id") or "")
-    if slot_id:
-        assignments.append(Assignment(
-            request_id=request_id,
-            slot_id=slot_id,
-            start=workout.time or "",
-            duration_min=int(workout.duration_min),
-        ))
+    # Контрольная точка — висяк: время теста выбирает пользователь.
+    unplaced = list(week.unplaced)
+    unplaced.append(requests[-1])
     workouts = list(week.workouts)
     workouts.append(_rebind(workout, request_id))
-    return week.copy_with(requests=requests, assignments=assignments,
+    return week.copy_with(requests=requests, unplaced=unplaced,
                            workouts=workouts)
 
 
@@ -581,16 +615,16 @@ def _merge_others(week: Week, others: list[Workout],
                    season: Season) -> Week:
     """Добавить не беговые тренировки к собранной неделе.
 
-    Запросы и размещения создаются под них, чтобы инвариант «каждый
-    Workout вырос из Request» не нарушился.
+    Запросы создаются под них, чтобы инвариант «каждый Workout вырос из
+    Request» не нарушился. Все они — висяки: время выбирает пользователь.
     """
-    from app.domain.entities import Assignment, Request
+    from app.domain.entities import Request
 
     if not others:
         return week
 
     requests = list(week.requests)
-    assignments = list(week.assignments)
+    unplaced = list(week.unplaced)
     workouts = list(week.workouts)
 
     for index, workout in enumerate(others):
@@ -602,23 +636,11 @@ def _merge_others(week: Week, others: list[Workout],
             focus=workout.focus,
             duration_min=int(workout.duration_min),
         ))
-        slot_id = str((workout.objective or {}).get("slot_id") or "")
-        slot = _slot_by_id(season, slot_id)
-        if slot is None:
-            # Без окна тренировка — висяк: решение пользователя.
-            unplaced = list(week.unplaced)
-            unplaced.append(requests[-1])
-            week = week.copy_with(unplaced=unplaced)
-        else:
-            assignments.append(Assignment(
-                request_id=request_id,
-                slot_id=slot.id,
-                start=workout.time or slot.start,
-                duration_min=int(workout.duration_min),
-            ))
+        # Висяк: решение пользователя.
+        unplaced.append(requests[-1])
         workouts.append(_rebind(workout, request_id))
 
-    return week.copy_with(requests=requests, assignments=assignments,
+    return week.copy_with(requests=requests, unplaced=unplaced,
                            workouts=workouts)
 
 
@@ -760,6 +782,10 @@ def propose_week(season: Season,
     planned = _merge_others(planned, others, season)
     if cp_workout is not None:
         planned = _merge_control_point(planned, cp_workout)
+
+    # Цель недели — из макро: она принадлежит неделе, а не тренировкам.
+    # Без неё экран недели не показывает, что неделя вообще про что.
+    planned.focus = macro_week.goal_text or macro_week.focus or current.focus
 
     # Недельная цель пересчитывается по итоговой неделе: перенесённые
     # тренировки тоже тренировки, а число сессий показывается клиенту.

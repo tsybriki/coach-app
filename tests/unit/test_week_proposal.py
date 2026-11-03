@@ -322,6 +322,62 @@ def test_propose_keeps_total_run_volume(season, current_week, planner):
 # ------------------------------------------------- планирование из макро
 
 
+def test_week_keeps_its_goal(season, planner):
+    """У недели есть своя цель — из макро.
+
+    Цель недели и описание тренировки — разные вещи: неделя говорит
+    «Проверяем форму на контрольной точке», а лёгкая пробежка — «Лёгкий
+    бег». Без недельной цели экран не показывает, что неделя про что.
+    """
+    week = plan_from_macro(season, 7, planner)
+
+    assert week.focus, "у недели нет цели"
+
+
+def test_no_workout_has_day_before_user_places_it(season, planner):
+    """До ручной привязки у тренировок нет дня.
+
+    День появляется, когда пользователь кладёт тренировку в окно.
+    Пока она висяк — она ни в какой день не стоит, и карточка не должна
+    показывать чужой день.
+    """
+    week = plan_from_macro(season, 7, planner)
+
+    for workout in week.workouts:
+        assert "day" not in (workout.objective or {}), \
+            f"у непривязанной тренировки {workout.id} не должно быть дня"
+        assert workout.time is None, \
+            f"у непривязанной тренировки {workout.id} не должно быть времени"
+
+
+def test_workout_focus_is_not_week_goal(season, planner):
+    """Фокус тренировки — не цель недели.
+
+    Цель недели («Проверяем форму на контрольной точке») на всех
+    пробежках недели — враньё: карточка лёгкой пробежки говорит, что
+    она проверяет форму на контрольной точке. Описание тренировки
+    задаёт планировщик по её виду.
+    """
+    week = plan_from_macro(season, 7, planner)
+
+    week_goal = week.focus or ""
+    for workout in week.workouts:
+        if workout.kind == "quality":
+            continue
+        assert workout.focus != week_goal, \
+            f"фокус тренировки {workout.id} повторяет цель недели: {week_goal!r}"
+
+
+def test_easy_run_has_own_focus(season, planner):
+    """Лёгкая пробежка называет себя пробежкой, а не целью недели."""
+    week = plan_from_macro(season, 7, planner)
+
+    easy = [w for w in week.workouts if w.kind == "easy"]
+    assert easy, "в неделе нет лёгких пробежек"
+    for workout in easy:
+        assert workout.focus, "у лёгкой пробежки нет описания"
+
+
 def test_plan_from_macro_creates_week(season, planner):
     """Неделя, которой нет в хранилище, собирается из макро-плана.
 
@@ -405,20 +461,92 @@ def test_placed_workout_has_a_time(season, planner):
         assert workout.time, f"у тренировки {workout.id} нет времени"
 
 
-def test_other_sports_take_slots_before_run(season, planner):
-    """Вел, плавание и ОФП размещаются, а не уходят висяками.
+def test_other_sports_are_planned_as_sessions(season, planner):
+    """Вел, плавание и ОФП — часть недели, и они висяки, как все.
 
-    Их объём известен точно, а бег забирает остаток — если вел и плавание
-    встанут после бега, им места не останется.
+    Их объём известен точно, и они не должны теряться: висяк — это
+    не «тренировка не поместилась», а «время выбирает пользователь».
     """
     week = plan_from_macro(season, 7, planner)
     sports = {w.sport for w in week.workouts}
     assert Sport.BIKE in sports
     assert Sport.SWIM in sports
-    # Висящими могут остаться только беговые тренировки: несколько
-    # тренировок в одном окне допустимы (утром пробежка, вечером вел).
+    # Висят все: размещений нет.
+    assert week.assignments == [], "планировщик не должен размещать ничего"
     hanging = {r.sport for r in week.unplaced}
-    assert hanging <= {Sport.RUN}, f"висяки не-беговые: {hanging}"
+    assert hanging == sports, "висят все тренировки недели"
+
+
+def test_control_point_title_is_russian(season, planner, templates):
+    """Название контрольной точки — по-русски.
+
+    Дефект: в карточке стояло «3K time trial» — внутренний код плана.
+    Читателю нужны характер теста и дистанция: «Темповый тест 3К».
+    """
+    plan = season.plans[0]
+    macro = plan.macro_week(4)
+    assert macro is not None
+    macro.control_point = {
+        "id": "cp_test",
+        "kind": "quality",
+        "title": "3K time trial",
+        "session_goal": "Темповый тест 3К",
+        "test_type": "pace",
+        "distance_m": 3000,
+        "pace_min_per_km": "4:40",
+        "variant_id": "tt_pace",
+    }
+    week = plan_from_macro(season, 4, planner, templates)
+    quality = [w for w in week.workouts if w.kind == "quality"]
+    assert quality, "контрольная точка не стала качественной работой"
+    name = (quality[0].objective or {}).get("name") or ""
+    assert name == "Темповый тест 3К", f"название теста: {name!r}"
+    assert "time trial" not in name.lower(), "в названии остался внутренний код"
+
+
+def test_control_point_title_for_max_test(season, planner, templates):
+    """Тест на максимум — «Тест на максимум 5К»."""
+    plan = season.plans[0]
+    macro = plan.macro_week(4)
+    assert macro is not None
+    macro.control_point = {
+        "id": "cp_test",
+        "kind": "quality",
+        "title": "5K max",
+        "session_goal": "Максимум 5К",
+        "test_type": "max",
+        "distance_m": 5000,
+        "pace_min_per_km": "4:30",
+        "variant_id": "tt_max",
+    }
+    week = plan_from_macro(season, 4, planner, templates)
+    quality = [w for w in week.workouts if w.kind == "quality"]
+    name = (quality[0].objective or {}).get("name") or ""
+    assert name == "Тест на максимум 5К", f"название теста: {name!r}"
+
+
+def test_control_point_is_unplaced(season, planner, templates):
+    """Контрольная точка — висяк: время теста выбирает пользователь."""
+    plan = season.plans[0]
+    macro = plan.macro_week(4)
+    assert macro is not None
+    macro.control_point = {
+        "id": "cp_test",
+        "kind": "quality",
+        "title": "3K time trial",
+        "session_goal": "Темповый тест 3К",
+        "test_type": "pace",
+        "distance_m": 3000,
+        "pace_min_per_km": "4:40",
+        "variant_id": "tt_pace",
+    }
+    week = plan_from_macro(season, 4, planner, templates)
+
+    assert week.assignments == [], "планировщик не должен размещать ничего"
+    quality = [w for w in week.workouts if w.kind == "quality"]
+    assert quality[0].time is None, "у непривязанного теста не должно быть времени"
+    assert "day" not in (quality[0].objective or {}), \
+        "у непривязанного теста не должно быть дня"
 
 
 def test_control_point_becomes_quality_work(season, planner, templates):

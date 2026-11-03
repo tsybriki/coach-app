@@ -359,8 +359,10 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         close_week,
         link_actual,
         link_actual_session,
+        place_unplaced,
         replan_remainder,
         unlink_actual,
+        unplace_request,
     )
     from app.services.week_proposal import (
         plan_from_macro,
@@ -452,6 +454,28 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
                                    container.methodology_repo.workout_templates())
     elif command.type is CommandType.ACTIVATE_WEEK:
         updated = activate_week(week)
+    elif command.type is CommandType.PLACE_UNPLACED:
+        # Ручная привязка висяка к окну: пользователь решил, когда эта
+        # тренировка. Валидаций нет — мягкое расписание.
+        slot_id = str(command.args.get("slot_id", ""))
+        # День берём у окна: карточка тренировки должна показать тот
+        # день, в который её положили, а не тот, на котором она была.
+        day = command.args.get("day")
+        if day is None:
+            slot = next((s for s in container.season_repo.load().slots
+                         if s.id == slot_id), None)
+            day = slot.day if slot is not None else None
+        updated = place_unplaced(
+            week,
+            str(command.args.get("request_id", "")),
+            slot_id,
+            command.args.get("start") or None,
+            day,
+        )
+    elif command.type is CommandType.UNPLACE_REQUEST:
+        # Обратное действие: вернуть размещённую тренировку в висяки.
+        updated = unplace_request(
+            week, str(command.args.get("request_id", "")))
     elif command.type is CommandType.CLOSE_WEEK:
         # Ритуал закрытия: вытянуть остаток факта → посчитать → записать.
         # Выкачка Garmin может не удаться (нет сети, нет ключа) — тогда
@@ -601,9 +625,13 @@ def _week_dict(
         ],
         "unplaced": [
             {"id": r.id, "sport": r.sport.value, "kind": r.kind,
-             "duration_min": r.duration_min}
+             "focus": r.focus, "duration_min": r.duration_min}
             for r in week.unplaced
         ],
+        # Окна недели — чтобы клиент мог предложить, куда привязать
+        # висяка: без них привязка вручную невозможно.
+        "slots": [_slot_dict(s) for s in sorted(
+            slots or [], key=lambda s: (s.day, s.start))],
         "workouts": [
             _workout_dict(w, week, slot_by_id, assignment_by_request)
             for w in week.workouts
@@ -797,7 +825,7 @@ def _form_text(form: str | None) -> str:
 
 
 def _slot_dict(slot: Any) -> dict[str, Any]:
-    """Окно тренировки — для карточки атлета."""
+    """Окно тренировки — для карточки атлета и выбора места для тренировки."""
     day = int(slot.day)
     return {
         "id": slot.id,
@@ -807,6 +835,8 @@ def _slot_dict(slot: Any) -> dict[str, Any]:
         "end": slot.end,
         "capacity_min": slot.capacity_min,
         "equipment_ids": list(slot.equipment_ids),
+        # Что в этом окне невозможно: велотренажёра на асфальте нет.
+        "forbidden_sports": sorted(s.value for s in slot.forbidden_sports),
         "note": slot.note,
     }
 

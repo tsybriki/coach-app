@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import date
+from typing import Any
 
 from app.domain.derivations import merged_slots
 from app.domain.entities import (
@@ -259,10 +260,25 @@ class WeekPlanner:
         ))
 
     def build_from(self, data: WeekPlanInput) -> Week:
-        """Собрать неделю по полному входу.
+        """
+        Собрать неделю по полному входу.
 
         Разница с `build`: известны неделя программы и срок до старта, значит
         правила методики применяются, а не только макро.
+
+        **Размещения нет.** Все тренировки недели становятся висяками, и
+        пользователь раскладывает их по дням руками.
+
+        Почему так: автоматическая привязка работает плохо — она
+        раскладывает тренировки по кругу дней, не глядя на то, что в
+        этом окне вообще можно делать. Вел вставал во вторник, где
+        велосипеда нет, а длинный бег — в среду, где по семейному
+        тайму интенсивное запрещено. Планировщик не знает о расписании
+        семьи, а пользователь знает.
+
+        Что остаётся от планировщика: **какие** тренировки нужны
+        (объём, качественная работа, длинный бег, вел, плавание) и
+        сколько они длятся. Куда они встанут — решение пользователя.
         """
         merged = merged_slots(
             data.slots,
@@ -273,28 +289,8 @@ class WeekPlanner:
         sessions = self._plan_sessions(data, merged)
 
         requests: list[Request] = []
-        assignments: list[Assignment] = []
         unplaced: list[Request] = []
         workouts: list[Workout] = []
-
-        # Размещение.
-        #
-        # Есть два правила, и они разные:
-        # - **с формой фазы** (правило Дэниэлса про семь пробежек):
-        #   пробежки — по кругу дней, по одной в день, окно вмещает две
-        #   тренировки;
-        # - **без формы**: каждая тренировка — в самое тесное подходящее
-        #   окно (тренировка в 30 минут занимает окно в 30 минут, а не в
-        #   90, иначе длинная тренировка уходит в висяк).
-        shape, _program_week = self._phase_shape(data)
-        if shape is not None and shape.runs_per_week > 0:
-            placed = self._place_sessions(
-                sessions, merged,
-                start_day=data.week_start.weekday(),
-                reserved_slots=data.reserved_slots,
-            )
-        else:
-            placed = self._place_tight(sessions, merged)
 
         for index, session in enumerate(sessions):
             target = session.target
@@ -307,25 +303,9 @@ class WeekPlanner:
                 equipment_required=target.equipment_required,
             )
             requests.append(request)
-
-            slot, start = placed.get(index, (None, None))
-            if slot is None:
-                # не разложилось — висяк, решение пользователя
-                unplaced.append(request)
-                workouts.append(self._build_workout(request, session, None))
-                continue
-
-            assignments.append(
-                Assignment(
-                    request_id=request.id,
-                    slot_id=slot.id,
-                    start=start or slot.start,
-                    duration_min=request.duration_min,
-                    equipment_ids=slot.equipment_ids,
-                )
-            )
-            workouts.append(
-                self._build_workout(request, session, slot, start or slot.start))
+            # Висяк: время выбирает пользователь.
+            unplaced.append(request)
+            workouts.append(self._build_workout(request, session, None))
 
         week = Week(
             id=f"W{data.season_week}",
@@ -337,7 +317,7 @@ class WeekPlanner:
             focus=data.targets[0].focus if data.targets else None,
             load_target=self._load_target(data.targets, data.run_km),
             requests=requests,
-            assignments=assignments,
+            assignments=[],
             unplaced=unplaced,
             workouts=workouts,
         )
@@ -474,7 +454,7 @@ class WeekPlanner:
                 target=WeeklyTarget(
                     sport=target.sport,
                     duration_min=target.long_min,
-                    focus=target.focus,
+                    focus=target.focus or "Длинный бег",
                     kind="long",
                 ),
             ))
@@ -510,7 +490,11 @@ class WeekPlanner:
             runs = data.easy_runs
             if runs <= 0:
                 runs = _easy_runs_by_slots(remaining, available, set())
+            # Описание лёгкой пробежки — её собственное («Лёгкий бег»),
+            # а не цель недели: карточка пробежки не должна говорить,
+            # что она проверяет форму на контрольной точке.
             focus = data.targets[0].focus if data.targets else ""
+            focus = focus or "Лёгкий бег"
             for minutes in _split_easy(remaining, runs):
                 sessions.append(_PlannedSession(
                     target=WeeklyTarget(
@@ -942,19 +926,29 @@ class WeekPlanner:
     def _build_workout(self, request: Request, session: _PlannedSession,
                        slot: Slot | None,
                        start: str | None = None) -> Workout:
-        """Тренировка из запроса: шаги по рецепту методики.
+        """
+        Тренировка из запроса: шаги по рецепту методики.
 
         Время — из слота: клиент показывает время тренировки, а без
         размещения его взять неоткуда.
+
+        День недели — тоже из слота. Без него карточка не знает, какой
+        это день: тренировка без дня уезжает в конец списка, и неделя
+        читается как «понедельник без названия, а потом длинный бег».
         """
         steps = self._build_steps(request, session)
         target = session.target
+        objective: dict[str, Any] = {}
+        if slot is not None:
+            objective["day"] = slot.day
+            objective["slot_id"] = slot.id
         return Workout(
             id=f"w-{request.id}",
             request_id=request.id,
             sport=request.sport,
             kind=request.kind,
             focus=request.focus,
+            objective=objective,
             time=start or (slot.start if slot else None),
             steps=steps,
             duration_min=sum(s.duration_min for s in steps),

@@ -77,7 +77,7 @@ def make_goal(race_date: date = date(2027, 4, 18), target: float = 2400.0) -> Go
 
 
 def test_planner_builds_week_from_targets():
-    """Планировщик собирает неделю: запросы → размещения → тренировки → шаги."""
+    """Планировщик собирает неделю: запросы → висяки → тренировки → шаги."""
     planner = make_planner()
     targets = [
         WeeklyTarget(sport=Sport.RUN, duration_min=60, focus="base"),
@@ -88,10 +88,32 @@ def test_planner_builds_week_from_targets():
 
     assert week.status is WeekStatus.PROPOSED
     assert len(week.requests) == 2
-    assert len(week.assignments) == 2
     assert len(week.workouts) == 2
-    assert len(week.unplaced) == 0
     assert week.validate() is None
+
+
+def test_planner_places_nothing():
+    """Планировщик не размещает ничего: время выбирает пользователь.
+
+    Автоматическая привязка работала плохо: вел вставал во вторник,
+    где велосипеда нет, а длинный бег — в среду, где по семейному
+    тайму интенсивное запрещено. Планировщик не знает о расписании
+    семьи, поэтому размещений у него быть не должно вовсе.
+    """
+    planner = make_planner()
+    targets = [
+        WeeklyTarget(sport=Sport.RUN, duration_min=60, focus="base"),
+        WeeklyTarget(sport=Sport.SWIM, duration_min=30),
+    ]
+
+    week = planner.build(1, WEEK_START, WEEK_END, targets, make_slots())
+
+    assert week.assignments == [], "планировщик не должен ничего размещать"
+    assert len(week.unplaced) == 2, "все тренировки — висяки"
+    for workout in week.workouts:
+        assert workout.time is None, "у висяка не должно быть времени"
+        assert "day" not in (workout.objective or {}), \
+            "у висяка не должно быть дня"
 
 
 def test_planner_step_durations_sum_to_workout():
@@ -107,8 +129,12 @@ def test_planner_step_durations_sum_to_workout():
     assert workout.duration_min == pytest.approx(60.0)
 
 
-def test_planner_puts_unplaced_when_no_slot_fits():
-    """Не разложилось — висяк, решение пользователя."""
+def test_planner_makes_every_session_unplaced():
+    """Даже тренировка, которой хватает окна, — висяк.
+
+    Проверка объёма и длительности — не причина размещать: размещение
+    это решение пользователя.
+    """
     planner = make_planner()
     targets = [
         WeeklyTarget(sport=Sport.RUN, duration_min=60),
@@ -118,93 +144,23 @@ def test_planner_puts_unplaced_when_no_slot_fits():
 
     week = planner.build(1, WEEK_START, WEEK_END, targets, make_slots())
 
-    assert len(week.unplaced) == 1, "третья тренировка не поместилась — висяк"
-    assert len(week.assignments) == 2
-    week.validate()
+    assert len(week.unplaced) == 3, "все тренировки — висяки"
+    assert week.assignments == []
 
 
-def test_planner_respects_slot_capacity():
-    """Слот берётся, только если хватает времени."""
-    planner = make_planner()
-    week = planner.build(
-        1, WEEK_START, WEEK_END,
-        [WeeklyTarget(sport=Sport.RUN, duration_min=45)],
-        make_slots(),
-    )
-    # первый слот 90 мин — подходит
-    assert week.assignments[0].slot_id == "sl-mon"
+def test_planner_keeps_equipment_requirement():
+    """Требование оборудования сохраняется в запросе.
 
-
-def test_planner_takes_the_tightest_fitting_slot():
-    """Из подходящих окон берётся самое тесное.
-
-    Первое попавшееся окно отдавало широкое окно короткой тренировке, и
-    длинный бег уходил в висяк, хотя для него было другое окно: тренировка
-    в 30 минут занимает окно в 30 минут, а не в 90.
+    Оно нужно для ручной привязки: пользователь видит, что тренировка
+    требует бассейна, и кладёт её туда, где бассейн есть.
     """
     planner = make_planner()
-    week = planner.build(
-        1, WEEK_START, WEEK_END,
-        [
-            WeeklyTarget(sport=Sport.SWIM, duration_min=30),
-            WeeklyTarget(sport=Sport.RUN, duration_min=60),
-        ],
-        make_slots(),
-    )
-    placed = {a.request_id: a.slot_id for a in week.assignments}
-    swim = next(r for r in week.requests if r.sport is Sport.SWIM)
-    run = next(r for r in week.requests if r.sport is Sport.RUN)
-    assert placed.get(swim.id) == "sl-tue", "плавание должно занять узкое окно"
-    assert placed.get(run.id) == "sl-mon", "бегу осталось широкое окно"
-    assert not week.unplaced
-
-
-def test_planner_leaves_wide_slot_for_long_session():
-    """Широкое окно достаётся тренировке, которая в него влезает.
-
-    Недельный объём бега делится на части — их может быть несколько,
-    и висяком остаётся та часть, для которой окна не нашлось.
-    """
-    planner = make_planner()
-    slots = [
-        Slot(id="sl-mon", day=0, start="18:45", end="20:15", capacity_min=90),
-        Slot(id="sl-tue", day=1, start="09:00", end="09:30", capacity_min=30),
-    ]
-    week = planner.build(
-        1, WEEK_START, WEEK_END,
-        [
-            WeeklyTarget(sport=Sport.SWIM, duration_min=30),
-            WeeklyTarget(sport=Sport.RUN, duration_min=120),
-        ],
-        slots,
-    )
-    swim = next(r for r in week.requests if r.sport is Sport.SWIM)
-    placed = {a.request_id: a.slot_id for a in week.assignments}
-    assert placed.get(swim.id) == "sl-tue", "плавание должно занять узкое окно"
-    # Часть бега, которая влезла в широкое окно, размещена; висяком
-    # осталась та, для которой окна не нашлось.
-    assert len(week.assignments) == 2
-    assert len(week.unplaced) == 1
-    hanging = week.unplaced[0]
-    assert hanging.sport is Sport.RUN
-
-
-def test_planner_skips_slot_with_wrong_equipment():
-    """Слот без нужного оборудования не берётся."""
-    planner = make_planner()
-    slots = [
-        Slot(id="sl-mon", day=0, start="18:45", end="20:15", capacity_min=90),
-        Slot(id="sl-pool", day=1, start="09:00", end="09:30", capacity_min=30,
-             equipment_ids=("pool",)),
-    ]
     week = planner.build(
         1, WEEK_START, WEEK_END,
         [WeeklyTarget(sport=Sport.SWIM, duration_min=30,
                       equipment_required=("pool",))],
-        slots,
+        make_slots(),
     )
-    # слот плава подходит по оборудованию
-    assert week.assignments[0].slot_id == "sl-pool"
     assert week.requests[0].equipment_required == ("pool",)
 
 

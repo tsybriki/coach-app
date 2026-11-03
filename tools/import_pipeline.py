@@ -55,6 +55,7 @@ from app.domain.enums import (  # noqa: E402
     TargetType,
     WeekStatus,
 )
+from app.domain.slot_rules import forbidden_sports_for_location  # noqa: E402
 
 PIPELINE = Path(os.path.expanduser("~/coach"))
 STATE = PIPELINE / "state"
@@ -434,8 +435,14 @@ def _pace_seconds(value: Any) -> float | None:
 def build_slots(constraints: dict[str, Any]) -> list[Slot]:
     """Дефолтные окна тренировок — из ограничений пайплайна.
 
-    Оборудование не проставляется: у окон пайплайна нет идентификаторов
-    оборудования, а подставлять свои — значит выдумать данные.
+    У каждого окна есть место (`location` в ограничениях), и место
+    определяет, что там можно делать: велотренажёра на асфальте нет.
+    Поэтому запреты видов спорта выводятся из места — иначе вел
+    вставал в окно, где велосипеда нет.
+
+    Идентификаторы оборудования не проставляются: у окон пайплайна их
+    нет, а подставлять свои — значит выдумать данные. Запреты по месту
+    — это другое: место в окне есть, и оно про то, что доступно.
     """
     slots: list[Slot] = []
     windows = constraints.get("weekly_windows") or {}
@@ -443,13 +450,15 @@ def build_slots(constraints: dict[str, Any]) -> list[Slot]:
         if day not in DAY_ORDER:
             continue
         for index, window in enumerate(entries, 1):
+            location = window.get("location")
             slots.append(Slot(
                 id=f"win-{day}-{index}",
                 day=DAY_ORDER.index(day),
                 start=window.get("start", "00:00"),
                 end=window.get("end", "23:59"),
                 capacity_min=int(window.get("duration_min", 60)),
-                note=window.get("location"),
+                forbidden_sports=forbidden_sports_for_location(location),
+                note=location,
             ))
     return slots
 

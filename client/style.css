@@ -377,6 +377,128 @@ h3 {
   margin-bottom: 14px;
 }
 
+/* ------------------------------------------------------- непривязанные тренировки */
+
+/* Висяк — тренировка без окна. Её время выбирает пользователь:
+ * тап по строке открывает список окон недели. */
+.unplaced-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.unplaced-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--panel);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.unplaced-row:active {
+  background: var(--panel2);
+}
+
+.unplaced-row .ico {
+  font-size: 15px;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.unplaced-row .body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.unplaced-row .name {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.unplaced-row .meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.unplaced-row .hint {
+  font-size: 11px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* Выбор окна для висяка — список кнопок. */
+.slot-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.slot-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.slot-choice:active {
+  transform: scale(0.985);
+}
+
+.slot-choice .day {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  width: 34px;
+  flex-shrink: 0;
+}
+
+.slot-choice .win-time {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.slot-choice .num {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Окно, в котором этому виду спорта нельзя: велотренажёра на асфальте
+ * нет. Оно остаётся доступным — решение принимает пользователь, — но
+ * помечено, чтобы выбор был осмысленным. */
+.slot-choice.slot-bad {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+.slot-choice .warn {
+  font-size: 10.5px;
+  color: var(--warn);
+  flex-shrink: 0;
+}
+
 .empty {
   color: var(--muted);
   font-style: italic;

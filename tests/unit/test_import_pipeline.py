@@ -53,6 +53,35 @@ def make_session(sid: str = "a1") -> ActualSession:
     )
 
 
+def test_import_builds_slots_with_location_rules(tmp_path: Path) -> None:
+    """Импорт окон выводит запреты из места.
+
+    Дефект, который это ловит: вел вставал во вторник, где
+    велосипеда нет. Окно хранило только строку места, и запретов из
+    неё не выводилось.
+    """
+    from import_pipeline import build_slots
+
+    constraints = {
+        "weekly_windows": {
+            "ВТ": [{"start": "09:00", "end": "09:30", "duration_min": 30,
+                    "location": "asphalt_commuter"}],
+            "ЧТ": [{"start": "10:30", "end": "11:15", "duration_min": 45,
+                    "location": "home_stationary_bike"}],
+        }
+    }
+
+    slots = build_slots(constraints)
+
+    by_id = {s.id: s for s in slots}
+    tuesday = by_id["win-ВТ-1"]
+    thursday = by_id["win-ЧТ-1"]
+    assert Sport.BIKE in tuesday.forbidden_sports, \
+        "во вторнике окно на асфальте — велосипеда там нет"
+    assert Sport.BIKE not in thursday.forbidden_sports, \
+        "в четверге домашний станок — велосипед есть"
+
+
 def test_import_preserves_existing_link(tmp_path: Path) -> None:
     """Повторный импорт не стирает привязку факта к тренировке."""
     storage = FileStorage(tmp_path / "data")

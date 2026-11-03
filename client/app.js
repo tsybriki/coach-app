@@ -41,6 +41,7 @@ const state = {
   online: navigator.onLine,
   outbox: [],
   openWorkoutId: null,
+  pickUnplaced: null,     // id висяка, для которого выбираем окно
   message: null,
   messageKind: 'info',   // 'info' — гаснет само, 'error' — ждёт действия
   messageTimer: null,
@@ -229,6 +230,28 @@ const KIND_ICON = {
   strength: '🏋️', mobility: '🧘', hiit: '⚡', brick: '🔄',
 };
 
+/* Вид тренировки — по-русски. Ключ `easy` читателю ничего не
+ * говорит: «Лёгкий бег» и «Длинный бег» говорят. */
+const WORKOUT_KIND_RU = {
+  easy: 'Лёгкий бег',
+  long: 'Длинный бег',
+  quality: 'Качественная работа',
+  key_run: 'Ключевая работа',
+  bike: 'Велосипед',
+  swim: 'Плавание',
+  ofp: 'ОФП',
+  mobility: 'Мобильность',
+  strength: 'Силовая',
+  brick: 'Брикет',
+};
+
+/* Название тренировки: своё, если есть, иначе вид по-русски. */
+function workoutTitle(workout) {
+  const objective = workout.objective || {};
+  if (objective.name) return objective.name;
+  return WORKOUT_KIND_RU[workout.kind] || workout.kind;
+}
+
 function kindTag(sport) {
   return `<span class="kind kind-${escapeHtml(sport)}">${escapeHtml(sport)}</span>`;
 }
@@ -259,10 +282,11 @@ const MONTHS_SHORT = [
  */
 function slotButton(workout, actual) {
   const objective = workout.objective || {};
-  const title = objective.name || workout.kind;
+  const title = workoutTitle(workout);
   const day = dayName(objective.day || workout.day);
   const date = objective.date || workout.date || '';
-  const focus = workout.focus && workout.focus !== 'core' ? workout.focus : '';
+  const focus = workout.focus && workout.focus !== 'core'
+    ? workout.focus : '';
   const done = actual ? ' <span class="done-mark">✓</span>' : '';
 
   const when = [
@@ -344,10 +368,6 @@ function screenWeek() {
     return slotButton(w, actual);
   }).join('');
 
-  const unplaced = (week.unplaced || []).length
-    ? `<div class="card warn"><div class="chead">Висяки: ${week.unplaced.length}</div></div>`
-    : '';
-
   return `${messageBlock()}
     ${week.focus ? `<div class="card goal"><h3>Фокус недели</h3><p class="lead">${escapeHtml(week.focus)}</p></div>` : ''}
     <div class="totals-card">
@@ -359,9 +379,89 @@ function screenWeek() {
       ${progressBlock(week.progress)}
     </div>
     ${weekActions(week)}
-    ${unplaced}
     <h2 class="slots-header">Тренировки · ${(week.workouts || []).length} шт</h2>
-    <div class="slots-list">${slots || '<p>Тренировок нет.</p>'}</div>`;
+    <div class="slots-list">${slots || '<p>Тренировок нет.</p>'}</div>
+    ${unplacedBlock(week)}`;
+}
+
+/* Непривязанные тренировки — под размещёнными.
+ *
+ * Авто-привязка работает плохо, и решение о времени тренировки
+ * принимает пользователь. Поэтому висяки показаны списком, и тап по
+ * висяку открывает список окон недели: выбрал — привязал.
+ *
+ * Проверок нет: если пользователь решил поставить тренировку в это
+ * окно — значит, она там и стоит. Даже если окно уже занято или
+ * тренировка в него не влезает: план мягкий, и «нельзя» здесь было бы
+ * ровно тем, от чего мы уходим.
+ */
+function unplacedBlock(week) {
+  const unplaced = week.unplaced || [];
+  if (!unplaced.length) return '';
+
+  const windows = state.slots || [];
+  const picked = unplaced.find((u) => u.id === state.pickUnplaced);
+  const pickedSport = picked ? picked.sport : null;
+  const rows = unplaced.map((u) => {
+    const icon = KIND_ICON[u.sport] || '🎯';
+    const label = u.focus || u.kind || 'Тренировка';
+    return `<div class="unplaced-row" data-unplaced="${escapeHtml(u.id)}">
+        <span class="ico">${icon}</span>
+        <span class="body">
+          <span class="name">${escapeHtml(label)}</span>
+          <span class="meta">${escapeHtml(formatDuration(u.duration_min))}</span>
+        </span>
+        <span class="hint">привязать</span>
+      </div>`;
+  }).join('');
+
+  const picker = state.pickUnplaced
+    ? slotPicker(state.pickUnplaced, windows, pickedSport)
+    : '';
+
+  return `<h2 class="slots-header">Не привязано · ${unplaced.length}</h2>
+    <div class="unplaced-list">${rows}</div>
+    ${picker}`;
+}
+
+/* Выбор окна для висяка.
+ *
+ * У окна есть место: в асфальтовом окне велосипеда нет, станок стоит
+ * дома. Поэтому у каждого окна показано, что в него можно положить —
+ * иначе пользователь кладёт вел туда, где его нет.
+ */
+function slotPicker(requestId, windows, sport) {
+  if (!windows.length) {
+    return '<div class="card warn"><div class="chead">Окна недели неизвестны</div></div>';
+  }
+  const rows = windows.map((slot) => {
+    const day = slot.day_name || dayName(slot.day);
+    const time = slot.start && slot.end
+      ? `${slot.start}–${slot.end}` : (slot.start || '');
+    const cap = slot.capacity_min ? `${slot.capacity_min} мин` : '';
+    const fits = slotFitsSport(slot, sport);
+    return `<button class="slot-choice${fits ? '' : ' slot-bad'}"
+        data-bind-slot="${escapeHtml(slot.id)}"
+        data-bind-request="${escapeHtml(requestId)}"
+        data-bind-start="${escapeHtml(slot.start || '')}"
+        data-bind-day="${escapeHtml(slot.day ?? '')}">
+        <span class="day">${escapeHtml(day)}</span>
+        <span class="win-time">${escapeHtml(time)}</span>
+        <span class="num">${escapeHtml(cap)}</span>
+        ${fits ? '' : '<span class="warn">не подходит</span>'}
+      </button>`;
+  }).join('');
+  return `<div class="card">
+      <div class="chead">Куда привязать</div>
+      <div class="slot-choices">${rows}</div>
+    </div>`;
+}
+
+/* Подходит ли тренировка по виду спорта в это окно. */
+function slotFitsSport(slot, sport) {
+  if (!sport) return true;
+  const forbidden = slot.forbidden_sports || [];
+  return !forbidden.includes(sport);
 }
 
 /* Недели ещё нет — её можно спланировать.
@@ -1481,6 +1581,22 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
+  // Тап по висяку — выбрать ему окно.
+  const unplaced = closest('[data-unplaced]');
+  if (unplaced) {
+    state.pickUnplaced = unplaced.dataset.unplaced;
+    render();
+    return;
+  }
+
+  // Выбор окна для висяка: привязать тренировку вручную.
+  const bind = closest('[data-bind-slot]');
+  if (bind) {
+    await placeUnplaced(bind.dataset.bindRequest, bind.dataset.bindSlot,
+                        bind.dataset.bindStart, bind.dataset.bindDay);
+    return;
+  }
+
   // Отвязать факт от тренировки
   const unlink = closest('[data-unlink]');
   if (unlink) {
@@ -1677,6 +1793,35 @@ async function unlinkActual(workoutId) {
   state.message = null;
   render();
   if (state.week && workoutId) showWorkout(workoutId);
+}
+
+/* Привязать висяка к окну — вручную.
+ *
+ * Решение о времени тренировки принимает пользователь, поэтому здесь
+ * нет проверок: окно может быть занято, тренировка может в него не
+ * влезать — это его решение, и сервер его выполнит.
+ */
+async function placeUnplaced(requestId, slotId, start, day) {
+  showMessage('Привязываю…');
+  render();
+  await queueCommand({
+    id: `place-${requestId}-${slotId}-${Date.now()}`,
+    type: 'place_unplaced',
+    args: {
+      season_week: state.seasonWeek,
+      request_id: requestId,
+      slot_id: slotId,
+      start: start || '',
+      day: day === '' || day === undefined ? null : Number(day),
+    },
+    reason: 'ручная привязка тренировки к окну',
+    expected_version: state.version,
+  });
+  await flushOutbox();
+  await load();
+  state.pickUnplaced = null;
+  state.message = null;
+  render();
 }
 
 async function queueCommand(command) {
