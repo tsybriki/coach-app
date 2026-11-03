@@ -808,6 +808,9 @@ def main() -> int:
                         help="корень данных приложения")
     parser.add_argument("--today", default=None,
                         help="дата «сегодня» (для тестов)")
+    parser.add_argument("--season-only", action="store_true",
+                        help="обновить только сезон (макро-план), не трогая "
+                             "неделю и факт")
     args = parser.parse_args()
 
     season_plan = load_json(STATE / "season_plan.json")
@@ -816,18 +819,33 @@ def main() -> int:
     start = season_start_of(season_plan)
     today = date.fromisoformat(args.today) if args.today else date.today()
 
+    root = Path(args.root) if args.root else Path(
+        os.environ.get("COACH_APP_DATA",
+                       Path.home() / ".local" / "share" / "coach-app")
+    )
+    storage = FileStorage(root)
+
+    # Только сезон: макро-план и методология. Неделя и факт не трогаются —
+    # их содержимое живёт своей жизнью, и обновление описаний недель не
+    # обязано переписывать раскладку тренировок.
+    if args.season_only:
+        season = build_season(season_plan, constraints)
+        storage.save(season, expected_version=storage.version())
+        storage.update_athlete(build_athlete(athlete_data))
+        write_methodology(storage, season_plan, athlete_data)
+        print(f"корень данных:      {root}")
+        print(f"сезон:              {season.id} {season.horizon_start} .. "
+              f"{season.horizon_end}, {season.season_week_count} недель")
+        print(f"макро-недель:       {len(season.plans[0].macro_weeks)}")
+        print(f"версия состояния:   {storage.version()}")
+        return 0
+
     season_week = args.week or week_of_date(start, today)
     plan_path = STATE / f"plan-w{season_week}.json"
     if not plan_path.exists():
         print(f"нет плана: {plan_path}", file=sys.stderr)
         return 2
     plan = load_json(plan_path)
-
-    root = Path(args.root) if args.root else Path(
-        os.environ.get("COACH_APP_DATA",
-                       Path.home() / ".local" / "share" / "coach-app")
-    )
-    storage = FileStorage(root)
 
     season = build_season(season_plan, constraints)
     storage.save(season, expected_version=storage.version())
