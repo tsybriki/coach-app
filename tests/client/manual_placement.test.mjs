@@ -27,8 +27,12 @@ const WEEK = {
   ],
   assignments: [],
   unplaced: [
-    {id: 'r4-6', sport: 'run', kind: 'easy', focus: 'Лёгкий бег', duration_min: 43},
-    {id: 'r4-7', sport: 'run', kind: 'easy', focus: 'Лёгкий бег', duration_min: 48},
+    {id: 'r4-6', sport: 'run', kind: 'easy', focus: 'Лёгкий бег',
+     name: 'Лёгкий бег', duration_min: 43,
+     objective: {name: 'Лёгкий бег'}, steps: []},
+    {id: 'r4-7', sport: 'run', kind: 'easy', focus: 'Лёгкий бег',
+     name: 'Лёгкий бег', duration_min: 48,
+     objective: {name: 'Лёгкий бег'}, steps: []},
   ],
   workouts: [
     {
@@ -219,17 +223,17 @@ test('висяки идут после размещённых тренирово
   assert.ok(unplacedPos > slotPos, 'висяки показаны выше тренировок');
 });
 
-test('тап по висяку открывает выбор окна', async () => {
-  const row = document.querySelector('.unplaced-row');
-  click(row);
+test('кнопка «привязать» открывает выбор окна', async () => {
+  /* Тап по строке висяка открывает детали тренировки, а выбор окна —
+   * кнопка «привязать». Поведение привязки прежнее. */
+  click(document.querySelector('.unplaced-bind'));
   await waitFor(() => document.querySelectorAll('.slot-choice').length > 0);
   const choices = document.querySelectorAll('.slot-choice');
   assert.equal(choices.length, SLOTS.length, 'выбор окна не открылся');
 });
 
 test('выбор окна шлёт команду place_unplaced', async () => {
-  const row = document.querySelector('.unplaced-row');
-  click(row);
+  click(document.querySelector('.unplaced-bind'));
   await waitFor(() => document.querySelectorAll('.slot-choice').length > 0);
 
   const choice = document.querySelector('.slot-choice[data-bind-slot="win-ПН-1"]');
@@ -249,8 +253,7 @@ test('привязка не проверяет занятость окна', asy
   /* Окно win-СР-1 уже занято длинным бегом. Привязка к нему —
    * решение пользователя, и клиент его не отменяет. */
   commands.length = 0;
-  const row = document.querySelector('.unplaced-row');
-  click(row);
+  click(document.querySelector('.unplaced-bind'));
   await waitFor(() => document.querySelectorAll('.slot-choice').length > 0);
 
   const busy = document.querySelector('.slot-choice[data-bind-slot="win-СР-1"]');
@@ -265,8 +268,7 @@ test('привязка не проверяет занятость окна', asy
 
 test('окно без велосипеда помечено «не подходит»', async () => {
   /* Базовый висяк — бег, и для бега подходят все окна. */
-  const row = document.querySelector('.unplaced-row');
-  click(row);
+  click(document.querySelector('.unplaced-bind'));
   await waitFor(() => document.querySelectorAll('.slot-choice').length > 0);
 
   const bad = [...document.querySelectorAll('.slot-choice.slot-bad')];
@@ -279,13 +281,13 @@ test('окно без велосипеда помечено для велоси�
     ...WEEK,
     unplaced: [
       {id: 'r4-bike', sport: 'bike', kind: 'bike', focus: 'Велосипед',
-       duration_min: 60},
+       name: 'Велосипед', duration_min: 60, objective: {name: 'Велосипед'},
+       steps: []},
     ],
   };
   await loadApp({week: bike});
 
-  const row = document.querySelector('.unplaced-row');
-  click(row);
+  click(document.querySelector('.unplaced-bind'));
   await waitFor(() => document.querySelectorAll('.slot-choice').length > 0);
 
   const bad = [...document.querySelectorAll('.slot-choice.slot-bad')]

@@ -94,16 +94,22 @@ async function waitFor(predicate, timeout = 3000) {
   return false;
 }
 
-async function loadApp() {
+function click(element) {
+  element.dispatchEvent(new global.window.MouseEvent('click', {
+    bubbles: true, cancelable: true,
+  }));
+}
+
+async function loadApp(overrides = {}) {
   setupDom();
   globalThis.__fixture = {
     version: 42,
     seasonWeek: 4,
     snapshot: {version: 42, seasonWeek: 4},
-    week: WEEK,
+    week: overrides.week || WEEK,
     actual: [],
     weeks: [],
-    slots: SLOTS,
+    slots: overrides.slots || SLOTS,
     details: {},
     onCommand: () => ({status: 'applied', new_version: 43}),
   };
@@ -144,4 +150,49 @@ test('описание недели — про объём', () => {
   assert.match(text, /Набираем 56 км/, `фокус недели: ${text}`);
   assert.doesNotMatch(text, /контрольной точке/,
     'в описании недели осталась цель тренировки');
+});
+
+test('показаны все шаги без названия группы', async () => {
+  /* Дефект: у контрольной точки три шага без группы (разминка,
+   * работа, заминка), и блок показывал только первый. В шапке
+   * «3 шага», а в структуре — один. */
+  const cp = {
+    ...WEEK,
+    workouts: [
+      {
+        id: 'w-cp',
+        request_id: 'r4-cp',
+        sport: 'run',
+        kind: 'quality',
+        focus: 'Темповый тест 3К',
+        objective: {name: 'Темповый тест 3К', day: 'ПН'},
+        time: '18:45',
+        duration_min: 41,
+        status: 'planned',
+        actual_id: null,
+        steps: [
+          {id: 's1', role: 'work', sport: 'run', target_type: 'time',
+           target_value: 15, focus: 'hr', focus_value: {zone: 'Z1'},
+           duration_min: 15},
+          {id: 's2', role: 'work', sport: 'run', target_type: 'distance',
+           target_value: 3000, focus: 'pace',
+           focus_value: {zone: 'Z4', pace_min_per_km: '4:40'},
+           duration_min: 14},
+          {id: 's3', role: 'work', sport: 'run', target_type: 'time',
+           target_value: 12, focus: 'hr', focus_value: {zone: 'Z1'},
+           duration_min: 12},
+        ],
+      },
+    ],
+  };
+  await loadApp({week: cp});
+
+  click(document.querySelector('button.slot'));
+  await waitFor(() => document.getElementById('cardHost').textContent.trim());
+
+  const text = document.getElementById('cardHost').textContent;
+  assert.match(text, /15 мин/, `нет разминки: ${text}`);
+  assert.match(text, /3\.0 км/, `нет работы на 3К: ${text}`);
+  assert.match(text, /4:40/, `нет темпа теста: ${text}`);
+  assert.match(text, /12 мин/, `нет заминки: ${text}`);
 });

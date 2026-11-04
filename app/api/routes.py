@@ -604,6 +604,9 @@ def _week_dict(
     # запроса, а не напрямую.
     slot_by_id = {s.id: s for s in (slots or [])}
     assignment_by_request = {a.request_id: a for a in week.assignments}
+    # Тренировка по запросу: у каждого запроса недели есть своя
+    # тренировка (инвариант I20), и по ней висяк показывает детали.
+    workout_by_request = {w.request_id: w for w in week.workouts}
 
     data: dict[str, Any] = {
         "id": week.id,
@@ -623,9 +626,15 @@ def _week_dict(
              "duration_min": a.duration_min}
             for a in week.assignments
         ],
+        # Непривязанные тренировки — с деталями.
+        #
+        # Висяк показывается списком, но по нему должно быть видно, что
+        # это за тренировка: название, структура, шаги. Иначе
+        # пользователь знает только «Лёгкий бег, 46 мин» и решает,
+        # куда её поставить, вслепую. Детали берём из тренировки
+        # запроса — она у висяка одна и та же, что и в списке.
         "unplaced": [
-            {"id": r.id, "sport": r.sport.value, "kind": r.kind,
-             "focus": r.focus, "duration_min": r.duration_min}
+            _unplaced_dict(r, workout_by_request.get(r.id))
             for r in week.unplaced
         ],
         # Окна недели — чтобы клиент мог предложить, куда привязать
@@ -641,6 +650,61 @@ def _week_dict(
     # Факт недели против плана: «N из M». Считается по всем активностям
     # недели — связанным и нет.
     data["progress"] = week_progress(week, sessions or [])
+    return data
+
+
+def _steps_dict(steps: Any) -> list[dict[str, Any]]:
+    """Шаги тренировки — плоский список."""
+    return [
+        {
+            "id": s.id,
+            "role": s.role.value,
+            "sport": s.sport.value,
+            "target_type": s.target_type.value,
+            "target_value": s.target_value,
+            "focus": s.focus.value,
+            "focus_value": s.focus_value,
+            "duration_min": s.duration_min,
+            "label": s.label,
+            "notes": s.notes,
+            "group": s.group,
+            "round": s.round,
+        }
+        for s in steps
+    ]
+
+
+def _unplaced_dict(request: Any, workout: Any = None) -> dict[str, Any]:
+    """Непривязанная тренировка — с деталями.
+
+    Висяк показывается списком, и по нему должно быть видно, что это за
+    тренировка: название, структура, шаги. Иначе пользователь знает
+    только «Лёгкий бег, 46 мин» и решает, куда её поставить, вслепую.
+
+    Детали берём из тренировки запроса: она у висяка одна и та же, что
+    и в списке размещённых, — иначе карточка и детали показывали бы
+    разное.
+    """
+    data: dict[str, Any] = {
+        "id": request.id,
+        "sport": request.sport.value,
+        "kind": request.kind,
+        "focus": request.focus,
+        "duration_min": request.duration_min,
+        "name": request.focus,
+        "objective": {},
+        "steps": [],
+        "rationale": None,
+    }
+    if workout is None:
+        return data
+    objective = dict(workout.objective or {})
+    data["name"] = objective.get("name") or workout.focus or request.focus
+    data["focus"] = workout.focus or request.focus
+    data["duration_min"] = workout.duration_min
+    data["objective"] = objective
+    data["steps"] = _steps_dict(workout.steps)
+    data["rationale"] = workout.rationale
     return data
 
 
@@ -763,23 +827,7 @@ def _workout_dict(
         "duration_min": workout.duration_min,
         "status": workout.status.value,
         "actual_id": workout.actual_id,
-        "steps": [
-            {
-                "id": s.id,
-                "role": s.role.value,
-                "sport": s.sport.value,
-                "target_type": s.target_type.value,
-                "target_value": s.target_value,
-                "focus": s.focus.value,
-                "focus_value": s.focus_value,
-                "duration_min": s.duration_min,
-                "label": s.label,
-                "notes": s.notes,
-                "group": s.group,
-                "round": s.round,
-            }
-            for s in workout.steps
-        ],
+        "steps": _steps_dict(workout.steps),
     }
 
 

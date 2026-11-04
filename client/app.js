@@ -91,11 +91,17 @@ function chromeBar() {
     return detailBar(title, fact ? fact.date : '');
   }
   if (state.openWorkoutId && state.week) {
-    const workout = (state.week.workouts || [])
-      .find((w) => w.id === state.openWorkoutId);
+    /* Тренировка может быть непривязанной — тогда у неё нет дня, и
+     * в шапке это видно по подписи «не привязано». */
+    const workout = findWorkout(state.openWorkoutId);
     if (workout) {
       const objective = workout.objective || {};
-      return detailBar(objective.name || workout.kind, objective.day || '');
+      const placed = objective.day !== undefined && objective.day !== null
+        && objective.day !== '';
+      const subtitle = placed ? (objective.day || '')
+        : 'не привязано';
+      return detailBar(objective.name || workout.kind || 'Тренировка',
+                       subtitle);
     }
   }
   return appBar();
@@ -430,14 +436,28 @@ function unplacedBlock(week) {
   const pickedSport = picked ? picked.sport : null;
   const rows = unplaced.map((u) => {
     const icon = KIND_ICON[u.sport] || '🎯';
-    const label = u.focus || u.kind || 'Тренировка';
-    return `<div class="unplaced-row" data-unplaced="${escapeHtml(u.id)}">
-        <span class="ico">${icon}</span>
-        <span class="body">
-          <span class="name">${escapeHtml(label)}</span>
-          <span class="meta">${escapeHtml(formatDuration(u.duration_min))}</span>
-        </span>
-        <span class="hint">привязать</span>
+    const label = u.name || u.focus || u.kind || 'Тренировка';
+    /* Строка висяка — два действия.
+     *
+     * Тап по самой строке открывает детали тренировки: то же, что
+     * открывает тап по размещённой. Иначе про висяк известно только
+     * «Лёгкий бег, 46 мин» — и куда его поставить, решаешь вслепую.
+     *
+     * Кнопка «привязать» — отдельная: она открывает выбор окна. Так
+     * оба действия не мешают друг другу, и привязка остаётся ровно
+     * такой, какой была.
+     */
+    return `<div class="unplaced-row">
+        <button class="unplaced-open" data-unplaced="${escapeHtml(u.id)}">
+          <span class="ico">${icon}</span>
+          <span class="body">
+            <span class="name">${escapeHtml(label)}</span>
+            <span class="meta">${escapeHtml(formatDuration(u.duration_min))}</span>
+          </span>
+        </button>
+        <button class="unplaced-bind" data-bind-pick="${escapeHtml(u.id)}">
+          привязать
+        </button>
       </div>`;
   }).join('');
 
@@ -448,6 +468,16 @@ function unplacedBlock(week) {
   return `<h2 class="slots-header">Не привязано · ${unplaced.length}</h2>
     <div class="unplaced-list">${rows}</div>
     ${picker}`;
+}
+
+/* Выбор окна для висяка — на экране деталей.
+ *
+ * Тот же выбор окон, что и в списке недели: окна и правило «не
+ * подходит» — одни и те же. Отличается только то, где список стоит.
+ */
+function slotPickerFor(requestId, sport) {
+  if (state.pickUnplaced !== requestId) return '';
+  return slotPicker(requestId, state.slots || [], sport);
 }
 
 /* Выбор окна для висяка.
@@ -1097,8 +1127,55 @@ function formatPace(mps) {
  * Сеты собираются обратно: шаги с одинаковым group — один блок,
  * шаги с round — повторы внутри блока.
  */
+/* Тренировка недели — размещённая или нет.
+ *
+ * Размещённая тренировка лежит в `week.workouts`. Непривязанная — там
+ * же (у неё просто нет дня), но клиент получает её ещё и в
+ * `week.unplaced`, где у неё свой `id` — id запроса.
+ *
+ * Поэтому ищем дважды: по id тренировки и по id запроса.
+ */
+function findWorkout(workoutId) {
+  const week = state.week || {};
+  const byId = (week.workouts || []).find((w) => w.id === workoutId);
+  if (byId) return byId;
+  const unplaced = (week.unplaced || []).find((u) => u.id === workoutId);
+  if (unplaced) return unplacedWorkout(unplaced);
+  return null;
+}
+
+/* Непривязанная тренировка — в виде тренировки.
+ *
+ * У висяка в `week.unplaced` уже есть всё, что нужно для экрана
+ * деталей: название, объект, шаги. Приводим к тому же виду, что и
+ * размещённая тренировка, чтобы экран деталей был один.
+ */
+function unplacedWorkout(u) {
+  return {
+    id: u.id,
+    request_id: u.id,
+    sport: u.sport,
+    kind: u.kind,
+    focus: u.focus,
+    objective: u.objective || {},
+    location: u.location || '',
+    time: u.time || '',
+    steps: u.steps || [],
+    duration_min: u.duration_min,
+    status: 'planned',
+    rationale: u.rationale || '',
+    actual_id: null,
+  };
+}
+
 function showWorkout(workoutId) {
-  const workout = (state.week.workouts || []).find((w) => w.id === workoutId);
+  /* Тренировка ищется и среди размещённых, и среди непривязанных.
+   *
+   * Дефект, который это ловит: по висяку нельзя было посмотреть
+   * детали — он был просто строкой «Лёгкий бег, 46 мин». Теперь у
+   * непривязанной тренировки есть свой экран, как у размещённой.
+   */
+  const workout = findWorkout(workoutId);
   if (!workout) {
     cardHost.innerHTML = '<div class="card">Тренировка не найдена</div>';
     return;
@@ -1138,10 +1215,31 @@ function showWorkout(workoutId) {
       </div>`
     : '';
 
+  /* Непривязанная тренировка — с кнопкой привязки.
+   *
+   * Кнопка «привязать» на экране деталей ведёт себя ровно как раньше:
+   * открывает выбор окна недели. Здесь она нужна, чтобы можно было
+   * посмотреть детали и сразу решить, куда поставить.
+   */
+  const placed = objective.day !== undefined && objective.day !== null
+    && objective.day !== '';
+  const bindBlock = placed
+    ? ''
+    : `<div class="bind-block">
+        <div class="lbl">Тренировка не привязана</div>
+        <div class="hint">Выбери окно недели — и тренировка встанет на это время.</div>
+        <button class="action primary" data-bind-pick="${escapeHtml(workout.request_id || workout.id)}">
+          Привязать к окну
+        </button>
+        ${slotPickerFor(workout.request_id || workout.id, workout.sport)}
+      </div>`;
+
   const linkedActual = workout.actual_id
     ? state.actual.find((a) => a.id === workout.actual_id)
     : null;
 
+  /* Факт привязывают к размещённой тренировке: у непривязанной нет
+   * дня, и связывать с ней активность — путаница. */
   const actualBlock = linkedActual
     ? `<div class="actual-block linked" data-detail="${escapeHtml(linkedActual.id)}">
         <div class="lbl">Выполнено</div>
@@ -1156,12 +1254,14 @@ function showWorkout(workoutId) {
           <button class="action secondary" data-unlink="${escapeHtml(workout.id)}">Отвязать</button>
         </div>
       </div>`
-    : `<div class="actual-block empty">
+    : placed
+      ? `<div class="actual-block empty">
         <div class="lbl">Факт не привязан</div>
         <div class="facts-hint">Кандидаты из Garmin — нажми, чтобы связать:</div>
         <div class="facts">${factList(workout)}</div>
         <button class="action secondary" id="pull">Загрузить факт из Garmin</button>
-      </div>`;
+      </div>`
+      : '';
 
   cardHost.innerHTML = `<div class="card detail">
       <div class="card-header">
@@ -1171,13 +1271,14 @@ function showWorkout(workoutId) {
         </div>
         <span class="tag kind-${escapeHtml(workout.sport)}">${stepCount} ${plural(stepCount, 'шаг', 'шага', 'шагов')}</span>
       </div>
-      <div class="subtitle">${escapeHtml(objective.day || '')} · ${escapeHtml(workout.time || '')} · ${formatDuration(workout.duration_min)}</div>
+      <div class="subtitle">${placed ? `${escapeHtml(objective.day || '')} · ` : 'не привязано · '}${escapeHtml(workout.time || '')}${workout.time ? ' · ' : ''}${formatDuration(workout.duration_min)}</div>
       ${meta.length ? `<div class="meta-row">${meta.join('')}</div>` : ''}
       ${goalHtml}
       ${rationaleHtml}
       ${invHtml}
       <h3>Структура тренировки</h3>
       ${structureHtml(workout)}
+      ${bindBlock}
       ${actualBlock}
     </div>
     <div id="detail-block"></div>`;
@@ -1234,6 +1335,10 @@ function detailBar(title, day) {
 function showPicker() {
   state.openWorkoutId = null;
   state.detailId = null;
+  /* Выбор окна закрывается вместе с экраном: список окон висит и на
+   * экране недели, и в деталях тренировки, и без сброса оба остаются
+   * в DOM сразу. */
+  state.pickUnplaced = null;
   cardWrap.classList.add('hidden');
   detailWrap.classList.add('hidden');
   picker.classList.remove('hidden');
@@ -1335,6 +1440,29 @@ function renderBlock(block) {
   }
 
   // Одиночный шаг
+  //
+  // Шагов без названия группы (`group: null`) в тренировке может быть
+  // несколько: разминка, работа, заминка у контрольной точки. Раньше
+  // такой блок показывал только первый шаг, а остальные молча
+  // пропадали: структура «3 шага» выглядела как «1 шаг».
+  //
+  // Название группы показываем, когда оно есть: у шага с `group`
+  // (например «6×100м через 100м») иначе пропадает само название
+  // серии, и читатель видит просто «0.1 км @ 3:35/км» без понятного,
+  // что это за работа.
+  if (steps.length > 1) {
+    return `<li class="step">
+        ${steps.map(renderSubStep).join('')}
+      </li>`;
+  }
+  if (block.group) {
+    return `<li class="step">
+        <div class="step-head">
+          <span class="step-phase">${escapeHtml(block.group)}</span>
+        </div>
+        ${renderSubStep(steps[0])}
+      </li>`;
+  }
   return `<li class="step">${renderSubStep(steps[0])}</li>`;
 }
 
@@ -1635,11 +1763,31 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
-  // Тап по висяку — выбрать ему окно.
+  /* Тап по висяку — открыть детали тренировки.
+   *
+   * То же, что тап по размещённой: отдельный экран со структурой,
+   * шагами и кнопкой привязки. Из списка висяков детали были
+   * недоступны — а решить, куда поставить, не видя состава тренировки,
+   * невозможно.
+   */
   const unplaced = closest('[data-unplaced]');
   if (unplaced) {
-    state.pickUnplaced = unplaced.dataset.unplaced;
-    render();
+    showWorkout(unplaced.dataset.unplaced);
+    return;
+  }
+
+  /* Кнопка «привязать» — открыть выбор окна. Поведение прежнее.
+   *
+   * На экране деталей выбор окон появляется под кнопкой, поэтому
+   * детали перерисовываются: список окон живёт внутри них. */
+  const bindPick = closest('[data-bind-pick]');
+  if (bindPick) {
+    state.pickUnplaced = bindPick.dataset.bindPick;
+    if (state.openWorkoutId) {
+      showWorkout(state.openWorkoutId);
+    } else {
+      render();
+    }
     return;
   }
 

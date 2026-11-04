@@ -50,7 +50,12 @@ def main() -> int:
             print()
             print("--- 1. закрыть proposed-неделю напрямую ---")
             r = cmd("c1", "close_week")
-            print(f"HTTP {r.status_code}: {r.json()['error']['message']}")
+            # Неделя может быть уже активной — тогда закрытие пройдёт.
+            # Чекер не должен падать из-за формы ответа: он показывает
+            # путь, а не проверяет конкретный статус боевой недели.
+            body = r.json()
+            message = (body.get("error") or {}).get("message") or "закрыто"
+            print(f"HTTP {r.status_code}: {message}")
 
             print()
             print("--- 2. активация ---")
