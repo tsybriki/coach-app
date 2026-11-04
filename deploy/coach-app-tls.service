@@ -1,7 +1,6 @@
 [Unit]
 Description=Coach App BFF (HTTPS — для установки на телефон)
 After=network-online.target
-Wants=coach-app.service
 
 [Service]
 Type=simple

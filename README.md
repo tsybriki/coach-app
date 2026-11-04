@@ -88,30 +88,29 @@ UI-тесты на `EventSource is not defined`, это неподключённ
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 COACH_APP_DATA=~/.local/share/coach-app \
-  .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080
+  .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8443 \
+  --ssl-keyfile ~/.local/share/coach-app/tls/key.pem \
+  --ssl-certfile ~/.local/share/coach-app/tls/cert.pem
 ```
 
-Сервис systemd — `deploy/coach-app.service`:
+Сервис systemd — `deploy/coach-app-tls.service`:
 
 ```bash
-cp deploy/coach-app.service ~/.config/systemd/user/
+cp deploy/coach-app-tls.service ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now coach-app.service
+systemctl --user enable --now coach-app-tls.service
 ```
+
+Порт 8080 (HTTP) отключён: отдельного инстанса на нём нет. PWA требует
+secure context, поэтому телефон ходит только по HTTPS.
 
 ## Service worker и HTTPS
 
-Service worker работает только на **HTTPS** или на `localhost`. По обычному HTTP
-с телефона (`http://192.168.178.43:8080`) браузер его не зарегистрирует — офлайн
-не заработает.
-
-Варианты для телефона:
-- **HTTPS с самоподписанным сертификатом** — телефон спросит доверие один раз.
-  Работает, но предупреждение остаётся.
-- **localhost через туннель** — телефон подключается к `127.0.0.1` на своей
-  стороне, а туннель ведёт на машину. Тогда service worker разрешён.
-- **Оставить HTTP** — приложение работает, но без офлайна: без кэша оболочки
-  и без очереди команд через service worker (сама очередь в IndexedDB работает).
+Service worker работает только на **HTTPS** или на `localhost`. С телефона
+(`https://192.168.178.43:8443`) он работает, но сертификат локальный —
+телефон спросит доверие один раз. Сертификат CA ставится с телефона один
+раз: открыть `https://192.168.178.43:8443/ca.crt`, сохранить, поставить
+как «сертификат CA пользователя».
 
 Выбор — отдельное решение, см. `specs/design/04-хостинг.md`.
 

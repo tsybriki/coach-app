@@ -1,9 +1,11 @@
 """Точка входа.
 
-Запуск:
-    uvicorn app.main:app --host 0.0.0.0 --port 8080
+Запуск (HTTPS — PWA требует secure context):
+    uvicorn app.main:app --host 0.0.0.0 --port 8443 \
+      --ssl-keyfile <данные>/tls/key.pem --ssl-certfile <данные>/tls/cert.pem
 
 BFF слушает локальную сеть: приложение доступно с телефона в домашнем Wi-Fi.
+Порт 8080 (HTTP) отключён — отдельного инстанса на нём нет.
 Авторизации в базе нет (решение от 26.10.2026) — добавим позже.
 """
 from __future__ import annotations
