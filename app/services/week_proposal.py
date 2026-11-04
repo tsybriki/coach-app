@@ -27,6 +27,7 @@ from app.domain.entities import (
     Workout,
 )
 from app.domain.enums import PlanStatus, Sport, TargetType, WeekStatus
+from app.domain.session_name import session_name
 from app.services.week_lifecycle import TransitionError
 from app.services.week_planner import (
     WeeklyTarget,
@@ -559,11 +560,6 @@ def _plan_other_sports(volume: MacroVolume, season: Season,
         # Разбивка из макро: «2×25м» — две тренировки по 25 минут, а не
         # одна на 50. Без разбивки число сессий не сходится с планом.
         parts = volume.sessions.get(sport.value) or [minutes]
-        name = {
-            Sport.BIKE: "Вел",
-            Sport.SWIM: "Пул",
-            Sport.OFP: "ОФП",
-        }[sport]
         # Описание тренировки — по-русски. Ключ вида спорта (`bike`,
         # `swim`) в карточке ничего не значит.
         focus_text = {
@@ -575,15 +571,21 @@ def _plan_other_sports(volume: MacroVolume, season: Season,
             part_minutes = int(part)
             if part_minutes <= 0:
                 continue
+            # Название — по тому же правилу, что и у пробежек: из
+            # состава. «Вел 60мин» читалось как обрывок, а «Велосипед» —
+            # понятно, что это за тренировка.
+            steps = [_plain_step(sport, part_minutes)]
+            workout_name = session_name(sport.value, sport, steps,
+                                        base=focus_text)
             # Окно не выбираем: время тренировки назначает пользователь.
             workouts.append(Workout(
                 id=f"w-{sport.value}-{index + 1}",
                 request_id=f"r-{sport.value}-{index + 1}",
                 sport=sport,
                 kind=sport.value,
-                focus=focus_text,
-                objective={"name": f"{name} {part_minutes}мин"},
-                steps=[_plain_step(sport, part_minutes)],
+                focus=workout_name,
+                objective={"name": workout_name},
+                steps=steps,
                 duration_min=float(part_minutes),
             ))
     return workouts, used

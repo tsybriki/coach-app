@@ -115,6 +115,20 @@ def test_bike_and_swim_named_by_sport():
         == "Плавание"
 
 
+def test_other_sports_have_no_awkward_minute_suffix():
+    """Название не оканчивается на «60мин».
+
+    Было: «Вел 60мин», «Пул 30мин» — обрывок, из которого непонятно,
+    что за тренировка. Название называет вид работы, а длительность
+    показывается рядом отдельной величиной.
+    """
+    for kind, sport in (("bike", Sport.BIKE), ("swim", Sport.SWIM),
+                         ("ofp", Sport.OFP)):
+        name = session_name(kind, sport, [step(sport=sport)])
+        assert not name.endswith("мин"), name
+        assert "мин" not in name, name
+
+
 def test_base_name_wins_over_kind():
     """Заданная основа важнее вида работы.
 
