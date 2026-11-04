@@ -499,6 +499,14 @@ h3 {
   flex-shrink: 0;
 }
 
+/* Что шаг делает — своей строкой под объёмом. */
+.step-about {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
 .empty {
   color: var(--muted);
   font-style: italic;
@@ -1381,6 +1389,15 @@ p.lead {
   flex-direction: column;
   gap: 6px;
   margin-bottom: 10px;
+}
+
+/* Подпись над кандидатами в Garmin: они не часть тренировки, а
+ * предложение связать. Без подписи «1 ч 21 мин» внутри карточки
+ * читается как длительность самой тренировки. */
+.facts-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
 }
 
 .fact {

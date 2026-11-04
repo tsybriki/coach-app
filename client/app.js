@@ -358,15 +358,41 @@ function sortedWorkouts(workouts) {
   });
 }
 
+/* Размещённые тренировки недели.
+ *
+ * В `week.workouts` лежат **все** тренировки недели, включая
+ * непривязанные: планировщик создаёт тренировку для каждого запроса, а
+ * запрос уходит в `unplaced`. Показывать все — значит показать каждую
+ * дважды: один раз в списке размещённых и один раз в списке висяков.
+ *
+ * Размещённая тренировка — та, у которой есть окно: `objective.day`
+ * проставлен при привязке.
+ */
+function placedWorkouts(week) {
+  return (week.workouts || []).filter((w) => {
+    const objective = w.objective || {};
+    return objective.day !== undefined && objective.day !== null
+      && objective.day !== '';
+  });
+}
+
 function screenWeek() {
   if (!state.week) return screenWeekMissing();
   const week = state.week;
   const target = week.load_target || {};
+  const placed = placedWorkouts(week);
+  const unplaced = week.unplaced || [];
 
-  const slots = sortedWorkouts(week.workouts || []).map((w) => {
+  const slots = sortedWorkouts(placed).map((w) => {
     const actual = state.actual.find((a) => a.id === w.actual_id);
     return slotButton(w, actual);
   }).join('');
+
+  /* Счётчик — по всем тренировкам недели: «9 тренировок», из них
+   * 3 размещены. Считать только размещённые — значит спрятать от
+   * читателя неделю, в которой половина тренировок ещё не расставлена. */
+  const total = (week.workouts || []).length;
+  const placedCount = placed.length;
 
   return `${messageBlock()}
     ${week.focus ? `<div class="card goal"><h3>Фокус недели</h3><p class="lead">${escapeHtml(week.focus)}</p></div>` : ''}
@@ -379,8 +405,8 @@ function screenWeek() {
       ${progressBlock(week.progress)}
     </div>
     ${weekActions(week)}
-    <h2 class="slots-header">Тренировки · ${(week.workouts || []).length} шт</h2>
-    <div class="slots-list">${slots || '<p>Тренировок нет.</p>'}</div>
+    <h2 class="slots-header">Тренировки · ${placedCount} из ${total}</h2>
+    <div class="slots-list">${slots || '<p class="empty">Размещённых тренировок нет.</p>'}</div>
     ${unplacedBlock(week)}`;
 }
 
@@ -1081,7 +1107,6 @@ function showWorkout(workoutId) {
   const objective = workout.objective || {};
   const title = objective.name || workout.kind;
   const stepCount = (workout.steps || []).length;
-
   const meta = [];
   if (workout.location) meta.push(`<span class="meta-item">📍 ${escapeHtml(workout.location)}</span>`);
   if (workout.focus) meta.push(`<span class="meta-item focus-pill focus-${escapeHtml(workout.focus)}">${escapeHtml(workout.focus)}</span>`);
@@ -1133,6 +1158,7 @@ function showWorkout(workoutId) {
       </div>`
     : `<div class="actual-block empty">
         <div class="lbl">Факт не привязан</div>
+        <div class="facts-hint">Кандидаты из Garmin — нажми, чтобы связать:</div>
         <div class="facts">${factList(workout)}</div>
         <button class="action secondary" id="pull">Загрузить факт из Garmin</button>
       </div>`;
@@ -1143,7 +1169,7 @@ function showWorkout(workoutId) {
           <span class="kind-ico">${KIND_ICON[workout.sport] || '🎯'}</span>
           <span class="name">${escapeHtml(title)}</span>
         </div>
-        <span class="tag kind-${escapeHtml(workout.sport)}">${stepCount} шагов</span>
+        <span class="tag kind-${escapeHtml(workout.sport)}">${stepCount} ${plural(stepCount, 'шаг', 'шага', 'шагов')}</span>
       </div>
       <div class="subtitle">${escapeHtml(objective.day || '')} · ${escapeHtml(workout.time || '')} · ${formatDuration(workout.duration_min)}</div>
       ${meta.length ? `<div class="meta-row">${meta.join('')}</div>` : ''}
@@ -1320,19 +1346,47 @@ function renderSubStep(step) {
 
   let value = '';
   if (step.target_type === 'distance') {
-    value = `<span class="step-dur">${Math.round(step.target_value)}м</span>`;
+    value = `<span class="step-dur">${(step.target_value / 1000).toFixed(1)} км</span>`;
   } else if (step.target_type === 'reps') {
     value = `<span class="step-reps">× ${step.target_value}</span>`;
   } else {
-    value = `<span class="step-dur">${Math.round(step.duration_min)}мин</span>`;
+    value = `<span class="step-dur">${Math.round(step.duration_min)} мин</span>`;
   }
 
   const hr = fv.hr_target ? ` <span class="step-extra">HR ${fv.hr_target}</span>` : '';
   const pace = fv.pace_min_per_km ? ` <span class="step-extra">@ ${escapeHtml(fv.pace_min_per_km)}/км</span>` : '';
 
+  /* Что шаг делает — своими словами.
+   *
+   * Раньше описание шага бралось из `notes`, а у шагов планировщика
+   * `notes` пустой: в карточке тренировки вместо содержимого стояло
+   * пустое место, и тренировку нельзя было понять, не открыв шаги
+   * вручную.
+   *
+   * Здесь важно не повторять то, что уже показано: объём и темп уже
+   * стоят в строке шага, поэтому `stepAbout` сообщает только то, чего
+   * в строке нет, — например, пульс.
+   */
+  const about = stepAbout(step);
+
   return `<div class="step-head">${zone}
       <span class="step-phase">${escapeHtml(role)}</span> ${value}${hr}${pace}
+      ${about ? `<span class="step-about">${escapeHtml(about)}</span>` : ''}
     </div>`;
+}
+
+/* Что в шаге не видно из строки шага: пульс и повторы ОФП. */
+function stepAbout(step) {
+  const fv = step.focus_value || {};
+  if (fv.ofp) {
+    return fv.reps ? `ОФП · ${fv.reps}` : 'ОФП';
+  }
+  const bits = [];
+  if (fv.hr_target) bits.push(`пульс до ${fv.hr_target}`);
+  if (step.target_type === 'reps') {
+    bits.push(`${Math.round(step.target_value)} повт.`);
+  }
+  return bits.join(' · ');
 }
 
 /* ------------------------------------------------------------------ данные */
@@ -1845,6 +1899,16 @@ function formatDuration(minutes) {
   const m = total % 60;
   if (!h) return `${m} мин`;
   return m ? `${h} ч ${m} мин` : `${h} ч`;
+}
+
+/* Русское склонение: 1 шаг, 2 шага, 5 шагов. */
+function plural(count, one, few, many) {
+  const n = Math.abs(Math.round(count)) % 100;
+  const n1 = n % 10;
+  if (n > 10 && n < 20) return many;
+  if (n1 > 1 && n1 < 5) return few;
+  if (n1 === 1) return one;
+  return many;
 }
 
 function timeOf(timestamp) {

@@ -50,6 +50,7 @@ from app.domain.methodology import (
     build_stride_steps,
     format_pace,
 )
+from app.domain.session_name import easy_pace_sec_per_km, session_name
 
 # Потолок длинного бега: «25 % недельного километража или 1,5 ч — что
 # меньше» (правило Дэниэлса). Без потолка длинный пробежек растёт с
@@ -129,6 +130,9 @@ class _PlannedSession:
     # Готовые шаги тренировки. Заданы, когда структура пришла из формы
     # фазы (отрезки и ОФП внутри пробежки), а не из рецепта.
     steps: list[Step] | None = None
+    # Основа названия тренировки. Если не задана — название собирается
+    # из вида работы и состава шагов (см. `app/domain/session_name.py`).
+    base_name: str | None = None
 
 
 def shift_time(start: str, offset_minutes: int) -> str:
@@ -305,7 +309,16 @@ class WeekPlanner:
             requests.append(request)
             # Висяк: время выбирает пользователь.
             unplaced.append(request)
-            workouts.append(self._build_workout(request, session, None))
+            workout = self._build_workout(request, session, None)
+            # Фокус запроса — из названия тренировки, а не из фокуса цели.
+            #
+            # Фокус цели («Лёгкий бег + отрезки») не знает, есть ли в
+            # тренировке ОФП: он задаётся формой фазы, а не целью. Имя
+            # тренировки собирается из состава шагов, и висяк должен
+            # называться так же, как тренировка, — иначе в списке
+            # непривязанных одно название, а в самой тренировке другое.
+            request.focus = workout.focus
+            workouts.append(workout)
 
         week = Week(
             id=f"W{data.season_week}",
@@ -710,7 +723,7 @@ class WeekPlanner:
         """Шаги пробежки: лёгкий бег + отрезки + ОФП в конце."""
         steps: list[Step] = []
         if km > 0:
-            easy_pace = pace_by_zone.get(ZONE_EASY)
+            easy_pace = easy_pace_sec_per_km(pace_by_zone)
             if easy_pace:
                 # Километраж — в километрах, темп — в секундах на км.
                 minutes = km * easy_pace / 60.0
@@ -942,17 +955,35 @@ class WeekPlanner:
         if slot is not None:
             objective["day"] = slot.day
             objective["slot_id"] = slot.id
+        # Название тренировки — из её состава, а не из фокуса запроса.
+        # Фокус недели копировался в каждую тренировку, и все пробежки
+        # недели назывались одинаково: отличить лёгкую от длинной было
+        # нельзя, а «Длинный бег + отрезки» от «Лёгкого бега» — тем
+        # более.
+        name = session_name(request.kind, request.sport, steps,
+                            base=session.base_name)
+        objective["name"] = name
+        # Длительность карточки — та же, что и внутри тренировки.
+        # Карточка показывает сумму шагов, и шаги — источник истины:
+        # расхождение между «43 мин» на карточке и «1 ч 21 мин» внутри
+        # означало, что внутри считают не то же, что показывают.
+        duration = sum(s.duration_min for s in steps)
+        # «Зачем» — тоже из названия. Фокус цели («Лёгкий бег + отрезки»)
+        # не знает, что в тренировке есть ОФП, и в «зачем» расходился с
+        # названием: «Лёгкий бег + отрезки + ОФП» сверху и «easy · Лёгкий
+        # бег + отрезки» внизу.
+        rationale = name if name else (target.focus or target.kind)
         return Workout(
             id=f"w-{request.id}",
             request_id=request.id,
             sport=request.sport,
             kind=request.kind,
-            focus=request.focus,
+            focus=name,
             objective=objective,
             time=start or (slot.start if slot else None),
             steps=steps,
-            duration_min=sum(s.duration_min for s in steps),
-            rationale=f"{target.kind} · {target.focus}" if target.focus else target.kind,
+            duration_min=duration,
+            rationale=rationale,
         )
 
     def _build_steps(self, request: Request, session: _PlannedSession) -> list[Step]:
@@ -970,7 +1001,7 @@ class WeekPlanner:
         if session.recipe is not None:
             return self._recipe_steps(session.recipe, pace_by_zone)
 
-        pace = pace_by_zone.get(ZONE_EASY)
+        pace = easy_pace_sec_per_km(pace_by_zone)
         focus_value: dict[str, object] = {"zone": "Z2"}
         if pace:
             focus_value["pace_min_per_km"] = format_pace(pace)

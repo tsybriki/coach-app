@@ -345,7 +345,15 @@ def build_macro_weeks(season_plan: dict[str, Any]) -> list[MacroWeek]:
             season_week=season_week,
             phase_id=entry.get("phase", ""),
             focus=entry.get("quality", {}).get("goal", "") or quality.get("goal", ""),
-            goal_text=quality.get("goal_text", "") or "",
+            # Описание недели — про объём. `week_goal` в макро — это
+            # «Набираем 56 км за 9 тренировок», а `quality.goal_text` —
+            # цель одной тренировки («Проверяем форму на контрольной
+            # точке»). Описание недели берём из объёма: иначе неделя с
+            # контрольной точкой называется «неделей про тест», и каждая
+            # её пробежка выглядит подготовкой к нему.
+            goal_text=entry.get("week_goal")
+            or quality.get("goal_text", "")
+            or "",
             run_km=float(entry.get("run_km", 0) or 0),
             total_h=float(entry.get("total_h", 0) or 0),
             sessions_target=int(entry.get("sessions_target", 0) or 0),
@@ -570,7 +578,11 @@ def build_week(plan: dict[str, Any], season_plan: dict[str, Any]) -> Week:
         start=week_start,
         end=week_end,
         status=WeekStatus.PROPOSED,
-        focus=quality.get("goal_text"),
+        # Описание недели — про объём: `week_goal` из макро
+        # («Набираем 56 км за 9 тренировок»). `quality.goal_text` — цель
+        # одной тренировки, и как описание недели она вводит в
+        # заблуждение.
+        focus=macro.get("week_goal") or quality.get("goal_text"),
         load_target=load_target,
         requests=requests,
         assignments=assignments,

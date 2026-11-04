@@ -47,6 +47,33 @@ const WEEK = {
       actual_id: null,
       steps: [],
     },
+    /* Непривязанная тренировка: у неё нет дня. В `week.workouts` она
+     * лежит рядом с размещёнными, и без фильтра показывалась бы
+     * дважды — и здесь, и в списке висяков. */
+    {
+      id: 'w-r4-6',
+      request_id: 'r4-6',
+      sport: 'run',
+      kind: 'easy',
+      focus: 'Лёгкий бег',
+      objective: {name: 'Лёгкий бег'},
+      duration_min: 43,
+      status: 'planned',
+      actual_id: null,
+      steps: [],
+    },
+    {
+      id: 'w-r4-7',
+      request_id: 'r4-7',
+      sport: 'run',
+      kind: 'easy',
+      focus: 'Лёгкий бег',
+      objective: {name: 'Лёгкий бег'},
+      duration_min: 48,
+      status: 'planned',
+      actual_id: null,
+      steps: [],
+    },
   ],
 };
 
@@ -164,6 +191,24 @@ test('висяки показаны списком под тренировкам
   const text = document.getElementById('picker').textContent;
   assert.match(text, /Не привязано/, 'нет заголовка списка висяков');
   assert.match(text, /Лёгкий бег/, 'нет описания висяка');
+});
+
+test('непривязанная тренировка не показана дважды', () => {
+  /* Дефект: в `week.workouts` лежат все тренировки недели, включая
+   * непривязанные. Без фильтра каждая показывалась дважды: в списке
+   * размещённых и в списке висяков — и неделя читалась как «18
+   * тренировок» вместо девяти. */
+  const placed = document.querySelectorAll('button.slot');
+  assert.equal(placed.length, 1,
+    `в списке размещённых ${placed.length} тренировок, а размещена одна`);
+
+  const unplaced = document.querySelectorAll('.unplaced-row');
+  assert.equal(unplaced.length, 2, 'висяки показаны не все');
+
+  /* Счётчик — «размещено из всех», а не «всего». */
+  const header = document.querySelector('.slots-header');
+  assert.match(header.textContent, /1 из 3/,
+    `счётчик тренировок: ${header.textContent.trim()}`);
 });
 
 test('висяки идут после размещённых тренировок', () => {
