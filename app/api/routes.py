@@ -31,6 +31,7 @@ from app.ports.storage import (
     StorageBusyError,
     VersionConflictError,
 )
+from app.services.week_lifecycle import activation_blocker
 
 router = APIRouter(prefix="/api/v1")
 
@@ -142,7 +143,11 @@ def week(season_week: int, container: AppContainer = Depends(get_container)) -> 
                     status=404)
     sessions = container.fact_repo.list_for_week(season_week)
     loaded = container.season_repo.load()
-    return ok(container, _week_dict(found, sessions, loaded.slots))
+    stored = container.season_repo.weeks()
+    return ok(container, _week_dict(
+        found, sessions, loaded.slots,
+        earlier=[w for w in stored if w.season_week < season_week],
+    ))
 
 
 @router.get("/actual/{season_week}")
@@ -238,6 +243,9 @@ def season(container: AppContainer = Depends(get_container)) -> JSONResponse:
     if plan is not None:
         for entry in plan.macro_weeks:
             week = stored.get(entry.season_week)
+            # Даты недели считает сервер: клиент знает только календарь
+            # текущей недели, а не горизонт сезона.
+            week_start = loaded.horizon_start + timedelta(days=7 * (entry.season_week - 1))
             macro_weeks.append({
                 "season_week": entry.season_week,
                 "phase_id": entry.phase_id,
@@ -249,6 +257,8 @@ def season(container: AppContainer = Depends(get_container)) -> JSONResponse:
                 "deload": entry.deload,
                 "status": week.status.value if week else None,
                 "has_fact": bool(week and week.summary),
+                "start": week_start.isoformat(),
+                "end": (week_start + timedelta(days=6)).isoformat(),
             })
 
     phases = []
@@ -453,7 +463,11 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         updated = propose_by_rules(season, week, container.planner,
                                    container.methodology_repo.workout_templates())
     elif command.type is CommandType.ACTIVATE_WEEK:
-        updated = activate_week(week)
+        # Активация — только после закрытия предыдущей недели (I45).
+        # Правило живёт в сервисе, а не в маршруте: маршрут переводит.
+        earlier = [w for w in container.season_repo.weeks()
+                   if w.season_week < week.season_week]
+        updated = activate_week(week, earlier)
     elif command.type is CommandType.PLACE_UNPLACED:
         # Ручная привязка висяка к окну: пользователь решил, когда эта
         # тренировка. Валидаций нет — мягкое расписание.
@@ -599,6 +613,7 @@ def _week_dict(
     week: Week,
     sessions: list[ActualSession] | None = None,
     slots: list[Any] | None = None,
+    earlier: list[Week] | None = None,
 ) -> dict[str, Any]:
     # Окно тренировки: слот. Тренировка знает свой слот через размещение
     # запроса, а не напрямую.
@@ -650,6 +665,10 @@ def _week_dict(
     # Факт недели против плана: «N из M». Считается по всем активностям
     # недели — связанным и нет.
     data["progress"] = week_progress(week, sessions or [])
+    # Можно ли активировать неделю. Правило — на сервере (I45): пока
+    # предыдущая неделя не закрыта, активация следующей недоступна.
+    data["can_activate"] = activation_blocker(week, earlier or []) is None
+    data["activate_blocked_by"] = activation_blocker(week, earlier or [])
     return data
 
 

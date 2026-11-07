@@ -25,6 +25,7 @@ import {
 const state = {
   screen: 'week',
   seasonWeek: Number(localStorage.getItem('coach-app-week')) || null,
+  currentWeek: null,     // неделя сезона по календарю — её считает сервер
   version: 0,
   week: null,
   season: null,
@@ -411,9 +412,76 @@ function screenWeek() {
       ${progressBlock(week.progress)}
     </div>
     ${weekActions(week)}
+    ${nextWeekCard()}
     <h2 class="slots-header">Тренировки · ${placedCount} из ${total}</h2>
     <div class="slots-list">${slots || '<p class="empty">Размещённых тренировок нет.</p>'}</div>
     ${unplacedBlock(week)}`;
+}
+
+/* Следующая неделя, которую можно планировать.
+ *
+ * Одна неделя наперёд: планируется неделя после текущей по календарю.
+ * Номер текущей недели считает сервер — клиент о горизонте сезона не знает.
+ */
+function nextPlannableWeek() {
+  if (!state.currentWeek) return null;
+  return state.currentWeek + 1;
+}
+
+/* Неделя макро-плана — по номеру. В ней и объём, и состояние: планы
+ * хранятся в макро-плане сезона, а не в отдельном списке. */
+function macroWeekOf(seasonWeek) {
+  const weeks = (state.seasonPlan && state.seasonPlan.macro_weeks) || [];
+  return weeks.find((w) => w.season_week === seasonWeek) || null;
+}
+
+/* Карточка следующей недели.
+ *
+ * Планировать следующую можно и до закрытия текущей — активировать
+ * нельзя. Карточка ведёт в следующую неделю: спланировать её, если её
+ * ещё нет, или открыть, если она уже запланирована.
+ *
+ * Живёт на экране текущей недели: на экране самой следующей недели она
+ * не нужна — там и так видно, что с ней делать.
+ */
+function nextWeekCard() {
+  const next = nextPlannableWeek();
+  if (!next) return '';
+  // Только на экране текущей недели: на прошлой карточка «следующая» —
+  // шум, а на экране самой следующей — тавто.
+  if (state.seasonWeek !== state.currentWeek) return '';
+
+  const macro = macroWeekOf(next);
+  if (!macro) return '';
+
+  const range = macro.start
+    ? `${formatDate(macro.start)} — ${formatDate(macro.end)}` : '';
+  const head = `<div class="chead"><span class="name">Следующая неделя · W${next}</span>
+    ${range ? `<span class="phase-range">${escapeHtml(range)}</span>` : ''}</div>`;
+
+  if (macro.status) {
+    // Неделя уже запланирована: показываем её состояние и ведём в неё.
+    const label = WEEK_STATUS[macro.status] || macro.status;
+    const focus = macro.goal_text || macro.focus || '';
+    return `<div class="card">${head}
+      ${focus ? `<p class="lead">${escapeHtml(focus)}</p>` : ''}
+      <p class="lead"><span class="badge">${escapeHtml(label)}</span></p>
+      <button class="action secondary" data-week="${next}">Открыть неделю</button>
+    </div>`;
+  }
+
+  // Недели ещё нет: объём известен из макро-плана, планирует её
+  // пользователь — кнопка одна.
+  const volume = `
+    <div class="metrics">
+      <div class="metric"><div class="v">${(macro.run_km || 0).toFixed(0)}</div><div class="l">км</div></div>
+      <div class="metric"><div class="v">${formatHours((macro.total_h || 0) * 60)}</div><div class="l">ч · план</div></div>
+      <div class="metric"><div class="v">${macro.sessions_target || 0}</div><div class="l">сессий</div></div>
+    </div>`;
+  return `<div class="card">${head}
+    ${volume}
+    <button class="action primary" id="plan-next-week">Спланировать неделю</button>
+  </div>`;
 }
 
 /* Непривязанные тренировки — под размещёнными.
@@ -578,13 +646,26 @@ function weekActions(week) {
   }
 
   // proposed: неделю можно пересобрать или оживить.
+  //
+  // Активация — только после закрытия предыдущей недели (I45). Пока
+  // предыдущая не закрыта, активировать нельзя: неделя ждёт очереди.
+  // Правило решает сервер, клиент только показывает его ответ.
+  const blockedBy = week.activate_blocked_by;
+  const canActivate = week.can_activate !== false && !blockedBy;
   const disabled = state.busy ? ' disabled' : '';
+  // Кнопка заблокирована и во время команды, и пока активация закрыта
+  // правилом: активировать нельзя, пока предыдущая неделя не закрыта.
+  const activateAttr = (state.busy || !canActivate) ? ' disabled' : '';
+  const blockedNote = blockedBy
+    ? `<p class="lead">Активация — после закрытия недели ${escapeHtml(blockedBy)}</p>`
+    : '';
   return `<div class="card"><div class="chead">Неделя ${escapeHtml(label)}</div>
     <p class="lead">${(week.workouts || []).length} тренировок · `
     + `${state.actual.length} сессий в факте</p>
+    ${blockedNote}
     <div class="action-row">
       <button class="action" id="propose"${disabled}>Предложить заново</button>
-      <button class="action primary" id="activate"${disabled}>Активировать неделю</button>
+      <button class="action primary" id="activate"${activateAttr}>Активировать неделю</button>
     </div></div>`;
 }
 
@@ -737,10 +818,15 @@ function screenSeason() {
  *
  * Закрытая неделя — с фактом; тап открывает её. Текущая и будущие —
  * без факта: план ещё не исполнен, и выдумывать итог нельзя.
+ *
+ * Следующая неделя (та, что после текущей) — кликабельна: её можно
+ * спланировать до закрытия текущей. Дальние недели — нет: наперёд
+ * планируется одна неделя.
  */
 function macroWeekRow(week, color) {
   const closed = week.status === 'closed';
   const current = week.season_week === state.seasonWeek;
+  const next = week.season_week === nextPlannableWeek();
   const badge = closed
     ? `<span class="badge done">факт</span>`
     : (week.status
@@ -749,7 +835,7 @@ function macroWeekRow(week, color) {
   const volume = week.run_km
     ? `<span class="vol">${Math.round(week.run_km)} км · ${formatHours(week.total_h * 60)} ч</span>`
     : '';
-  const clickable = closed || week.status;
+  const clickable = closed || week.status || next;
   const tag = clickable ? 'button' : 'div';
   const attrs = clickable
     ? ` data-week="${week.season_week}" id="season-week-${week.season_week}"`
@@ -1566,8 +1652,11 @@ async function load() {
 
     // Текущая неделя — по дате на сервере: клиент не знает про начало сезона.
     // Ручной выбор в localStorage перекрывает.
-    if (!state.seasonWeek && current) {
-      state.seasonWeek = current.data.season_week;
+    if (current) {
+      state.currentWeek = current.data.season_week;
+      if (!state.seasonWeek) {
+        state.seasonWeek = current.data.season_week;
+      }
     }
     const seasonWeek = state.seasonWeek;
 
@@ -1839,6 +1928,34 @@ document.addEventListener('click', async (event) => {
   if (closest('#plan-week')) {
     await runWeekCommand('propose_week', 'Планирую неделю…',
       'Неделя спланирована — проверь и активируй');
+    return;
+  }
+
+  /* Спланировать следующую неделю — до закрытия текущей.
+   *
+   * Команда уходит на неделю после текущей: туда и возвращаемся. */
+  if (closest('#plan-next-week')) {
+    const next = nextPlannableWeek();
+    if (!next) return;
+    showMessage('Планирую следующую неделю…');
+    state.busy = true;
+    render();
+    await queueCommand({
+      id: `propose-${next}-${Date.now()}`,
+      type: 'propose_week',
+      args: { season_week: next },
+      reason: 'планирование следующей недели',
+      expected_version: state.version,
+    });
+    await flushOutbox();
+    await load();
+    state.busy = false;
+    if (state.messageKind === 'error' && state.message) {
+      render();
+      return;
+    }
+    showMessage('Следующая неделя спланирована');
+    render();
     return;
   }
 

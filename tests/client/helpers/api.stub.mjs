@@ -29,7 +29,9 @@ export function getCurrentWeek() {
   const f = fixture();
   return Promise.resolve({
     version: f.version ?? 42,
-    data: {season_week: f.seasonWeek ?? 3},
+    // Неделя сезона по календарю. Ручной выбор недели хранится отдельно
+    // (localStorage) и может указывать на другую неделю.
+    data: {season_week: f.currentWeek ?? f.seasonWeek ?? 3},
   });
 }
 

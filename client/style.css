@@ -1002,6 +1002,29 @@ button.macro-week:active {
   color: var(--bg);
 }
 
+/* Заблокированная кнопка видна как заблокированная.
+ *
+ * Без этого правила кнопка выглядит живой, хотя `disabled` стоит:
+ * пользователь жмёт и ничего не происходит. Особенно заметно у
+ * активации недели, которая ждёт закрытия предыдущей.
+ *
+ * Правило идёт **после** `.action.primary` — иначе заливка primary
+ * перебивает его по порядку объявления, и кнопка выглядит живой.
+ */
+.action.primary:disabled,
+.action:disabled {
+  color: var(--muted);
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.action.primary:disabled:active,
+.action:disabled:active {
+  opacity: 0.65;
+}
+
 /* ------------------------------------------------------------------ списки */
 
 ul.plain {

@@ -81,10 +81,37 @@ def _without_actual(workout: Workout) -> Workout:
     )
 
 
-def activate_week(week: Week) -> Week:
-    """proposed → active. Висяки остаются висять: расписание мягкое."""
+def activation_blocker(week: Week, earlier: list[Week]) -> str | None:
+    """Номер недели, которую надо закрыть до активации этой.
+
+    Активация следующей недели доступна только после закрытия
+    предыдущей: пока та не закрыта, активировать нельзя. `None` — можно.
+
+    Возвращается номер недели (`W4`), а не текст: текст собирает тот,
+    кто показывает, — клиент или BFF.
+    """
+    for other in sorted(earlier, key=lambda w: w.season_week):
+        if other.season_week >= week.season_week:
+            continue
+        if other.status is not WeekStatus.CLOSED:
+            return f"W{other.season_week}"
+    return None
+
+
+def activate_week(week: Week, earlier: list[Week] | None = None) -> Week:
+    """proposed → active. Висяки остаются висять: расписание мягкое.
+
+    I45: активировать можно только после закрытия предыдущей недели.
+    Планировать следующую можно и раньше — активировать нельзя.
+    """
     if week.status is not WeekStatus.PROPOSED:
         raise TransitionError(f"активировать можно только proposed, а не {week.status}")
+
+    blocker = activation_blocker(week, earlier or [])
+    if blocker is not None:
+        raise TransitionError(
+            f"активировать можно после закрытия недели {blocker}"
+        )
 
     activated = week.copy_with(status=WeekStatus.ACTIVE)
     activated.validate()

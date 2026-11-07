@@ -33,6 +33,9 @@ const SEASON_PLAN = {
     {season_week: 3, phase_id: 'run_taper', focus: 'taper_race_pace',
      goal_text: 'Снимаем объём', run_km: 16, total_h: 3.15,
      sessions_target: 5, deload: true, status: null, has_fact: false},
+    {season_week: 4, phase_id: 'run_taper', focus: 'taper_race_pace',
+     goal_text: 'Снимаем объём', run_km: 12, total_h: 2.8,
+     sessions_target: 4, deload: true, status: null, has_fact: false},
   ],
 };
 
@@ -139,7 +142,7 @@ test('вкладка «Сезон»: недели по фазам, с фокус
   openSeason();
 
   const rows = document.querySelectorAll('.macro-week');
-  assert.equal(rows.length, 3, 'не все недели макро-плана показаны');
+  assert.equal(rows.length, 4, 'не все недели макро-плана показаны');
 
   const first = rows[0].textContent;
   assert.match(first, /W1/);
@@ -188,11 +191,26 @@ test('вкладка «Сезон»: будущая неделя не клика
   await loadApp();
   openSeason();
 
+  // Текущая неделя — W2, планируется вперёд одна: W3. W4 — дальше
+  // текущей, её не планируют.
   const future = [...document.querySelectorAll('.macro-week')]
-    .find((row) => row.textContent.includes('W3'));
-  assert.ok(future, 'будущая неделя не найдена');
-  assert.equal(future.tagName, 'DIV', 'у будущей недели нет плана — открывать нечего');
+    .find((row) => row.textContent.includes('W4'));
+  assert.ok(future, 'дальняя неделя не найдена');
+  assert.equal(future.tagName, 'DIV', 'дальняя неделя не кликабельна');
   assert.ok(!future.hasAttribute('data-week'));
+});
+
+test('вкладка «Сезон»: следующая неделя кликабельна', async () => {
+  await loadApp();
+  openSeason();
+
+  // W3 — неделя после текущей (W2): её можно спланировать до закрытия
+  // текущей, поэтому строка кликабельна.
+  const next = [...document.querySelectorAll('.macro-week')]
+    .find((row) => row.textContent.includes('W3'));
+  assert.ok(next, 'следующая неделя не найдена');
+  assert.equal(next.tagName, 'BUTTON', 'следующая неделя должна быть кликабельна');
+  assert.equal(next.dataset.week, '3');
 });
 
 test('вкладка «Сезон»: без макро-плана — понятное сообщение', async () => {

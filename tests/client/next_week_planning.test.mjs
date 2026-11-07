@@ -1,0 +1,263 @@
+/* UI-тесты планирования следующей недели до закрытия текущей.
+ *
+ * Проверяем то, что просил Кирилл: закрыл неделю, а следующей
+ * планировать негде — кнопки нет. Теперь она есть: карточка на экране
+ * недели и кликабельная строка в «Сезоне».
+ *
+ * Импортируется настоящий `client/app.js` — с его рендером и обработчиками
+ * клика. Вместо сети и IndexedDB подставляются заглушки (см. helpers/).
+ */
+import {test, beforeEach} from 'node:test';
+import assert from 'node:assert/strict';
+
+import {JSDOM} from 'jsdom';
+
+/* ------------------------------------------------------------------ фикстуры */
+
+function makeWeek(status, extra = {}) {
+  return {
+    id: 'W4',
+    season_week: 4,
+    start: '2026-11-01',
+    end: '2026-11-07',
+    status,
+    focus: 'Развиваем VO2max',
+    load_target: {hours: 6.24, sessions: 7, distance_m: 35000},
+    requests: [],
+    assignments: [],
+    unplaced: [],
+    workouts: [],
+    summary: null,
+    can_activate: true,
+    activate_blocked_by: null,
+    ...extra,
+  };
+}
+
+const SNAPSHOT = {
+  season: {horizon: {start: '2026-10-11', end: '2027-09-18', season_week_count: 49}},
+  athlete: {vdot: 48, hr_max: 182, lth: 164, hr_zones: {}},
+};
+
+/* Текущая неделя — W4, планируется вперёд W5. */
+const SEASON_PLAN = {
+  id: 'S1',
+  horizon: {start: '2026-10-11', end: '2027-09-18', season_week_count: 49},
+  plans: [{id: 'g1', status: 'active', goal: '40:00',
+           race_date: '2027-04-18', venue: 'S25 Berlin 10K'}],
+  phases: [{id: 'run_base', objective: 'Поднимаем базовый объём',
+            week_from: 1, week_to: 5}],
+  macro_weeks: [
+    {season_week: 4, phase_id: 'run_base', focus: 'vo2max',
+     goal_text: 'Развиваем VO2max', run_km: 35, total_h: 6.24,
+     sessions_target: 7, deload: false, status: 'active', has_fact: false,
+     start: '2026-11-01', end: '2026-11-07'},
+    {season_week: 5, phase_id: 'run_base', focus: 'threshold',
+     goal_text: 'Порог', run_km: 38, total_h: 6.8,
+     sessions_target: 7, deload: false, status: null, has_fact: false,
+     start: '2026-11-08', end: '2026-11-14'},
+    {season_week: 6, phase_id: 'run_base', focus: 'tempo',
+     goal_text: 'Темп', run_km: 40, total_h: 7.0,
+     sessions_target: 7, deload: false, status: null, has_fact: false,
+     start: '2026-11-15', end: '2026-11-21'},
+  ],
+};
+
+/* ------------------------------------------------------------------ dom */
+
+let dom;
+
+function setupDom() {
+  dom = new JSDOM('<!doctype html><html><body>'
+    + '<div id="appbar"></div><div id="picker"></div>'
+    + '<div id="cardWrap" class="hidden"><div id="cardHost"></div></div>'
+    + '<div id="detailWrap" class="hidden"><div id="detailHost"></div></div>'
+    + '<nav id="nav"></nav></body></html>',
+    {url: 'http://localhost/'});
+
+  const put = (key, value) => Object.defineProperty(globalThis, key, {
+    value, configurable: true, writable: true,
+  });
+  put('window', dom.window);
+  put('document', dom.window.document);
+  put('navigator', dom.window.navigator);
+  put('location', dom.window.location);
+  put('localStorage', dom.window.localStorage);
+  put('history', dom.window.history);
+  put('HTMLElement', dom.window.HTMLElement);
+  put('Element', dom.window.Element);
+  put('Node', dom.window.Node);
+  put('CustomEvent', dom.window.CustomEvent);
+  put('Event', dom.window.Event);
+  put('MouseEvent', dom.window.MouseEvent);
+  put('getComputedStyle', dom.window.getComputedStyle.bind(dom.window));
+  return dom;
+}
+
+async function loadApp({week, onCommand, currentWeek = 4, selectedWeek} = {}) {
+  setupDom();
+  // Ручной выбор недели живёт в localStorage: клиент читает его при
+  // загрузке. Без него берётся неделя по календарю.
+  if (selectedWeek) {
+    localStorage.setItem('coach-app-week', String(selectedWeek));
+  }
+  globalThis.__fixture = {
+    version: 42,
+    seasonWeek: selectedWeek ?? currentWeek,
+    currentWeek,
+    snapshot: SNAPSHOT,
+    week: week || makeWeek('active'),
+    actual: [],
+    weeks: [],
+    details: {},
+    seasonPlan: SEASON_PLAN,
+    onCommand,
+  };
+  const url = new URL('../../client/app.js', import.meta.url).href;
+  await import(`${url}?t=${Date.now()}${Math.random()}`);
+  await waitFor(() => document.getElementById('nav').children.length > 0);
+}
+
+async function waitFor(predicate, timeout = 3000) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    if (predicate()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return false;
+}
+
+function click(element) {
+  element.dispatchEvent(new global.window.MouseEvent('click', {
+    bubbles: true, cancelable: true,
+  }));
+}
+
+function sentCommands() {
+  return globalThis.__fixture.sent || [];
+}
+
+/* ------------------------------------------------------------------ тесты */
+
+beforeEach(() => {
+  globalThis.__fixture = undefined;
+});
+
+test('на экране недели есть карточка следующей недели', async () => {
+  await loadApp();
+
+  const text = document.getElementById('picker').textContent;
+  assert.match(text, /Следующая неделя/, 'нет карточки следующей недели');
+  assert.match(text, /W5/, 'не указан номер следующей недели');
+  assert.ok(document.querySelector('#plan-next-week'),
+    'нет кнопки «Спланировать неделю» для следующей недели');
+});
+
+test('карточка показывает объём следующей недели из макро-плана', async () => {
+  await loadApp();
+
+  const card = document.querySelector('#plan-next-week').closest('.card');
+  const text = card.textContent;
+  assert.match(text, /38/, 'нет километража следующей недели');
+  assert.match(text, /6\.8/, 'нет часов следующей недели');
+});
+
+test('нажатие шлёт propose_week для следующей недели', async () => {
+  const sent = [];
+  await loadApp({
+    onCommand: (command) => {
+      sent.push(command);
+      return Promise.resolve({version: 43, data: {status: 'applied'}});
+    },
+  });
+
+  click(document.querySelector('#plan-next-week'));
+  await waitFor(() => sent.length > 0);
+
+  assert.equal(sent[0].type, 'propose_week');
+  assert.equal(sent[0].args.season_week, 5, 'планироваться должна следующая неделя');
+  assert.ok(sent[0].reason, 'у команды нет причины');
+});
+
+test('на своей следующей неделе карточки нет', async () => {
+  await loadApp({week: makeWeek('active'), currentWeek: 4, selectedWeek: 5});
+
+  const text = document.getElementById('picker').textContent;
+  assert.ok(!text.includes('Следующая неделя'),
+    'на самой следующей неделе карточка не нужна');
+});
+
+test('спланированная следующая неделя открывается, а не планируется заново',
+  async () => {
+    const plan = {
+      ...SEASON_PLAN,
+      macro_weeks: SEASON_PLAN.macro_weeks.map((w) => (
+        w.season_week === 5 ? {...w, status: 'proposed'} : w)),
+    };
+    setupDom();
+    globalThis.__fixture = {
+      version: 42,
+      seasonWeek: 4,
+      currentWeek: 4,
+      snapshot: SNAPSHOT,
+      week: makeWeek('active'),
+      actual: [],
+      weeks: [],
+      details: {},
+      seasonPlan: plan,
+    };
+    const url = new URL('../../client/app.js', import.meta.url).href;
+    await import(`${url}?t=${Date.now()}${Math.random()}`);
+    await waitFor(() => document.getElementById('nav').children.length > 0);
+
+    const card = document.querySelector('#plan-next-week')?.closest('.card')
+      || [...document.querySelectorAll('.card')]
+        .find((c) => c.textContent.includes('Следующая неделя'));
+    assert.ok(card, 'нет карточки следующей недели');
+    const open = card.querySelector('[data-week="5"]');
+    assert.ok(open, 'нет кнопки открытия запланированной недели');
+    assert.ok(!document.querySelector('#plan-next-week'),
+      'запланированную неделю не планируют заново');
+    assert.match(card.textContent, /предложена/);
+  });
+
+test('кнопка активации заблокирована, пока предыдущая неделя не закрыта',
+  async () => {
+    await loadApp({
+      week: makeWeek('proposed', {can_activate: false, activate_blocked_by: 'W3'}),
+      currentWeek: 3,
+    });
+
+    const activate = document.querySelector('#activate');
+    assert.ok(activate, 'нет кнопки активации');
+    assert.ok(activate.disabled, 'активация должна быть недоступна');
+    const text = document.getElementById('picker').textContent;
+    assert.match(text, /W3/, 'не сказано, после закрытия какой недели');
+  });
+
+test('после закрытия предыдущей активация доступна', async () => {
+  await loadApp({
+    week: makeWeek('proposed', {can_activate: true, activate_blocked_by: null}),
+    currentWeek: 3,
+  });
+
+  const activate = document.querySelector('#activate');
+  assert.ok(activate, 'нет кнопки активации');
+  assert.ok(!activate.disabled, 'активация должна быть доступна');
+});
+
+test('в «Сезоне» следующая неделя кликабельна, дальняя — нет', async () => {
+  await loadApp();
+
+  click(document.querySelector('#nav [data-screen="season"]'));
+
+  const next = [...document.querySelectorAll('.macro-week')]
+    .find((row) => row.textContent.includes('W5'));
+  assert.ok(next, 'следующая неделя не найдена');
+  assert.equal(next.tagName, 'BUTTON', 'следующая неделя должна быть кликабельна');
+
+  const far = [...document.querySelectorAll('.macro-week')]
+    .find((row) => row.textContent.includes('W6'));
+  assert.ok(far, 'дальняя неделя не найдена');
+  assert.equal(far.tagName, 'DIV', 'дальняя неделя не кликабельна');
+});
