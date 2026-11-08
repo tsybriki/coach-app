@@ -12,6 +12,7 @@ from pathlib import Path
 
 from fastapi import Request
 
+from app.adapters.composer import MiniMaxComposer
 from app.adapters.garmin import GarminActivityPort, GarminFitPort
 from app.adapters.storage.files import FileStorage
 from app.adapters.storage.ports import (
@@ -34,8 +35,10 @@ from app.ports.storage import (
     MethodologyRepo,
     NarratorPort,
     SeasonRepo,
+    WorkoutComposerPort,
 )
 from app.services.assessment import Assessor
+from app.services.composer import WorkoutComposer
 from app.services.detail_import import DetailImporter
 from app.services.form_metrics import MetricsCollector
 from app.services.goal_feasibility import GoalFeasibility, StubGrowthRule
@@ -113,6 +116,8 @@ class AppContainer:
     clock: Clock
     metrics: MetricsCollector
     detail_importer: DetailImporter
+    composer: WorkoutComposer
+    composer_port: WorkoutComposerPort
 
 
 def build_container(data_root: Path | None = None) -> AppContainer:
@@ -173,6 +178,11 @@ def build_container(data_root: Path | None = None) -> AppContainer:
         athlete_repo=athlete_repo,
     )
 
+    # Разбор текста пожеланий — через модель. Ключ в окружении сервиса;
+    # без него кнопка «Предложить тренировку» просто недоступна, а
+    # обычное планирование не ломается.
+    composer_port = MiniMaxComposer()
+
     return AppContainer(
         storage=storage,
         season_repo=SeasonRepoAdapter(storage),
@@ -190,6 +200,8 @@ def build_container(data_root: Path | None = None) -> AppContainer:
         clock=SystemClock(),
         metrics=metrics,
         detail_importer=detail_importer,
+        composer=WorkoutComposer(composer_port),
+        composer_port=composer_port,
     )
 
 

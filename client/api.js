@@ -73,6 +73,18 @@ export function getFtpEstimate() {
   return request('/api/v1/ftp-estimate');
 }
 
+/* Разбор текста пожеланий в структуру тренировки.
+ *
+ * Это чтение: неделя не меняется, ничего не сохраняется. Сервер
+ * возвращает шаги с зонами и темпами — их посчитал домен по профилю.
+ */
+export function composeWorkout(text, seasonWeek) {
+  return request('/api/v1/compose', {
+    method: 'POST',
+    body: JSON.stringify({text, season_week: seasonWeek ?? null}),
+  });
+}
+
 export async function getSlots() {
   return request('/api/v1/slots');
 }

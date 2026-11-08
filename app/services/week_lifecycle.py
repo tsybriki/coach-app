@@ -304,6 +304,54 @@ def unplace_request(week: Week, request_id: str) -> Week:
     return updated
 
 
+def remove_workout(week: Week, workout_id: str) -> Week:
+    """Удалить тренировку из недели.
+
+    **Только пока неделя не активна.** Активная неделя — это то, что уже
+    исполняется: её тренировки привязаны к факту, и удаление тренировки
+    порвало бы связь с фактом. Закрытая неделя не меняется вообще (I23).
+
+    Правило: удалять можно у `proposed`-недели. Это ровно то окно, когда
+    план ещё можно переделать: пользователь увидел, что тренировка не
+    та, и убрал её.
+
+    Удаляются вместе с тренировкой:
+      - её запрос (`Request`) — из `requests` и `unplaced`;
+      - её размещение (`Assignment`) — из `assignments`.
+
+    Иначе остался бы запрос без тренировки, и неделю нельзя было бы
+    собрать заново.
+    """
+    if week.status is not WeekStatus.PROPOSED:
+        # Статусы — внутренние (active, closed), пользователю это
+        # ничего не говорит. Поэтому по-русски и словами.
+        labels = {
+            WeekStatus.ACTIVE: "активной",
+            WeekStatus.CLOSED: "закрытой",
+        }
+        raise TransitionError(
+            f"удалить тренировку можно только в запланированной неделе, "
+            f"а не в {labels.get(week.status, week.status.value)}"
+        )
+
+    workout = next((w for w in week.workouts if w.id == workout_id), None)
+    if workout is None:
+        raise TransitionError(
+            f"в неделе {week.id} нет тренировки {workout_id}"
+        )
+
+    request_id = workout.request_id
+    updated = week.copy_with(
+        requests=[r for r in week.requests if r.id != request_id],
+        unplaced=[r for r in week.unplaced if r.id != request_id],
+        assignments=[a for a in week.assignments
+                     if a.request_id != request_id],
+        workouts=[w for w in week.workouts if w.id != workout_id],
+    )
+    updated.validate()
+    return updated
+
+
 def check_status_changed_by_command(week: Week, command: Command) -> None:
     """I19: статус недели меняется только через Command."""
     if command.type not in (

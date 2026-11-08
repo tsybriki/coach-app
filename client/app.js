@@ -39,6 +39,11 @@ const state = {
   detail: null,
   detailId: null,        // разбор какой факта открыт
   workoutMetrics: null,  // метрики открытой фактической тренировки
+  compose: null,         // разбор текста: что получилось из пожеланий
+  composeText: '',       // исходный текст пожеланий
+  composeBusy: false,    // идёт разбор: ждём модель
+  composeError: null,    // разбор не удался
+  composeAvailable: true, // доступен ли разбор (есть ли ключ модели)
   weeks: [],
   summary: null,
   seasonPlan: null,      // макро-план сезона: фазы и недели целиком
@@ -97,6 +102,12 @@ function chromeBar() {
       : 'Разбор тренировки';
     return detailBar(title, fact ? fact.date : '');
   }
+  // Разбор тренировки — подэкран недели: кнопка «назад» возвращает
+  // в неё, а не вниз по истории приложения.
+  if (state.screen === 'compose') {
+    return detailBar('Предложить тренировку',
+                     state.week ? `Неделя ${state.week.season_week}` : '');
+  }
   if (state.openWorkoutId && state.week) {
     /* Тренировка может быть непривязанной — тогда у неё нет дня, и
      * в шапке это видно по подписи «не привязано». */
@@ -150,6 +161,10 @@ function screenTitle() {
   if (state.screen === 'week') {
     return state.week ? `Неделя ${state.week.season_week}` : 'Неделя';
   }
+  // Разбор тренировки — подэкран недели, в нижней навигации его нет.
+  if (state.screen === 'compose') {
+    return 'Предложить тренировку';
+  }
   const found = SCREENS.find(([id]) => id === state.screen);
   return found ? found[1] : 'Coach';
 }
@@ -177,6 +192,7 @@ function renderScreen() {
     : state.screen === 'season' ? screenSeason()
     : state.screen === 'fact' ? screenFact()
     : state.screen === 'close' ? screenClose()
+    : state.screen === 'compose' ? screenCompose()
     : screenAthlete();
   picker.innerHTML = body;
 }
@@ -672,6 +688,16 @@ function screenWeekMissing() {
   const week = state.seasonWeek;
   const macro = (state.seasonPlan?.macro_weeks || [])
     .find((w) => w.season_week === week);
+  /* Кнопка предложения — и здесь.
+   *
+   * Неделя ещё не спланирована, и предложить ей тренировку из текста
+   * как раз и нужно: пользователь описал тренировку, а неделю планировать
+   * целиком он не хочет. Тренировка станет висяком внутри ещё не
+   * спланированной недели — а неделя при этом появится.
+   */
+  const composeBtn = state.composeAvailable === false
+    ? ''
+    : `<button class="action secondary" id="compose-open">Предложить тренировку</button>`;
   const plan = macro
     ? `<div class="totals-card">
         <div class="metrics">
@@ -689,7 +715,8 @@ function screenWeekMissing() {
       <p class="lead">Объём взят из макро-плана сезона, качественная работа —
       по правилам Дэниэлса, время — по твоим окнам тренировок.</p>
     </div>
-    <button class="action primary" id="plan-week"${disabled}>Спланировать неделю</button>`;
+    <button class="action primary" id="plan-week"${disabled}>Спланировать неделю</button>
+    ${composeBtn}`;
 }
 
 /* Действия недели — по её статусу.
@@ -717,7 +744,7 @@ function weekActions(week) {
       <button class="action" id="close"${disabled}>Закрыть неделю</button></div>`;
   }
 
-  // proposed: неделю можно пересобрать или оживить.
+  // proposed: неделю можно пересобрать, оживить или дополнить тренировкой.
   //
   // Активация — только после закрытия предыдущей недели (I45). Пока
   // предыдущая не закрыта, активировать нельзя: неделя ждёт очереди.
@@ -725,16 +752,27 @@ function weekActions(week) {
   const blockedBy = week.activate_blocked_by;
   const canActivate = week.can_activate !== false && !blockedBy;
   const disabled = state.busy ? ' disabled' : '';
-  // Кнопка заблокирована и во время команды, и пока активация закрыта
+  // Кнопка активации заблокирована и во время команды, и пока активация закрыта
   // правилом: активировать нельзя, пока предыдущая неделя не закрыта.
   const activateAttr = (state.busy || !canActivate) ? ' disabled' : '';
   const blockedNote = blockedBy
     ? `<p class="lead">Активация — после закрытия недели ${escapeHtml(blockedBy)}</p>`
     : '';
+  /* Кнопка «Предложить тренировку» — только пока неделя не активна.
+   *
+   * В активной неделе план уже исполняется: добавлять тренировки и
+   * удалять их — значит менять то, что уже начали делать. В proposed
+   * неделе план ещё можно переделать — это и есть время предлагать и
+   * убирать лишнее.
+   */
+  const composeBtn = state.composeAvailable === false
+    ? ''
+    : `<button class="action secondary" id="compose-open">Предложить тренировку</button>`;
   return `<div class="card"><div class="chead">Неделя ${escapeHtml(label)}</div>
     <p class="lead">${(week.workouts || []).length} тренировок · `
     + `${state.actual.length} сессий в факте</p>
     ${blockedNote}
+    ${composeBtn}
     <div class="action-row">
       <button class="action" id="propose"${disabled}>Предложить заново</button>
       <button class="action primary" id="activate"${activateAttr}>Активировать неделю</button>
@@ -1195,6 +1233,75 @@ function screenClose() {
     <button class="action" id="close">Закрыть неделю</button>`;
 }
 
+/* Экран «Предложить тренировку»: текст пожеланий → структура.
+ *
+ * Два состояния: ввод текста и результат разбора. Разбор — чтение,
+ * неделя не меняется; добавление в неделю — отдельное действие.
+ */
+function screenCompose() {
+  const busy = state.composeBusy;
+  const head = `<div class="card">
+      <div class="chead">Предложить тренировку</div>
+      <p class="lead">Опиши тренировку как хочешь. Разберу сам и покажу
+      структуру до того, как она попадёт в неделю.</p>
+    </div>`;
+
+  const input = `<div class="card">
+      <textarea id="compose-text" placeholder="Например: 12 км, 3 км разминка, дальше фартлек, заминка 1 км">${escapeHtml(state.composeText)}</textarea>
+      <div class="chips">
+        ${['12 км с фартлеком', 'Интервалы 8×400', 'Темповая 40 минут', 'Лёгкая 50 минут']
+          .map((t) => `<button class="chip" data-compose-example="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('')}
+      </div>
+      ${state.composeError ? `<div class="msg error" id="compose-error">${escapeHtml(state.composeError)}</div>` : ''}
+      <button class="action primary" id="compose-run"${busy ? ' disabled' : ''}>${busy ? 'Разбираю…' : 'Разобрать'}</button>
+    </div>`;
+
+  if (!state.compose) return `${head}${input}`;
+
+  const c = state.compose;
+  const steps = (c.steps || []).map((s) => {
+    const step = s.step || {};
+    const focus = step.focus_value || {};
+    const detail = [
+      focus.zone ? `пульс до ${focus.zone}` : '',
+      focus.pace_min_per_km ? `${focus.pace_min_per_km}/км` : '',
+      focus.hr_target ? `HR ${focus.hr_target}` : '',
+    ].filter((x) => x).join(' · ');
+    const amount = step.target_type === 'distance'
+      ? `${(step.target_value / 1000).toFixed(1).replace('.', ',')} км`
+      : `${Math.round(step.target_value)} мин`;
+    const role = ROLE_RU[step.role] || step.role || '';
+    return `<div class="mrow">
+        <span class="mname">${escapeHtml(role)}</span>
+        <span class="mval">${escapeHtml(amount)}</span>
+        ${detail ? `<span class="mnote">${escapeHtml(detail)}</span>` : ''}
+      </div>`;
+  }).join('');
+
+  const assumptions = (c.assumptions || []).length
+    ? `<div class="card"><div class="chead">Что я додумал</div>
+        <ul class="plain">${c.assumptions.map((a) => `<li>${escapeHtml(a)}</li>`).join('')}</ul>
+      </div>`
+    : '';
+
+  const total = `${(c.distance_m / 1000).toFixed(1).replace('.', ',')} км · ${formatDuration(c.duration_min)}`;
+
+  return `${head}
+    <div class="card">
+      <div class="chead">${escapeHtml(c.name || 'Тренировка')}</div>
+      <div class="metrics-list">${steps}</div>
+      <div class="mrow total"><span class="mname">Итого</span>
+        <span class="mval">${escapeHtml(total)}</span></div>
+    </div>
+    ${assumptions}
+    <div class="card">
+      <p class="lead">Тренировка станет непривязанной: время и окно
+      выберешь сам.</p>
+      <button class="action primary" id="compose-add">Добавить в неделю</button>
+      <button class="action secondary" id="compose-reset">Изменить текст</button>
+    </div>`;
+}
+
 function screenAthlete() {
   if (!state.athlete) return empty('Профиль ещё не загружен');
   const a = state.athlete;
@@ -1524,11 +1631,18 @@ function findWorkout(workoutId) {
  * У висяка в `week.unplaced` уже есть всё, что нужно для экрана
  * деталей: название, объект, шаги. Приводим к тому же виду, что и
  * размещённая тренировка, чтобы экран деталей был один.
+ *
+ * **id — разные вещи.** id висяка — это id запроса (`r-...`), а у
+ * тренировки свой (`w-...`). Экран деталей должен знать id тренировки:
+ * по нему удаляют. Поэтому берём `workout_id` из ответа, а если его
+ * нет (старые данные) — ищем тренировку по запросу.
  */
 function unplacedWorkout(u) {
+  const week = state.week || {};
+  const own = (week.workouts || []).find((w) => w.request_id === u.id);
   return {
-    id: u.id,
-    request_id: u.id,
+    id: u.workout_id || (own ? own.id : u.id),
+    request_id: u.request_id || u.id,
     sport: u.sport,
     kind: u.kind,
     focus: u.focus,
@@ -1640,6 +1754,23 @@ function showWorkout(workoutId, skipMetrics = false) {
       </div>`
       : '';
 
+  /* Кнопка удаления — только пока неделя не активна.
+   *
+   * В активной неделе план уже исполняется: удалять тренировку из неё
+   * нельзя (и сервер не даст). В proposed-неделе план ещё можно
+   * переделать — это и есть время убрать лишнее.
+   */
+  const weekStatus = state.week ? (state.week.status || 'proposed') : 'proposed';
+  const removeBlock = weekStatus === 'proposed'
+    ? `<div class="card"><div class="chead">Удалить тренировку</div>
+        <p class="lead">Пока неделя не активирована, тренировку можно
+        убрать из плана.</p>
+        <button class="action secondary" data-remove-workout="${escapeHtml(workout.id)}">
+          Удалить тренировку
+        </button>
+      </div>`
+    : '';
+
   /* Подзаголовок: день, время, длительность и километраж.
    *
    * Километраж плана — рядом с длительностью: в карточке тренировки
@@ -1666,6 +1797,7 @@ function showWorkout(workoutId, skipMetrics = false) {
       ${structureHtml(workout)}
       ${bindBlock}
       ${actualBlock}
+      ${removeBlock}
     </div>
     <div id="detail-block"></div>`;
 
@@ -2030,6 +2162,9 @@ async function load() {
       state.week = week.data;
       // Метрики формы — с неделей: сервер считает их из разборов.
       state.metrics = week.data.metrics || null;
+      // Доступен ли разбор текста в тренировку: без ключа модели
+      // кнопку «Предложить тренировку» не показываем.
+      state.composeAvailable = week.data.compose_available !== false;
       cacheWrites.push(putCache(`week:${seasonWeek}`, week.data, snapshot.version));
     } else {
       state.week = null;
@@ -2169,6 +2304,10 @@ document.addEventListener('click', async (event) => {
     if (state.detailId) {
       // с разбора — к тренировке
       showDetailBack();
+    } else if (state.screen === 'compose') {
+      // с разбора тренировки — к неделе
+      state.screen = 'week';
+      showPicker();
     } else if (history.state && history.state.page === 'detail') {
       history.back();
     } else {
@@ -2359,6 +2498,132 @@ document.addEventListener('click', async (event) => {
       return;
     }
     showMessage(`Порог мощности: ${ftp} Вт`);
+    render();
+    return;
+  }
+
+  /* Открыть экран разбора тренировки. */
+  if (closest('#compose-open')) {
+    state.screen = 'compose';
+    state.compose = null;
+    state.composeError = null;
+    state.composeText = '';
+    showPicker();
+    return;
+  }
+
+  /* Пример пожелания — подставляется в поле. */
+  const example = closest('[data-compose-example]');
+  if (example) {
+    state.composeText = example.dataset.composeExample || '';
+    state.compose = null;
+    state.composeError = null;
+    render();
+    return;
+  }
+
+  /* Разобрать текст в структуру. */
+  if (closest('#compose-run')) {
+    const field = document.getElementById('compose-text');
+    const text = (field ? field.value : state.composeText) || '';
+    if (!text.trim()) {
+      state.composeError = 'Опиши тренировку — пустым текстом её не сделать';
+      render();
+      return;
+    }
+    state.composeText = text;
+    state.composeBusy = true;
+    state.composeError = null;
+    render();
+    try {
+      const response = await api.composeWorkout(text, state.seasonWeek);
+      state.compose = response.data;
+    } catch (error) {
+      state.compose = null;
+      state.composeError = error.message || 'не удалось разобрать текст';
+    }
+    state.composeBusy = false;
+    render();
+    return;
+  }
+
+  /* Вернуться к тексту: разбор можно поправить. */
+  if (closest('#compose-reset')) {
+    state.compose = null;
+    state.composeError = null;
+    render();
+    return;
+  }
+
+  /* Добавить разобранную тренировку в неделю — висяком. */
+  if (closest('#compose-add')) {
+    const c = state.compose;
+    if (!c) return;
+    const intents = (c.steps || []).map((s) => {
+      const step = s.step || {};
+      return {
+        role: step.role,
+        sport: step.sport,
+        target_type: step.target_type,
+        target_value: step.target_value,
+        intent: (step.focus_value || {}).intent || 'easy',
+        label: step.label || '',
+        reps: 1,
+        rest_type: 'distance',
+        rest_value: 0,
+      };
+    });
+    showMessage('Добавляю тренировку в неделю…');
+    state.busy = true;
+    render();
+    await queueCommand({
+      id: `compose-add-${Date.now()}`,
+      type: 'add_composed_workout',
+      args: {
+        season_week: state.seasonWeek,
+        name: c.name,
+        assumptions: c.assumptions || [],
+        source_text: c.source_text || state.composeText,
+        intents,
+      },
+      reason: 'тренировка из твоего описания',
+      expected_version: state.version,
+    });
+    await flushOutbox();
+    await load();
+    state.busy = false;
+    state.screen = 'week';
+    state.compose = null;
+    if (state.messageKind === 'error' && state.message) {
+      render();
+      return;
+    }
+    showMessage('Тренировка добавлена — привяжи её к окну');
+    render();
+    return;
+  }
+
+  /* Удалить тренировку. Кнопка есть только у неактивной недели. */
+  if (closest('[data-remove-workout]')) {
+    const workoutId = closest('[data-remove-workout]').dataset.removeWorkout;
+    showMessage('Удаляю тренировку…');
+    state.busy = true;
+    render();
+    await queueCommand({
+      id: `remove-workout-${Date.now()}`,
+      type: 'remove_workout',
+      args: {season_week: state.seasonWeek, workout_id: workoutId},
+      reason: 'удаление тренировки из недели',
+      expected_version: state.version,
+    });
+    await flushOutbox();
+    await load();
+    state.busy = false;
+    if (state.messageKind === 'error' && state.message) {
+      render();
+      return;
+    }
+    showMessage('Тренировка удалена');
     render();
     return;
   }

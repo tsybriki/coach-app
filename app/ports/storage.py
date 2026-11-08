@@ -11,6 +11,7 @@ from datetime import date
 from pathlib import Path
 from typing import Protocol
 
+from app.domain.composition import WorkoutIntent
 from app.domain.entities import (
     ActualSession,
     Athlete,
@@ -20,6 +21,7 @@ from app.domain.entities import (
     Week,
     WorkoutDetail,
 )
+from app.domain.enums import Sport
 from app.domain.methodology import DanielsPaces, MethodPlan
 
 
@@ -191,6 +193,88 @@ class NarratorPort(Protocol):
         ...
 
 
+class ComposeContext:
+    """То, что модель должна знать о спортсмене.
+
+    Без контекста «интенсивная» — это чья интенсивность: у другого
+    спортсмена «порог» — это другой пульс и другой темп. Модель говорит
+    **намерение** («порог»), а числа домен подставляет сам.
+
+    `pace_by_zone` — темпы по зонам правила, секунды на километр: нужны,
+    чтобы оценить, влезает ли тренировка в неделю.
+    """
+
+    def __init__(
+        self,
+        athlete_name: str = "",
+        vdot: float | None = None,
+        hr_zones: dict[str, tuple[int, int]] | None = None,
+        hr_max: int = 0,
+        week_load_km: float = 0.0,
+        week_load_hours: float = 0.0,
+        pace_by_zone: dict[str, float] | None = None,
+    ) -> None:
+        self.athlete_name = athlete_name
+        self.vdot = vdot
+        self.hr_zones = hr_zones or {}
+        self.hr_max = hr_max
+        self.week_load_km = week_load_km
+        self.week_load_hours = week_load_hours
+        self.pace_by_zone = pace_by_zone or {}
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "athlete_name": self.athlete_name,
+            "vdot": self.vdot,
+            "hr_zones": {
+                name: {"low": low, "high": high}
+                for name, (low, high) in self.hr_zones.items()
+            },
+            "hr_max": self.hr_max,
+            "week_load_km": self.week_load_km,
+            "week_load_hours": self.week_load_hours,
+        }
+
+
+class ComposedPlan(Protocol):
+    """Намерения тренировки, разобранные из текста."""
+
+    @property
+    def name(self) -> str:
+        """Название тренировки."""
+        ...
+
+    @property
+    def sport(self) -> Sport:
+        """Вид спорта."""
+        ...
+
+    @property
+    def intents(self) -> list[WorkoutIntent]:
+        """Намерения по шагам."""
+        ...
+
+    @property
+    def assumptions(self) -> list[str]:
+        """Что модель додумала."""
+        ...
+
+
+class WorkoutComposerPort(Protocol):
+    """Разбор текста пожеланий в структуру тренировки.
+
+    Порт не знает, кто разбирает: модель, человек или заглушка в тестах.
+    Главное — наружу выходит структура, а не текст.
+
+    Источник недоступен → исключение `ExternalSourceError`: вызывающий
+    превращает в `degraded`, и обычное планирование не ломается.
+    """
+
+    def compose(self, text: str, context: ComposeContext) -> ComposedPlan:
+        """Текст пожеланий → намерения по шагам."""
+        ...
+
+
 class Clock(Protocol):
     """Текущее время. В тестах — фиксированное."""
 
@@ -234,6 +318,8 @@ class DuplicateExternalIdError(Exception):
 __all__ = [
     "ActivityPort",
     "AthleteRepo",
+    "ComposedPlan",
+    "ComposeContext",
     "DetailRepo",
     "StorageBusyError",
     "CalendarPort",
@@ -248,4 +334,5 @@ __all__ = [
     "NarratorPort",
     "SeasonRepo",
     "VersionConflictError",
+    "WorkoutComposerPort",
 ]

@@ -96,7 +96,7 @@
 </head><body>
 <header>
 <h1>Модель домена — спецификация</h1>
-<div class="meta">Coach App · v4.1 · 21 сущностей · 48 инвариантов (48 подтверждено) · 5 вопросов</div>
+<div class="meta">Coach App · v4.1 · 22 сущностей · 48 инвариантов (48 подтверждено) · 5 вопросов</div>
 <div class="meta">состав: диаграмма · сущности · связи · вопросы</div>
 </header>
 <nav>
@@ -351,12 +351,21 @@
 </ul></div>
 <div class="ent">
 <div class="eh"><span>Command</span><span class="k">command</span></div>
-<div class="role">Любое изменение состояния. Ничего не меняется само — только по команде.</div>
+<div class="role">выбирает пользователь, система ничего за него не решает.</div>
 <ul class="pl">
-<li><code>id</code> · <code>type</code> — <code>propose_week · activate_week · close_week · replan_remainder · link_actual · unlink_actual · place_unplaced</code></li>
+<li><code>id</code> · <code>type</code> — <code>propose_week · activate_week · close_week · replan_remainder · link_actual · unlink_actual · place_unplaced · unplace_request · add_composed_workout · remove_workout</code></li>
 <li><code>target{week_id, ...}</code> · <code>args{}</code></li>
 <li><code>reason</code> · <code>issued_at</code> · <code>issued_by{user,brain}</code></li>
 <li><code>status{proposed,applied,rejected}</code> · <code>diff[]</code></li>
+</ul></div>
+<div class="ent">
+<div class="eh"><span>WorkoutIntent</span><span class="k">value</span></div>
+<div class="role">модель, а не набор правил.</div>
+<ul class="pl">
+<li><code>role{warmup,work,rest,cooldown,transition}</code> · <code>sport</code></li>
+<li><code>target_type{distance,time}</code> · <code>target_value</code> — объём, который назвал человек</li>
+<li><code>intent</code> — интенсивность словами: <code>easy · long · marathon · steady · threshold · interval · repetition</code></li>
+<li><code>label</code> · <code>reps</code> · <code>notes</code> · <code>rest_type</code> · <code>rest_value</code></li>
 </ul></div>
 <div class="ent">
 <div class="eh"><span>Request</span><span class="k">value</span></div>

@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import date, timedelta
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -25,11 +26,13 @@ from app.domain.derivations import (
 from app.domain.entities import (
     ActualSession,
     Command,
+    Request,
     Week,
     WeekSummary,
+    Workout,
     WorkoutDetail,
 )
-from app.domain.enums import CommandType, PlanStatus
+from app.domain.enums import CommandType, PlanStatus, WeekStatus
 from app.domain.metrics import estimate_ftp
 from app.ports.storage import (
     DuplicateExternalIdError,
@@ -69,6 +72,15 @@ class NarrateIn(BaseModel):
 
     about: str
     diff: list[dict[str, Any]] | None = None
+
+
+class ComposeIn(BaseModel):
+    """Запрос разбора текста пожеланий в тренировку."""
+
+    text: str
+    # Неделя, для которой разбирают: нужна её нагрузка, чтобы понимать,
+    # влезает ли тренировка в неделю.
+    season_week: int | None = None
 
 
 # ------------------------------------------------------------------ ответы
@@ -153,6 +165,7 @@ def week(season_week: int, container: AppContainer = Depends(get_container)) -> 
     data = _week_dict(
         found, sessions, loaded.slots,
         earlier=[w for w in stored if w.season_week < season_week],
+        compose_available=container.composer.available,
     )
     # Метрики формы — по всем сессиям недели. Считаются на лету: закрытая
     # неделя хранит агрегат, а текущая ещё не закрыта.
@@ -277,6 +290,50 @@ def ftp_estimate(container: AppContainer = Depends(get_container)) -> JSONRespon
         "current_ftp_w": athlete.ftp_w,
         "workouts_used": len(details),
     })
+
+
+@router.post("/compose")
+def compose(payload: ComposeIn,
+            container: AppContainer = Depends(get_container)) -> JSONResponse:
+    """Разобрать текст пожеланий в структуру тренировки.
+
+    Это чтение, а не изменение: неделя не трогается, ничего не
+    сохраняется. Пользователь сначала смотрит, что получилось, и только
+    потом добавляет тренировку в неделю отдельной командой.
+
+    Модель возвращает намерения («порог», «8 км»), домен подставляет
+    зону пульса, темп и длительность по профилю атлета. Модель не
+    придумывает числа — иначе ошибки шли бы оттуда, где их быть не
+    должно.
+    """
+    from app.domain.composition import CompositionError
+
+    if not container.composer.available:
+        return fail(container, "degraded",
+                    "предложение тренировки недоступно: нет ключа модели",
+                    status=503)
+
+    athlete = container.athlete_repo.get()
+    paces = container.methodology_repo.training_paces()
+    pace_by_zone = paces.pace_by_zone(athlete.vdot) if athlete.vdot else {}
+    week = None
+    if payload.season_week is not None:
+        week = container.season_repo.week(payload.season_week)
+
+    try:
+        outcome = container.composer.compose(
+            payload.text,
+            athlete=athlete,
+            pace_by_zone=pace_by_zone,
+            week=week,
+        )
+    except CompositionError as error:
+        return fail(container, "invalid_request", str(error))
+    except ExternalSourceError as error:
+        return fail(container, "degraded",
+                    f"модель недоступна: {error.message}", status=503)
+
+    return ok(container, outcome.as_dict())
 
 
 @router.get("/slots")
@@ -434,6 +491,7 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         link_actual,
         link_actual_session,
         place_unplaced,
+        remove_workout,
         replan_remainder,
         unlink_actual,
         unplace_request,
@@ -540,6 +598,12 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         season = container.season_repo.load()
         updated = plan_from_macro(season, season_week, container.planner,
                                   container.methodology_repo.workout_templates())
+    elif command.type is CommandType.ADD_COMPOSED_WORKOUT and week is None:
+        # Неделя ещё не спланирована, а пользователь описал тренировку.
+        # Неделя создаётся — но не целиком по макро-плану, а с этой
+        # одной тренировкой: он хотел именно её. Всё остальное он
+        # спланирует сам (кнопка «Спланировать неделю» рядом).
+        updated = _add_composed_workout(command, None, container)
     elif week is None:
         raise ValueError(f"неделя W{season_week} не найдена")
     elif command.type is CommandType.PROPOSE_WEEK:
@@ -578,6 +642,14 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         # Обратное действие: вернуть размещённую тренировку в висяки.
         updated = unplace_request(
             week, str(command.args.get("request_id", "")))
+    elif command.type is CommandType.REMOVE_WORKOUT:
+        # Удалить тренировку — пока неделя не активна. Правило в сервисе.
+        updated = remove_workout(
+            week, str(command.args.get("workout_id", "")))
+    elif command.type is CommandType.ADD_COMPOSED_WORKOUT:
+        # Тренировка из разбора текста. Разбор уже сделан (маршрут
+        # `/compose`), здесь — только создание и добавление в неделю.
+        updated = _add_composed_workout(command, week, container)
     elif command.type is CommandType.CLOSE_WEEK:
         # Ритуал закрытия: вытянуть остаток факта → посчитать → записать.
         # Выкачка Garmin может не удаться (нет сети, нет ключа) — тогда
@@ -621,6 +693,168 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
     return {"status": "applied", "new_version": version, "diff": diff,
             "consequences": {"scope": "local", "affected": [f"W{season_week}"]},
             "warnings": []}
+
+
+def _add_composed_workout(
+    command: Command,
+    week: Week | None,
+    container: AppContainer,
+) -> Week:
+    """Добавить разобранную тренировку в неделю — висяком.
+
+    Висяк, а не в окно: время и место выбирает пользователь, система
+    ничего за него не решает (решение Кирилла).
+
+    Тренировка создаётся из намерений, которые пришли с разбором: модель
+    сказала «порог», домен подставил зону и темп. Здесь ничего не
+    пересчитывается — разбор уже сделан, его результат приходит в
+    команде.
+
+    `week` может быть None: недели ещё нет, и пользователь описал
+    тренировку для ещё не спланированной недели. Тогда неделя
+    создаётся — с этой одной тренировкой, а не по макро-плану.
+    """
+    from app.domain.composition import WorkoutIntent, build_steps
+    from app.domain.enums import Sport, StepRole, TargetType
+
+    season_week = int(command.args.get("season_week", 0))
+
+    intents_raw = command.args.get("intents") or []
+    if not isinstance(intents_raw, list) or not intents_raw:
+        raise ValueError("в команде нет ни одного намерения")
+
+    intents: list[WorkoutIntent] = []
+    for item in intents_raw:
+        if not isinstance(item, dict):
+            continue
+        try:
+            role = StepRole(str(item.get("role") or "work"))
+            sport = Sport(str(item.get("sport") or "run"))
+            target_type = TargetType(str(item.get("target_type") or "distance"))
+        except ValueError:
+            continue
+        try:
+            target_value = float(item.get("target_value") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if target_value <= 0:
+            continue
+        intents.append(WorkoutIntent(
+            role=role,
+            sport=sport,
+            target_type=target_type,
+            target_value=target_value,
+            intent=str(item.get("intent") or "easy"),
+            label=str(item.get("label") or ""),
+            reps=max(1, int(item.get("reps") or 1)),
+            notes=str(item.get("notes") or ""),
+            rest_type=TargetType(str(item.get("rest_type") or "distance")),
+            rest_value=float(item.get("rest_value") or 0.0),
+        ))
+    if not intents:
+        raise ValueError("намерения не разобрались")
+
+    athlete = container.athlete_repo.get()
+    paces = container.methodology_repo.training_paces()
+    pace_by_zone = paces.pace_by_zone(athlete.vdot) if athlete.vdot else {}
+    composition = build_steps(
+        intents,
+        athlete=athlete,
+        pace_by_zone=pace_by_zone,
+        assumptions=[str(a) for a in (command.args.get("assumptions") or [])],
+    )
+    name = str(command.args.get("name") or "").strip() or composition.name
+
+    # Идентификаторы — случайные: команда может прийти повторно, и
+    # тренировка должна быть одна, а не две одинаковые.
+    suffix = uuid4().hex[:8]
+    workout_id = f"w-composed-{suffix}"
+    request_id = f"r-composed-{suffix}"
+
+    steps = [s.step for s in composition.steps]
+    duration = round(sum(s.duration_min for s in steps), 2)
+    objective: dict[str, Any] = {"name": name}
+    if composition.assumptions:
+        objective["assumptions"] = list(composition.assumptions)
+    source_text = str(command.args.get("source_text") or "")
+    if source_text:
+        objective["source_text"] = source_text
+
+    request = Request(
+        id=request_id,
+        sport=composition.sport,
+        kind="composed",
+        focus=name,
+        duration_min=int(round(duration)),
+    )
+    workout = Workout(
+        id=workout_id,
+        request_id=request_id,
+        sport=composition.sport,
+        kind="composed",
+        focus=name,
+        objective=objective,
+        steps=steps,
+        duration_min=duration,
+        rationale="Тренировка из твоего описания.",
+    )
+
+    updated = _week_with_composed(
+        week,
+        request=request,
+        workout=workout,
+        season_week=season_week,
+        container=container,
+    )
+    updated.validate()
+    return updated
+
+
+def _week_with_composed(
+    week: Week | None,
+    request: Request,
+    workout: Workout,
+    season_week: int,
+    container: AppContainer,
+) -> Week:
+    """Неделя с добавленной тренировкой-висяком.
+
+    Недели ещё нет — создаётся пустая `proposed`-неделя с этой одной
+    тренировкой. Не по макро-плану: пользователь описал конкретную
+    тренировку, а не всю неделю. Остальное он спланирует сам.
+    """
+    if week is not None:
+        return week.copy_with(
+            requests=list(week.requests) + [request],
+            unplaced=list(week.unplaced) + [request],
+            workouts=list(week.workouts) + [workout],
+        )
+
+    season = container.season_repo.load()
+    plan = next((p for p in season.plans if p.status is PlanStatus.ACTIVE), None)
+    macro = plan.macro_week(season_week) if plan is not None else None
+    week_start = season.horizon_start + timedelta(days=7 * (season_week - 1))
+    week_end = week_start + timedelta(days=6)
+    focus = (macro.goal_text or macro.focus) if macro else "Тренировка из описания"
+    return Week(
+        id=f"W{season_week}",
+        plan_id=plan.id if plan is not None else "",
+        season_week=season_week,
+        start=week_start,
+        end=week_end,
+        status=WeekStatus.PROPOSED,
+        focus=focus,
+        # Нагрузка недели — пока только эта тренировка: неделя не
+        # спланирована, и макро-план к ней ещё не применён.
+        load_target={
+            "hours": round(workout.duration_min / 60.0, 2),
+            "sessions": 1.0,
+            "distance_m": workout_distance_m(workout),
+        },
+        requests=[request],
+        unplaced=[request],
+        workouts=[workout],
+    )
 
 
 def _pull_remaining_fact(
@@ -706,6 +940,7 @@ def _week_dict(
     sessions: list[ActualSession] | None = None,
     slots: list[Any] | None = None,
     earlier: list[Week] | None = None,
+    compose_available: bool = True,
 ) -> dict[str, Any]:
     # Окно тренировки: слот. Тренировка знает свой слот через размещение
     # запроса, а не напрямую.
@@ -761,6 +996,10 @@ def _week_dict(
     # предыдущая неделя не закрыта, активация следующей недоступна.
     data["can_activate"] = activation_blocker(week, earlier or []) is None
     data["activate_blocked_by"] = activation_blocker(week, earlier or [])
+    # Доступен ли разбор текста в тренировку. Без ключа модели кнопку
+    # «Предложить тренировку» лучше не показывать, чем показывать и
+    # отказывать.
+    data["compose_available"] = compose_available
     return data
 
 
@@ -814,6 +1053,10 @@ def _unplaced_dict(request: Any, workout: Any = None) -> dict[str, Any]:
     data["focus"] = workout.focus or request.focus
     data["duration_min"] = workout.duration_min
     data["distance_m"] = workout_distance_m(workout)
+    # id висяка — это id запроса, а тренировка своя. Обе нужны: по
+    # запросу ищется висяк, по тренировке — сама тренировка (удаление).
+    data["workout_id"] = workout.id
+    data["request_id"] = workout.request_id
     data["objective"] = objective
     data["steps"] = _steps_dict(workout.steps)
     data["rationale"] = workout.rationale

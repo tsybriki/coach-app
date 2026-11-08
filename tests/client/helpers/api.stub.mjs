@@ -112,6 +112,48 @@ export function getSlots() {
   });
 }
 
+/* Разбор текста пожеланий в структуру тренировки. */
+export function composeWorkout(text, seasonWeek) {
+  const f = fixture();
+  const handler = f.onCompose;
+  if (handler) return handler(text, seasonWeek);
+  const data = f.composeResult || {
+    name: 'Фартлек',
+    sport: 'run',
+    duration_min: 54.3,
+    distance_m: 12000,
+    assumptions: ['объём фартлека — 8 км: в тексте не указан'],
+    source_text: text,
+    steps: [
+      {assumption: '', step: {
+        id: 's1', role: 'warmup', sport: 'run',
+        target_type: 'distance', target_value: 3000,
+        focus: 'hr', focus_value: {zone: 'Z2', pace_min_per_km: '5:13',
+                                  intent: 'easy'},
+        duration_min: 15.7, label: 'Разминка', group: 'Разминка',
+        round: null, notes: '',
+      }},
+      {assumption: '', step: {
+        id: 's2', role: 'work', sport: 'run',
+        target_type: 'distance', target_value: 8000,
+        focus: 'hr', focus_value: {zone: 'Z5', pace_min_per_km: '4:11',
+                                  intent: 'threshold'},
+        duration_min: 33.5, label: 'Фартлек', group: 'Фартлек',
+        round: null, notes: '',
+      }},
+      {assumption: '', step: {
+        id: 's3', role: 'cooldown', sport: 'run',
+        target_type: 'distance', target_value: 1000,
+        focus: 'hr', focus_value: {zone: 'Z2', pace_min_per_km: '5:13',
+                                  intent: 'easy'},
+        duration_min: 5.2, label: 'Заминка', group: 'Заминка',
+        round: null, notes: '',
+      }},
+    ],
+  };
+  return Promise.resolve({version: f.version ?? 42, data});
+}
+
 export function sendCommand(command) {
   const f = fixture();
   const handler = f.onCommand;
