@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Предложить тренировку — дизайн</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161a22;
+    --panel2: #1d222c;
+    --border: #2a3140;
+    --text: #e6e9ef;
+    --muted: #9aa3b2;
+    --accent: #7aa2ff;
+    --accent2: #5cd6c0;
+    --warn: #ff9b6a;
+    --good: #7ee787;
+    --cp: #d8a0ff;
+    --run: #7ec8e3;
+    --theme-color: #0f1115;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    line-height: 1.45; -webkit-text-size-adjust: 100%; }
+  body { padding: 24px 16px 80px; max-width: 860px; margin: 0 auto; }
+
+  h1 { font-size: 19px; margin: 0 0 4px; letter-spacing: -0.2px; }
+  .lede { font-size: 13px; color: var(--muted); margin: 0 0 22px; max-width: 62ch; }
+
+  .section { margin: 0 0 26px; }
+  .sec-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.7px;
+    color: var(--muted); margin: 0 0 9px; display: flex; align-items: center; gap: 8px;
+  }
+  .sec-label::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+  .sec-label .n { color: var(--accent); font-family: ui-monospace, monospace; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 15px;
+  }
+  .card + .card { margin-top: 10px; }
+
+  /* --- экран 1: ввод пожеланий --- */
+  .phone {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 16px; padding: 14px; margin: 0 auto 8px; max-width: 420px;
+  }
+  .phone-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .phone-bar .t { font-size: 14px; font-weight: 600; }
+  .phone-bar .s { font-size: 11px; color: var(--muted); }
+
+  textarea {
+    width: 100%; min-height: 108px; resize: vertical;
+    background: var(--panel2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 11px 12px; font: inherit; font-size: 14px; line-height: 1.5;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  textarea::placeholder { color: #6b7382; }
+
+  .hint { font-size: 11.5px; color: var(--muted); margin: 8px 0 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip {
+    font: inherit; font-size: 11.5px; color: var(--muted);
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 999px; padding: 5px 10px; cursor: pointer;
+  }
+  .chip:hover { color: var(--text); border-color: var(--accent); }
+
+  .action {
+    display: block; width: 100%; font: inherit; font-size: 13px; font-weight: 600;
+    color: var(--bg); background: var(--accent); border: none;
+    border-radius: 10px; padding: 12px; margin-top: 12px; cursor: pointer;
+  }
+  .action.secondary { color: var(--text); background: var(--panel2); border: 1px solid var(--border); }
+  .action:disabled { opacity: 0.45; cursor: default; }
+
+  /* --- экран 2: разбор --- */
+  .steps { margin: 0; padding: 0; list-style: none; }
+  .step {
+    display: grid; grid-template-columns: 74px 1fr auto;
+    gap: 10px; align-items: baseline;
+    padding: 8px 0; border-bottom: 1px solid var(--border);
+  }
+  .step:last-child { border-bottom: none; }
+  .step .role {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--muted);
+  }
+  .step .body { font-size: 13.5px; }
+  .step .body em { color: var(--muted); font-style: normal; font-size: 12px; }
+  .step .val {
+    font-family: ui-monospace, monospace; font-size: 12.5px;
+    color: var(--accent2); white-space: nowrap;
+  }
+  .step.total { border-top: 1px solid var(--border); border-bottom: none; margin-top: 2px; padding-top: 9px; }
+  .step.total .body { font-weight: 600; }
+  .step.total .val { color: var(--accent); font-weight: 600; }
+
+  .note {
+    font-size: 12px; color: var(--muted); background: var(--panel2);
+    border-left: 2px solid var(--warn); padding: 9px 11px; border-radius: 0 8px 8px 0;
+    margin: 0 0 12px;
+  }
+  .note strong { color: var(--text); font-weight: 600; }
+
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 12.5px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; font-family: ui-monospace, monospace; color: var(--text); }
+
+  /* --- схема --- */
+  .schema { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11.5px;
+    line-height: 1.55; color: var(--muted); background: #0b0d11;
+    border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+    overflow-x: auto; white-space: pre; margin: 0; }
+  .schema b { color: var(--text); font-weight: 600; }
+  .schema i { color: var(--accent2); font-style: normal; }
+  .schema u { color: var(--accent); text-decoration: none; }
+
+  .q { border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; background: var(--panel); }
+  .q p { margin: 0 0 8px; font-size: 13px; }
+  .q .opt { font-size: 12.5px; color: var(--muted); margin: 0 0 4px; padding-left: 16px; }
+  .q .opt b { color: var(--text); font-weight: 600; }
+  .q .rec { font-size: 11px; color: var(--accent); margin-top: 7px; }
+
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .split { grid-template-columns: 1fr; } }
+
+  .rule { font-size: 12.5px; color: var(--muted); margin: 0 0 8px; }
+  .rule b { color: var(--text); font-weight: 600; }
+  ol.rules { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); }
+  ol.rules li { margin-bottom: 6px; }
+  ol.rules b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<h1>«Предложить тренировку» — дизайн</h1>
+<p class="lede">
+  Кнопка в режиме планирования недели. Человек пишет пожелания обычным языком,
+  система превращает их в структуру шагов тренировки. Детерминированного парсинга
+  нет и не будет: текст живой, значит разбирать его должна модель.
+</p>
+
+<!-- ================= 1. ПОТОК ================= -->
+<div class="section">
+  <p class="sec-label"><span class="n">1</span> Поток</p>
+
+  <div class="split">
+    <div>
+      <p class="rule"><b>Шаг 1. Кнопка.</b> В режиме планирования недели — рядом с
+      «Спланировать неделю» или в списке тренировок. Жмёшь — открывается поле ввода.</p>
+      <p class="rule"><b>Шаг 2. Текст.</b> Свободное поле: «12 км, 3 км разминка,
+      дальше фартлек». Под полем — примеры, которые подставляются по тапу.</p>
+      <p class="rule"><b>Шаг 3. Разбор.</b> Модель возвращает <i>структуру шагов</i>.
+      Показываем не текст ответа, а таблицу шагов: роль, что делать, сколько.</p>
+      <p class="rule"><b>Шаг 4. Правка.</b> Шаги можно поправить руками. Кнопка
+      «Добавить в неделю» — тренировка появляется висяком.</p>
+    </div>
+
+    <div class="phone">
+      <div class="phone-bar">
+        <span class="t">Предложить тренировку</span>
+        <span class="s">W5 · 8–14 ноя</span>
+      </div>
+
+      <div class="card" style="padding:0;border:none;background:none">
+        <textarea placeholder="Опиши тренировку как хочешь. Например: 12 км, 3 км разминка, дальше фартлек, заминка 1 км"></textarea>
+        <p class="hint">Можно писать как удобно — разберу сам и покажу структуру до того, как она попадёт в неделю.</p>
+        <div class="chips">
+          <span class="chip">12 км с фартлеком</span>
+          <span class="chip">Интервалы 8×400</span>
+          <span class="chip">Темповый 40 мин</span>
+          <span class="chip">Лёгкая 50 мин</span>
+        </div>
+        <button class="action">Разобрать</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 2. РЕЗУЛЬТАТ РАЗБОРА ================= -->
+<div class="section">
+  <p class="sec-label"><span class="n">2</span> Что показываем после разбора</p>
+
+  <div class="phone">
+    <div class="phone-bar">
+      <span class="t">Разбор тренировки</span>
+      <span class="s">из твоего текста</span>
+    </div>
+
+    <div class="card">
+      <p class="note">
+        <strong>Название:</strong> Тренировка на фартлек<br>
+        <strong>Вид спорта:</strong> бег · <strong>Когда:</strong> СР, 17:00
+      </p>
+
+      <ul class="steps">
+        <li class="step">
+          <span class="role">разминка</span>
+          <span class="body">Лёгкий бег <em>Z2, 5:35/км</em></span>
+          <span class="val">3,0 км</span>
+        </li>
+        <li class="step">
+          <span class="role">работа</span>
+          <span class="body">Фартлек <em>Z4, 4:05/км</em></span>
+          <span class="val">8,0 км</span>
+        </li>
+        <li class="step">
+          <span class="role">заминка</span>
+          <span class="body">Лёгкий бег <em>Z2, 6:00/км</em></span>
+          <span class="val">1,0 км</span>
+        </li>
+        <li class="step total">
+          <span class="role">итого</span>
+          <span class="body">Тренировка</span>
+          <span class="val">12,0 км · 1 ч 04 мин</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="card" style="margin-top:10px">
+      <p class="note" style="margin-bottom:0">
+        <strong>Что я додумал:</strong> разминку и заминку добавил сам — в тексте их не было.
+        Темп фартлека взял из твоей формы (4:05/км на 10 км). Если что-то не так —
+        правь шаги ниже.
+      </p>
+    </div>
+
+    <button class="action">Добавить в неделю</button>
+    <button class="action secondary">Править шаги</button>
+  </div>
+
+  <p class="rule" style="margin-top:14px">
+    <b>Почему так.</b> Таблица шагов, а не текст: текст модели читать дольше и
+    в нём нет структуры. Явно показанные «додумал» — чтобы человек видел, где
+    модель приняла решение за него, и мог это отменить.
+  </p>
+</div>
+
+<!-- ================= 3. ЧТО ВОЗВРАЩАЕТ МОДЕЛЬ ================= -->
+<div class="section">
+  <p class="sec-label"><span class="n">3</span> Формат ответа модели</p>
+
+  <div class="split">
+    <div>
+      <p class="rule">Модель возвращает <b>не текст, а данные</b> — тот же
+      <code>Step</code>, что уже есть в домене. Иначе пришлось бы парсить её
+      ответ обратно в шаги, и вся идея ломается.</p>
+      <p class="rule">Темпы и зоны — <b>не из модели</b>. Модель говорит
+      «фартлек», а пульс и 4:05/км подставляет домен по Дэниэлсу и профилю
+      атлета. Модель не знает твоих зон и не должна их выдумывать.</p>
+    </div>
+
+    <pre class="schema"><b>steps</b>: [
+  {
+    <i>role</i>: "warmup",
+    <i>label</i>: "Лёгкий бег",
+    <i>target_type</i>: "distance",
+    <i>target_value</i>: 3000,        <u>// метры</u>
+    <i>intent</i>: "easy",            <u>// → зона и темп</u>
+    <i>duration_min</i>: 16.1
+  },
+  {
+    <i>role</i>: "work",
+    <i>label</i>: "Фартлек",
+    <i>target_type</i>: "distance",
+    <i>target_value</i>: 8000,
+    <i>intent</i>: "threshold",       <u>// → Z3, темп по Дэниэлсу</u>
+    <i>duration_min</i>: 43.2
+  }
+],
+<b>assumptions</b>: [
+  "разминка и заминка добавлены мной",
+  "темп фартлека — по форме, не из текста"
+],
+<b>name</b>: "Тренировка на фартлек"</pre>
+  </div>
+
+  <p class="rule" style="margin-top:12px">
+    <b>Ключевая идея:</b> модель отвечает за <i>структуру и намерение</i>
+    («разминка → работа → заминка», «фартлек», «8×400»), а домен — за
+    <i>числа</i> (зоны, темпы, длительности). Модель не считает минуты и не
+    придумывает пульс: она говорит «порог», а 164 уд/мин и 4:05/км получаются
+    из профиля. Если модель ошиблась в числах — это ошибка домена, а не модели.
+  </p>
+</div>
+
+<!-- ================= 4. ПОРТ ================= -->
+<div class="section">
+  <p class="sec-label"><span class="n">4</span> Где живёт разбор</p>
+
+  <div class="split">
+    <div>
+      <p class="rule">Новый порт в <code>app/ports/</code> — рядом с
+      <code>ActivityPort</code> и <code>NarratorPort</code>:</p>
+      <pre class="schema" style="margin-top:8px">class <b>WorkoutComposerPort</b>(Protocol):
+    def compose(self, <i>text</i>: str, <i>context</i>: ComposeContext) -&gt; Composition:
+        <u>"""Текст пожеланий → структура шагов."""</u>
+        ...</pre>
+      <p class="rule" style="margin-top:12px">
+        Контекст — то, что модель должна знать о тебе: пульсовые зоны, VDOT,
+        текущая неделя, что уже есть в плане. Без контекста «интенсивная» —
+        это чья интенсивность.
+      </p>
+    </div>
+
+    <div>
+      <p class="rule">Адаптер — в <code>app/adapters/</code>. Две реализации:</p>
+      <ul class="rules" style="margin-top:8px">
+        <li><b>LLM-адаптер</b> — реальный вызов модели. Есть в проде.</li>
+        <li><b>Заглушка</b> — в тестах: принимает текст, возвращает
+        заранее заданные шаги. Тесты не ходят в сеть.</li>
+      </ul>
+      <p class="rule" style="margin-top:12px">
+        Если LLM недоступен — <b>предложение не ломает планирование</b>.
+        Кнопка «Предложить тренировку» просто недоступна с пояснением,
+        обычная неделя планируется как раньше.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 5. ВОПРОСЫ ================= -->
+<div class="section">
+  <p class="sec-label"><span class="n">5</span> Вопросы, на которые нужен твой ответ</p>
+
+  <div class="q">
+    <p><b>1. Текст тренировки или текст недели?</b></p>
+    <p class="opt"><b>Рекомендую: текст тренировки.</b> Один текст — одна тренировка,
+    кладётся висяком. Если просить текст недели, придётся сразу разбирать несколько
+    тренировок и раскладывать их по дням — это вдвое сложнее и менее понятно.</p>
+    <p class="rec">Что выбрал — напиши, поправлю схему.</p>
+  </div>
+
+  <div class="q" style="margin-top:10px">
+    <p><b>2. Что делать с местом и временем?</b></p>
+    <p class="opt"><b>Рекомендую: висяк, место и время выбираешь ты.</b>
+    Так же, как сейчас у висяков: система предлагает структуру, ты кладёшь
+    в окно сам. Автоподстановка окна по смыслу («в среду» — значит СР) — можно,
+    но это ещё одно место, где система решает за тебя.</p>
+    <p class="rec">Если хочешь, чтобы время подставлялось само — скажи, добавлю в схему.</p>
+  </div>
+
+  <div class="q" style="margin-top:10px">
+    <p><b>3. Модель — какая?</b></p>
+    <p class="opt"><b>Рекомендую: та же, что у Hermes (minimax).</b> Она уже
+    настроена и доступна. Но приложение должно ходить к ней своим ключом —
+    сейчас ключ живёт в пуле Hermes, а не в приложении. Нужен ключ в
+    окружении сервиса.</p>
+    <p class="opt">Альтернатива: спросить <b>тебя</b> (меня) через Hermes — но тогда
+    приложение зависит от живого агента, это плохо для сервиса, который должен
+    работать сам.</p>
+  </div>
+
+  <div class="q" style="margin-top:10px">
+    <p><b>4. Что показывать, если текст не сходится?</b></p>
+    <p class="opt"><b>Рекомендую: разбор с пометками, а не отказ.</b> Например,
+    «12 км» и «потом фартлек» — но фартлек сколько? Модель ставит
+    «8 км — предположил по форме» и помечает это в «додумал». Ты видишь и
+    правишь. Полный отказ («не могу разобрать») хуже: он ничему не учит.</p>
+  </div>
+</div>
+
+<!-- ================= 6. ЧТО НЕ ДЕЛАЕМ ================= -->
+<div class="section">
+  <p class="sec-label"><span class="n">6</span> Границы</p>
+  <div class="card">
+    <ul class="rules">
+      <li><b>Модель не придумывает числа.</b> Зоны, темпы, длительности — домен.
+      Модель говорит «порог», «8×400», «8 км» — и больше ничего.</li>
+      <li><b>Модель не активирует и не закрывает.</b> Максимум — создать
+      тренировку-висяк. Всё остальное — как обычно, кнопками.</li>
+      <li><b>Предложенная тренировка — обычная.</b> Тот же <code>Workout</code>,
+      те же шаги, те же инварианты. Разницы в данных нет — только в пути
+      создания.</li>
+      <li><b>Нет детерминированного парсинга.</b> Никаких «если есть слово
+      «разминка» — добавить шаг». Один путь: текст → модель → структура.</li>
+    </ul>
+  </div>
+</div>
+
+</body>
+</html>
