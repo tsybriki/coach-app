@@ -147,7 +147,7 @@ function appBar() {
     : '';
   return `<div class="title">
         <div>${escapeHtml(screenTitle())}</div>
-        <div class="sub">${escapeHtml(screenSubtitle())}</div>
+        <div class="sub">${screenSubtitle()}</div>
       </div>
       <div class="right">
         ${stale}${queued}
@@ -169,13 +169,34 @@ function screenTitle() {
   return found ? found[1] : 'Coach';
 }
 
+/* Статус недели — цветным словом в подзаголовке заголовка.
+ *
+ * Цвет по статусу: активна — зелёный, предложена — оранжевый, закрыта —
+ * красный. Отдельной плашкой статус показывать не надо: он принадлежит
+ * заголовку, а не экрану.
+ */
+const WEEK_STATUS_COLOR = {
+  active: 'good',
+  proposed: 'warn',
+  closed: 'bad',
+};
+
+function weekStatusBadge() {
+  const status = (state.week && state.week.status) || 'proposed';
+  const label = WEEK_STATUS[status] || status;
+  const color = WEEK_STATUS_COLOR[status] || 'warn';
+  return `<span class="week-status ${color}">${escapeHtml(label)}</span>`;
+}
+
 function screenSubtitle() {
   if (state.screen === 'week' && state.week) {
     // Диапазон недели: даты по-русски, иначе «11-01 — 11-07».
     const from = formatDate(state.week.start);
     const to = formatDate(state.week.end);
-    if (!from || !to) return `${state.week.start.slice(5)} — ${state.week.end.slice(5)}`;
-    return `${from} — ${to}`;
+    const range = (!from || !to)
+      ? `${state.week.start.slice(5)} — ${state.week.end.slice(5)}`
+      : `${from} — ${to}`;
+    return `${escapeHtml(range)} · ${weekStatusBadge()}`;
   }
   if (state.screen === 'fact' && state.week) {
     return `${state.actual.length} сессий в факте`;
@@ -715,36 +736,32 @@ function screenWeekMissing() {
     ${composeBtn}`;
 }
 
-/* Действия недели — по её статусу.
+/* Действия недели.
  *
  * Жизненный цикл: proposed → active → closed. Каждый переход — команда
- * пользователя, ничего не инициируется само (I19).
+ * пользователя, ничего не инициируется само (I19). У закрытой недели
+ * действий нет: она не меняется (I23).
  *
- * У закрытой недели действий нет: она не меняется (I23).
+ * Плашки со статусом («Неделя активна · 9 тренировок · 0 сессий в
+ * факте») больше нет: статус живёт в заголовке — цветным словом, а
+ * счётчики тренировок и факта и так видны на экране. Карточка осталась
+ * только у предложенной недели: там есть что делать — предложить
+ * тренировку, пересобрать план, активировать.
  */
 function weekActions(week) {
   const status = week.status || 'proposed';
+
+  if (status !== 'proposed') {
+    // Активная и закрытая неделя: отдельного блока действий у них нет.
+    return '';
+  }
+
   const label = WEEK_STATUS[status] || status;
-
-  if (status === 'closed') {
-    const line = summaryLine(week.summary);
-    return `<div class="card"><div class="chead">Неделя закрыта</div>
-      ${line ? `<p class="lead">${escapeHtml(line)}</p>` : ''}</div>`;
-  }
-
-  if (status === 'active') {
-    /* Кнопка закрытия уехала в шапку карточки «Фокус недели» — здесь
-     * осталось только состояние. Закрытие — действие необратимое, и
-     * ему не место среди карточек. */
-    return `<div class="card"><div class="chead">Неделя активна</div>
-      <p class="lead">${(week.workouts || []).length} тренировок · `
-      + `${state.actual.length} сессий в факте</p></div>`;
-  }
 
   // proposed: неделю можно пересобрать, оживить или дополнить тренировкой.
   //
   // Активация — только после закрытия предыдущей недели (I45). Пока
-  // предыдущая не закрыта, активировать нельзя: неделя ждёт очереди.
+  // предыдущая неделя не закрыта, активировать нельзя: неделя ждёт очереди.
   // Правило решает сервер, клиент только показывает его ответ.
   const blockedBy = week.activate_blocked_by;
   const canActivate = week.can_activate !== false && !blockedBy;

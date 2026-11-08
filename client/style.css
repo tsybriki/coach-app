@@ -17,6 +17,7 @@
   --accent2: #5cd6c0;
   --warn: #ff9b6a;
   --good: #7ee787;
+  --bad: #f2777a;
   --cp: #d8a0ff;
   --run: #7ec8e3;
   --bike: #f08a5a;
@@ -112,6 +113,27 @@ h3 {
   font-size: 11.5px;
   color: var(--muted);
   margin-top: 1px;
+}
+
+/* Статус недели в подзаголовке заголовка — цветным словом.
+ *
+ * Активна — зелёный, предложена — оранжевый, закрыта — красный.
+ * Слово, а не плашка: статус принадлежит заголовку.
+ */
+.week-status {
+  font-weight: 600;
+}
+
+.week-status.good {
+  color: var(--good);
+}
+
+.week-status.warn {
+  color: var(--warn);
+}
+
+.week-status.bad {
+  color: var(--bad);
 }
 
 .appbar .back {

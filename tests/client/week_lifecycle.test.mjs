@@ -201,14 +201,71 @@ test('графики прогресса в карточке фокуса', async
   assert.match(progress.textContent, /из 6\.2/, 'нет плана по часам');
 });
 
-test('закрытая неделя: действий нет, виден итог', async () => {
+test('закрытая неделя: плашки статуса нет, статус в заголовке', async () => {
   await loadApp({week: makeWeek('closed')});
 
   assert.ok(!document.querySelector('#close'), 'закрытую неделю закрывать нельзя');
   assert.ok(!document.querySelector('#activate'), 'закрытую неделю активировать нельзя');
+
+  /* Плашки со статусом на экране больше нет: статус живёт в
+   * заголовке, цветным словом. */
+  const picker = document.getElementById('picker').textContent;
+  assert.ok(!picker.includes('Неделя закрыта'),
+    'плашка статуса всё ещё на экране');
+
+  const badge = document.querySelector('#appbar .week-status');
+  assert.ok(badge, 'в заголовке нет статуса недели');
+  assert.match(badge.textContent, /закрыта/i);
+  assert.ok(badge.classList.contains('bad'),
+    'закрытая неделя должна быть красной');
+});
+
+test('закрытая неделя: итоги видны на экране «План vs факт»', async () => {
+  await loadApp({week: makeWeek('closed')});
+
+  click(document.querySelector('#nav [data-screen="fact"]'));
+
   const text = document.getElementById('picker').textContent;
-  assert.match(text, /закрыта/i, 'не видно статуса закрытой недели');
   assert.match(text, /391|6\.5|424|7\.1/, 'не видно итогов недели');
+});
+
+/* Статус недели — в заголовке, цветным словом.
+ *
+ * Активна — зелёный, предложена — оранжевый, закрыта — красный. Плашки
+ * со статусом на экране нет: она была шумом, а статус принадлежит
+ * заголовку.
+ */
+test('активная неделя: плашки статуса нет, в заголовке зелёный статус',
+  async () => {
+    await loadApp({week: makeWeek('active')});
+
+    const picker = document.getElementById('picker').textContent;
+    assert.ok(!picker.includes('Неделя активна'),
+      'плашка статуса всё ещё на экране');
+
+    const badge = document.querySelector('#appbar .week-status');
+    assert.ok(badge, 'в заголовке нет статуса недели');
+    assert.match(badge.textContent, /активна/i);
+    assert.ok(badge.classList.contains('good'),
+      'активная неделя должна быть зелёной');
+  });
+
+test('предложенная неделя: в заголовке оранжевый статус', async () => {
+  await loadApp({week: makeWeek('proposed')});
+
+  const badge = document.querySelector('#appbar .week-status');
+  assert.ok(badge, 'в заголовке нет статуса недели');
+  assert.match(badge.textContent, /предложена/i);
+  assert.ok(badge.classList.contains('warn'),
+    'предложенная неделя должна быть оранжевой');
+});
+
+test('статус в заголовке стоит рядом с диапазоном недели', async () => {
+  await loadApp({week: makeWeek('active')});
+
+  const sub = document.querySelector('#appbar .sub').textContent;
+  assert.match(sub, /25 окт|25\s+окт/, 'нет диапазона недели');
+  assert.match(sub, /активна/i, 'нет статуса в заголовке');
 });
 
 test('нажатие «Активировать» отправляет команду activate_week', async () => {
