@@ -450,10 +450,20 @@ function placedWorkouts(week) {
   });
 }
 
+/* Главный экран недели.
+ *
+ * **Плана недели здесь нет.** Раньше стоял блок из трёх плиток (часы,
+ * сессии, километраж) и под ним — те же три величины с прогрессом:
+ * «7,5 ч · план» и «0 из 7,5 ч» рядом об одном и том же. Шум, из
+ * которого ничего не читается. Факт и так виден по тренировкам.
+ *
+ * В шапке карточки «Фокус недели» — кнопка закрытия недели: замок
+ * (он же в нижней навигации), маленькой иконкой справа. Закрытие —
+ * действие необратимое, и ему не место среди плиток с цифрами.
+ */
 function screenWeek() {
   if (!state.week) return screenWeekMissing();
   const week = state.week;
-  const target = week.load_target || {};
   const placed = placedWorkouts(week);
   const unplaced = week.unplaced || [];
 
@@ -469,20 +479,34 @@ function screenWeek() {
   const placedCount = placed.length;
 
   return `${messageBlock()}
-    ${week.focus ? `<div class="card goal"><h3>Фокус недели</h3><p class="lead">${escapeHtml(week.focus)}</p></div>` : ''}
-    <div class="totals-card">
-      <div class="metrics">
-        <div class="metric"><div class="v">${formatHours(target.hours * 60)}</div><div class="l">ч · план</div></div>
-        <div class="metric"><div class="v">${target.sessions || 0}</div><div class="l">сессий</div></div>
-        <div class="metric"><div class="v">${(target.distance_m / 1000).toFixed(0)}</div><div class="l">км</div></div>
-      </div>
-      ${progressBlock(week.progress)}
-    </div>
+    ${focusCard(week)}
     ${weekActions(week)}
     ${nextWeekCard()}
     <h2 class="slots-header">Тренировки · ${placedCount} из ${total}</h2>
     <div class="slots-list">${slots || '<p class="empty">Размещённых тренировок нет.</p>'}</div>
     ${unplacedBlock(week)}`;
+}
+
+/* Карточка фокуса недели — с кнопкой закрытия в шапке.
+ *
+ * Кнопка появляется только у активной недели: закрыть можно только
+ * активную (правило на сервере). У запланированной недели в шапке
+ * ничего нет — нечего закрывать.
+ */
+function focusCard(week) {
+  const focus = week.focus || '';
+  const canClose = (week.status || 'proposed') === 'active';
+  const closeBtn = canClose
+    ? `<button class="card-act" id="close" title="Закрыть неделю"
+         aria-label="Закрыть неделю">🔒</button>`
+    : '';
+  return `<div class="card goal">
+      <div class="goal-head">
+        <h3>Фокус недели</h3>
+        ${closeBtn}
+      </div>
+      ${focus ? `<p class="lead">${escapeHtml(focus)}</p>` : ''}
+    </div>`;
 }
 
 /* Следующая неделя, которую можно планировать.
@@ -737,11 +761,12 @@ function weekActions(week) {
   }
 
   if (status === 'active') {
-    const disabled = state.busy ? ' disabled' : '';
+    /* Кнопка закрытия уехала в шапку карточки «Фокус недели» — здесь
+     * осталось только состояние. Закрытие — действие необратимое, и
+     * ему не место среди карточек. */
     return `<div class="card"><div class="chead">Неделя активна</div>
       <p class="lead">${(week.workouts || []).length} тренировок · `
-      + `${state.actual.length} сессий в факте</p>
-      <button class="action" id="close"${disabled}>Закрыть неделю</button></div>`;
+      + `${state.actual.length} сессий в факте</p></div>`;
   }
 
   // proposed: неделю можно пересобрать, оживить или дополнить тренировкой.
@@ -777,51 +802,6 @@ function weekActions(week) {
       <button class="action" id="propose"${disabled}>Предложить заново</button>
       <button class="action primary" id="activate"${activateAttr}>Активировать неделю</button>
     </div></div>`;
-}
-
-/* Факт недели против плана: «N из M».
- *
- * Показывается по всем трём величинам: часы, сессии, километраж бега.
- * План сверху, факт снизу — так виден разрыв.
- */
-function progressBlock(progress) {
-  if (!progress) return '';
-  const rows = [];
-
-  const hours = progress.hours || {};
-  if (hours.planned) {
-    rows.push(progressRow('ч', formatHours(hours.actual * 60),
-      formatHours(hours.planned * 60), hours.actual / hours.planned));
-  }
-
-  const sessions = progress.sessions || {};
-  if (sessions.planned) {
-    rows.push(progressRow('сессий', String(sessions.actual), String(sessions.planned),
-      sessions.actual / sessions.planned));
-  }
-
-  const distance = progress.distance_m || {};
-  if (distance.planned) {
-    rows.push(progressRow('км', (distance.actual / 1000).toFixed(1),
-      (distance.planned / 1000).toFixed(0),
-      distance.actual / distance.planned));
-  }
-
-  if (!rows.length) return '';
-  return `<div class="progress">${rows.join('')}</div>`;
-}
-
-/* Одна строка прогресса: факт, план и доля выполнения. */
-function progressRow(label, actual, planned, share) {
-  const pct = Math.round(Math.min(share, 1.5) * 100);
-  const over = share > 1.02;
-  const width = Math.min(100, pct);
-  return `<div class="prog-row">
-      <span class="prog-label">${escapeHtml(label)}</span>
-      <span class="prog-value ${over ? 'over' : ''}">${escapeHtml(actual)}</span>
-      <span class="prog-plan">из ${escapeHtml(planned)}</span>
-      <span class="prog-bar"><i style="width:${width}%"${over ? ' class="over"' : ''}></i></span>
-    </div>`;
 }
 
 /* Список факта недели — для выбора: что связать с этой тренировкой. */

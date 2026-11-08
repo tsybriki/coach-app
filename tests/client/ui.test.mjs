@@ -224,11 +224,18 @@ before(async () => {
   await loadApp();
 });
 
-test('главный экран: плашки тренировок и прогресс недели', () => {
+test('главный экран: плашки тренировок', () => {
   const slots = document.querySelectorAll('.slot');
   assert.equal(slots.length, 2);
-  assert.ok(document.querySelector('.progress'), 'нет блока прогресса');
-  assert.match(document.querySelector('.progress').textContent, /из/);
+});
+
+/* Плана недели на главном экране нет: он стоял рядом с фактом по тем же
+ * трём величинам («7,5 ч · план» и «0 из 7,5 ч»), и это был шум. */
+test('главный экран: блока плана и индикаторов прогресса нет', () => {
+  assert.ok(!document.querySelector('.progress'),
+    'индикаторы прогресса всё ещё на главном экране');
+  const totals = document.querySelector('.totals-card');
+  assert.ok(!totals, 'блок плана недели всё ещё на главном экране');
 });
 
 test('плашка тренировки: день недели, дата и время', () => {

@@ -148,6 +148,35 @@ test('активная неделя: есть «Закрыть неделю»', 
   assert.ok(!document.querySelector('#activate'), 'активную неделю активировать нельзя');
 });
 
+/* Закрытие — замок в шапке карточки «Фокус недели»: действие
+ * необратимое, и отдельная маленькая кнопка не нажимается случайно. */
+test('кнопка закрытия — в шапке карточки «Фокус недели»', async () => {
+  await loadApp({week: makeWeek('active')});
+
+  const head = document.querySelector('.goal-head');
+  assert.ok(head, 'нет шапки карточки фокуса');
+  const close = head.querySelector('#close');
+  assert.ok(close, 'в шапке карточки фокуса нет кнопки закрытия');
+  // Иконка замка: по ней понятно, что это закрыть.
+  assert.match(close.textContent, /🔒/, 'нет иконки замка');
+  assert.ok(close.getAttribute('title'),
+    'у кнопки закрытия нет подсказки');
+});
+
+test('кнопка закрытия не вынесена в отдельную карточку', async () => {
+  await loadApp({week: makeWeek('active')});
+
+  // Кнопка стоит в шапке карточки фокуса, а не в карточке, где она
+  // была бы единственным содержимым.
+  const ownCard = [...document.querySelectorAll('.card')].find((c) => {
+    const close = c.querySelector('#close');
+    if (!close) return false;
+    // В карточке фокуса есть заголовок и текст — кнопка не одна.
+    return !c.querySelector('.goal-head');
+  });
+  assert.ok(!ownCard, 'кнопка закрытия стоит отдельной карточкой');
+});
+
 test('закрытая неделя: действий нет, виден итог', async () => {
   await loadApp({week: makeWeek('closed')});
 

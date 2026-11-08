@@ -636,6 +636,50 @@ h3 {
   border: 1px solid rgba(92, 214, 192, 0.3);
 }
 
+/* Шапка карточки «Фокус недели»: заголовок и действие справа.
+ *
+ * Закрытие недели — замок в правом углу. Оно необратимо, поэтому
+ * отдельная маленькая кнопка, а не широкая кнопка под текстом: её
+ * нельзя случайно нажать, но она всегда на виду.
+ */
+.goal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.goal-head h3 {
+  margin: 0;
+}
+
+.card-act {
+  margin-left: auto;
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  padding: 6px 8px;
+  color: var(--muted);
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.card-act:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.card-act:active {
+  background: var(--bg);
+}
+
+.card-act:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .card.warn {
   border-color: rgba(255, 155, 106, 0.4);
   background: rgba(255, 155, 106, 0.05);
@@ -1842,75 +1886,6 @@ p.lead {
   font-family: ui-monospace, SFMono-Regular, monospace;
   min-width: 92px;
   text-align: right;
-}
-
-
-/* ------------------------------------------------- факт против плана: «N из M» */
-
-.progress {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-}
-
-.prog-row {
-  display: grid;
-  grid-template-columns: 52px auto 1fr;
-  grid-template-areas:
-    "label value plan"
-    "bar   bar   bar";
-  align-items: baseline;
-  column-gap: 6px;
-  row-gap: 3px;
-}
-
-.prog-label {
-  grid-area: label;
-  font-size: 10px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: .4px;
-}
-
-.prog-value {
-  grid-area: value;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--accent2);
-  font-family: ui-monospace, SFMono-Regular, monospace;
-}
-
-.prog-value.over {
-  color: var(--good);
-}
-
-.prog-plan {
-  grid-area: plan;
-  font-size: 11px;
-  color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, monospace;
-}
-
-.prog-bar {
-  grid-area: bar;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--panel2);
-  overflow: hidden;
-}
-
-.prog-bar i {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-  border-radius: 2px;
-}
-
-.prog-bar i.over {
-  background: var(--good);
 }
 
 
