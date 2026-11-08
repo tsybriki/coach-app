@@ -155,23 +155,28 @@ beforeEach(() => {
   globalThis.__fixture = undefined;
 });
 
-test('на экране недели есть карточка следующей недели', async () => {
+/* Иконка «предложить следующую неделю» живёт в шапке карточки фокуса.
+ * Большая карточка с объёмом недели убрана с главного экрана — она
+ * засоряла его. */
+test('в шапке фокуса есть иконка следующей недели', async () => {
+  await loadApp();
+
+  const btn = document.querySelector('#plan-next-week');
+  assert.ok(btn, 'нет иконки «предложить следующую неделю»');
+  assert.ok(btn.closest('.goal-head'),
+    'иконка должна стоять в шапке карточки фокуса');
+  assert.match(btn.getAttribute('aria-label'), /следующ/i);
+  assert.match(btn.textContent, /📅/);
+});
+
+test('большой карточки следующей недели на главном экране нет', async () => {
   await loadApp();
 
   const text = document.getElementById('picker').textContent;
-  assert.match(text, /Следующая неделя/, 'нет карточки следующей недели');
-  assert.match(text, /W5/, 'не указан номер следующей недели');
-  assert.ok(document.querySelector('#plan-next-week'),
-    'нет кнопки «Спланировать неделю» для следующей недели');
-});
-
-test('карточка показывает объём следующей недели из макро-плана', async () => {
-  await loadApp();
-
-  const card = document.querySelector('#plan-next-week').closest('.card');
-  const text = card.textContent;
-  assert.match(text, /38/, 'нет километража следующей недели');
-  assert.match(text, /6\.8/, 'нет часов следующей недели');
+  assert.ok(!text.includes('Следующая неделя'),
+    'карточка следующей недели засоряет главный экран');
+  assert.ok(!document.querySelector('#plan-next-week').closest('.totals-card'),
+    'иконка не должна быть в карточке с объёмом');
 });
 
 test('нажатие шлёт propose_week для следующей недели', async () => {
@@ -191,12 +196,11 @@ test('нажатие шлёт propose_week для следующей недел�
   assert.ok(sent[0].reason, 'у команды нет причины');
 });
 
-test('на своей следующей неделе карточки нет', async () => {
+test('на своей следующей неделе иконки нет', async () => {
   await loadApp({week: makeWeek('active'), currentWeek: 4, selectedWeek: 5});
 
-  const text = document.getElementById('picker').textContent;
-  assert.ok(!text.includes('Следующая неделя'),
-    'на самой следующей неделе карточка не нужна');
+  assert.ok(!document.querySelector('#plan-next-week'),
+    'на самой следующей неделе иконка не нужна');
 });
 
 test('спланированная следующая неделя открывается, а не планируется заново',
@@ -222,15 +226,12 @@ test('спланированная следующая неделя открыв�
     await import(`${url}?t=${Date.now()}${Math.random()}`);
     await waitFor(() => document.getElementById('nav').children.length > 0);
 
-    const card = document.querySelector('#plan-next-week')?.closest('.card')
-      || [...document.querySelectorAll('.card')]
-        .find((c) => c.textContent.includes('Следующая неделя'));
-    assert.ok(card, 'нет карточки следующей недели');
-    const open = card.querySelector('[data-week="5"]');
-    assert.ok(open, 'нет кнопки открытия запланированной недели');
-    assert.ok(!document.querySelector('#plan-next-week'),
-      'запланированную неделю не планируют заново');
-    assert.match(card.textContent, /предложена/);
+    const btn = document.querySelector('#plan-next-week');
+    assert.ok(btn, 'нет иконки следующей недели');
+    /* Уже предложенная неделя открывается, а не планируется заново —
+     * поэтому команда propose_week не отправляется. */
+    assert.match(btn.getAttribute('aria-label'), /Открыть/i);
+    assert.match(btn.getAttribute('title'), /Открыть/i);
   });
 
 test('кнопка активации заблокирована, пока предыдущая неделя не закрыта',
@@ -292,10 +293,13 @@ test('воскресенье: на главном экране есть кноп
       selectedWeek: 4,
     });
 
-    const text = document.getElementById('picker').textContent;
-    assert.ok(document.querySelector('#plan-next-week'),
-      `нет кнопки «Спланировать неделю» на главном экране (текст: ${text.slice(0, 120)})`);
-    assert.match(text, /W5/, 'не указан номер планируемой недели');
+    const btn = document.querySelector('#plan-next-week');
+    assert.ok(btn,
+      `нет кнопки «Спланировать неделю» на главном экране (текст: ${document.getElementById('picker').textContent.slice(0, 120)})`);
+    /* Номер недели — в подсказке: на экране он только в тексте, а
+     * иконка должна остаться маленькой. */
+    assert.match(btn.getAttribute('aria-label'), /W5/,
+      'не указан номер планируемой недели');
   });
 
 test('воскресенье: планируется та неделя, что только началась, а не следующая за ней',
@@ -328,11 +332,27 @@ test('кнопка есть и на экране «Факт» открытой �
 
   click(document.querySelector('#nav [data-screen="fact"]'));
 
-  assert.ok(document.querySelector('#plan-next-week'),
-    'на экране «Факт» нет кнопки спланировать неделю');
+  const btn = document.querySelector('#plan-next-week');
+  assert.ok(btn, 'на экране «Факт» нет кнопки спланировать неделю');
+  assert.ok(btn.closest('.goal-head'),
+    'иконка должна стоять в заголовке, а не в карточке с объёмом');
 });
 
-test('на своей неделе карточки нет — там и так видно, что с ней делать',
+test('на экране «Факт» большой карточки следующей недели нет', async () => {
+  await loadApp({
+    week: makeWeek('closed', {id: 'W4', season_week: 4}),
+    currentWeek: 5,
+    selectedWeek: 4,
+  });
+
+  click(document.querySelector('#nav [data-screen="fact"]'));
+
+  const text = document.getElementById('picker').textContent;
+  assert.ok(!text.includes('Следующая неделя'),
+    'большая карточка следующей недели засоряет экран «Факт»');
+});
+
+test('на своей неделе иконки нет — там и так видно, что с ней делать',
   async () => {
     await loadApp({
       week: makeWeek('proposed', {id: 'W5', season_week: 5}),
@@ -340,9 +360,8 @@ test('на своей неделе карточки нет — там и так 
       selectedWeek: 5,
     });
 
-    const text = document.getElementById('picker').textContent;
-    assert.ok(!text.includes('Следующая неделя'),
-      'на самой планируемой неделе карточка не нужна');
+    assert.ok(!document.querySelector('#plan-next-week'),
+      'на самой планируемой неделе иконка не нужна');
   });
 
 /* Метрики формы — списком, а не плитками: числа без пояснений не читаются. */

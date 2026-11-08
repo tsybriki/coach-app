@@ -452,14 +452,16 @@ function placedWorkouts(week) {
 
 /* Главный экран недели.
  *
- * **Плана недели здесь нет.** Раньше стоял блок из трёх плиток (часы,
- * сессии, километраж) и под ним — те же три величины с прогрессом:
- * «7,5 ч · план» и «0 из 7,5 ч» рядом об одном и том же. Шум, из
- * которого ничего не читается. Факт и так виден по тренировкам.
+ * **Плана-плиток здесь нет.** Раньше стоял блок из трёх плиток (часы,
+ * сессии, километраж) с планом, а под ним — те же три величины с
+ * прогрессом: «7,5 ч · план» рядом с «0 из 7,5 ч». Два блока об одном
+ * и том же — шум. Плитки убраны, графики прогресса вернулись: они
+ * показывают выполнение цели недели, а не план второй раз.
  *
- * В шапке карточки «Фокус недели» — кнопка закрытия недели: замок
- * (он же в нижней навигации), маленькой иконкой справа. Закрытие —
- * действие необратимое, и ему не место среди плиток с цифрами.
+ * В шапке карточки «Фокус недели» — две маленькие иконки справа: замок
+ * (закрыть неделю) и календарь со стрелкой (предложить следующую
+ * неделю). Обе — необратимые или меняющие состояние действия, обе
+ * маленькие, чтобы не нажимались случайно.
  */
 function screenWeek() {
   if (!state.week) return screenWeekMissing();
@@ -481,31 +483,40 @@ function screenWeek() {
   return `${messageBlock()}
     ${focusCard(week)}
     ${weekActions(week)}
-    ${nextWeekCard()}
     <h2 class="slots-header">Тренировки · ${placedCount} из ${total}</h2>
     <div class="slots-list">${slots || '<p class="empty">Размещённых тренировок нет.</p>'}</div>
     ${unplacedBlock(week)}`;
 }
 
-/* Карточка фокуса недели — с кнопкой закрытия в шапке.
+/* Карточка фокуса недели: заголовок, действия справа и прогресс.
  *
- * Кнопка появляется только у активной недели: закрыть можно только
- * активную (правило на сервере). У запланированной недели в шапке
- * ничего нет — нечего закрывать.
+ * Иконки в шапке:
+ *   - замок — закрыть неделю (только у активной: закрывают активную);
+ *   - календарь со стрелкой — предложить следующую неделю.
+ *
+ * Кнопка «предложить следующую» ведёт туда же, куда большая карточка,
+ * что была на главном экране: в неделю, которую ещё можно предложить.
+ * Если предложение уже есть — открывает её.
  */
 function focusCard(week) {
   const focus = week.focus || '';
-  const canClose = (week.status || 'proposed') === 'active';
-  const closeBtn = canClose
+  const status = week.status || 'proposed';
+
+  const closeBtn = status === 'active'
     ? `<button class="card-act" id="close" title="Закрыть неделю"
          aria-label="Закрыть неделю">🔒</button>`
     : '';
+
+  // Следующая неделя — только если её есть чем предложить или открыть.
+  const nextBtn = nextWeekButton();
+
   return `<div class="card goal">
       <div class="goal-head">
         <h3>Фокус недели</h3>
-        ${closeBtn}
+        <div class="goal-acts">${nextBtn}${closeBtn}</div>
       </div>
       ${focus ? `<p class="lead">${escapeHtml(focus)}</p>` : ''}
+      ${progressBlock(week.progress)}
     </div>`;
 }
 
@@ -555,45 +566,6 @@ function macroWeekOf(seasonWeek) {
  * «Спланировать неделю» не было вообще. Планировать следующую можно
  * независимо от того, какая неделя открыта.
  */
-function nextWeekCard() {
-  const next = nextPlannableWeek();
-  if (!next) return '';
-  // На экране самой следующей недели карточка не нужна: там её собственные
-  // действия — спланировать, привязать, активировать.
-  if (state.seasonWeek === next) return '';
-
-  const macro = macroWeekOf(next);
-  if (!macro) return '';
-
-  const range = macro.start
-    ? `${formatDate(macro.start)} — ${formatDate(macro.end)}` : '';
-  const head = `<div class="chead"><span class="name">Следующая неделя · W${next}</span>
-    ${range ? `<span class="phase-range">${escapeHtml(range)}</span>` : ''}</div>`;
-
-  if (macro.status) {
-    // Неделя уже запланирована: показываем её состояние и ведём в неё.
-    const label = WEEK_STATUS[macro.status] || macro.status;
-    const focus = macro.goal_text || macro.focus || '';
-    return `<div class="card">${head}
-      ${focus ? `<p class="lead">${escapeHtml(focus)}</p>` : ''}
-      <p class="lead"><span class="badge">${escapeHtml(label)}</span></p>
-      <button class="action secondary" data-week="${next}">Открыть неделю</button>
-    </div>`;
-  }
-
-  // Недели ещё нет: объём известен из макро-плана, планирует её
-  // пользователь — кнопка одна.
-  const volume = `
-    <div class="metrics">
-      <div class="metric"><div class="v">${(macro.run_km || 0).toFixed(0)}</div><div class="l">км</div></div>
-      <div class="metric"><div class="v">${formatHours((macro.total_h || 0) * 60)}</div><div class="l">ч · план</div></div>
-      <div class="metric"><div class="v">${macro.sessions_target || 0}</div><div class="l">сессий</div></div>
-    </div>`;
-  return `<div class="card">${head}
-    ${volume}
-    <button class="action primary" id="plan-next-week">Спланировать неделю</button>
-  </div>`;
-}
 
 /* Непривязанные тренировки — под размещёнными.
  *
@@ -804,6 +776,52 @@ function weekActions(week) {
     </div></div>`;
 }
 
+/* Факт против плана: «N из M».
+ *
+ * Три величины недели — часы, сессии, километраж — и полоска выполнения
+ * по каждой. Показываются по всем трём: в неделе может быть 12 сессий
+ * из 9, и одна цифра это не покажет.
+ */
+function progressBlock(progress) {
+  if (!progress) return '';
+  const rows = [];
+
+  const hours = progress.hours || {};
+  if (hours.planned) {
+    rows.push(progressRow('ч', formatHours(hours.actual * 60),
+      formatHours(hours.planned * 60), hours.actual / hours.planned));
+  }
+
+  const sessions = progress.sessions || {};
+  if (sessions.planned) {
+    rows.push(progressRow('сессий', String(sessions.actual), String(sessions.planned),
+      sessions.actual / sessions.planned));
+  }
+
+  const distance = progress.distance_m || {};
+  if (distance.planned) {
+    rows.push(progressRow('км', (distance.actual / 1000).toFixed(1),
+      (distance.planned / 1000).toFixed(0),
+      distance.actual / distance.planned));
+  }
+
+  if (!rows.length) return '';
+  return `<div class="progress">${rows.join('')}</div>`;
+}
+
+/* Одна строка прогресса: факт, план и доля выполнения. */
+function progressRow(label, actual, planned, share) {
+  const pct = Math.round(Math.min(share, 1.5) * 100);
+  const over = share > 1.02;
+  const width = Math.min(100, pct);
+  return `<div class="prog-row">
+      <span class="prog-label">${escapeHtml(label)}</span>
+      <span class="prog-value ${over ? 'over' : ''}">${escapeHtml(actual)}</span>
+      <span class="prog-plan">из ${escapeHtml(planned)}</span>
+      <span class="prog-bar"><i style="width:${width}%"${over ? ' class="over"' : ''}></i></span>
+    </div>`;
+}
+
 /* Список факта недели — для выбора: что связать с этой тренировкой. */
 function factList(workout) {
   const facts = linkCandidates(workout, state.actual).map((a) => {
@@ -961,6 +979,33 @@ async function openSeasonWeek(seasonWeek) {
   showPicker();
 }
 
+/* Иконка «предложить следующую неделю» (или открыть уже предложенную).
+ *
+ * Одна кнопка на два случая: неделя ещё не предложена — предлагаем,
+ * предложена — открываем. Иконка маленькая и в заголовке, чтобы не
+ * превращать экран в карточку с объёмом.
+ */
+function nextWeekButton() {
+  const next = nextPlannableWeek();
+  if (!next) return '';
+  /* На экране самой следующей недели иконка не нужна: там и так видно,
+   * что с ней делать. */
+  if (state.seasonWeek === next) return '';
+  const macro = macroWeekOf(next);
+  if (!macro) return '';
+  const planned = Boolean(macro.status);
+  const label = planned ? 'Открыть предложенную неделю' : 'Предложить следующую неделю';
+  const hint = `${label} · W${next}`;
+  return `<button class="card-act" id="plan-next-week"
+      title="${hint}" aria-label="${hint}">📅</button>`;
+}
+
+/* Заголовок экрана с иконкой справа — как в карточке фокуса. */
+function headWithNext(icon) {
+  return `<div class="goal-head"><h2>План vs факт</h2>
+    <div class="goal-acts">${icon}</div></div>`;
+}
+
 function screenFact() {
   if (!state.week) return empty('Неделя ещё не загружена');
   const summary = state.summary;
@@ -971,9 +1016,10 @@ function screenFact() {
   const metrics = (summary && summary.metrics && summary.metrics.workouts_counted)
     ? summary.metrics : state.metrics;
   const metricsBlock = weekMetricsBlock(metrics);
+  const head = headWithNext(nextWeekButton());
 
   if (!summary) {
-    return `${messageBlock()}<h2>План vs факт</h2>
+    return `${messageBlock()}${head}
       <div class="card">
         <div class="chead">Факт без саммари</div>
         <div class="metrics">
@@ -983,8 +1029,7 @@ function screenFact() {
         </div>
         <p>Итога ещё нет: неделя не закрыта.</p>
       </div>
-      ${metricsBlock}
-      ${nextWeekCard()}`;
+      ${metricsBlock}`;
   }
 
   const totals = summary.totals || {};
@@ -998,7 +1043,7 @@ function screenFact() {
   const actual = totals.actual_minutes || 0;
   const delta = actual - planned;
 
-  return `${messageBlock()}<h2>План vs факт</h2>
+  return `${messageBlock()}${head}
     <div class="card">
       <div class="chead">Итоги недели</div>
       <div class="metrics">
@@ -1008,8 +1053,7 @@ function screenFact() {
       </div>
     </div>
     <div class="card"><h3>Вердикты</h3><ul class="plain">${rows || '<li>нет</li>'}</ul></div>
-    ${metricsBlock}
-    ${nextWeekCard()}`;
+    ${metricsBlock}`;
 }
 
 /* Метрики формы недели — над тренировками.
@@ -2433,6 +2477,14 @@ document.addEventListener('click', async (event) => {
   if (closest('#plan-next-week')) {
     const next = nextPlannableWeek();
     if (!next) return;
+    const macro = macroWeekOf(next);
+    /* Уже предложена — открываем её, а не предлагаем заново. Так же,
+     * как делала большая карточка: «Открыть неделю» вместо
+     * «Спланировать». */
+    if (macro && macro.status) {
+      await openSeasonWeek(next);
+      return;
+    }
     showMessage('Планирую следующую неделю…');
     state.busy = true;
     render();

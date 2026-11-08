@@ -652,6 +652,31 @@ h3 {
   margin: 0;
 }
 
+/* Заголовок экрана с иконкой справа — тот же вид, что шапка карточки. */
+.goal-head h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+/* Группа иконок в шапке — прижата вправо.
+ *
+ * Кнопок может быть две (календарь и замок), и если у каждой свой
+ * `margin-left: auto`, свободное место делится между ними: календарь
+ * уезжает в середину. Поэтому иконки собраны в группу, а auto margin
+ * один — у группы.
+ */
+.goal-acts {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.goal-acts .card-act {
+  margin-left: 0;
+}
+
 .card-act {
   margin-left: auto;
   flex-shrink: 0;
@@ -1886,6 +1911,75 @@ p.lead {
   font-family: ui-monospace, SFMono-Regular, monospace;
   min-width: 92px;
   text-align: right;
+}
+
+
+/* ------------------------------------------------- факт против плана: «N из M» */
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.prog-row {
+  display: grid;
+  grid-template-columns: 52px auto 1fr;
+  grid-template-areas:
+    "label value plan"
+    "bar   bar   bar";
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 3px;
+}
+
+.prog-label {
+  grid-area: label;
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+
+.prog-value {
+  grid-area: value;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent2);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.prog-value.over {
+  color: var(--good);
+}
+
+.prog-plan {
+  grid-area: plan;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.prog-bar {
+  grid-area: bar;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--panel2);
+  overflow: hidden;
+}
+
+.prog-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.prog-bar i.over {
+  background: var(--good);
 }
 
 

@@ -13,7 +13,7 @@ import {JSDOM} from 'jsdom';
 
 /* ------------------------------------------------------------------ фикстуры */
 
-function makeWeek(status) {
+function makeWeek(status, extra = {}) {
   return {
     id: 'W3',
     season_week: 3,
@@ -41,6 +41,7 @@ function makeWeek(status) {
       per_session: [], missed: [], extra: [], deviations: [],
       intensity: {actual_moderate: 424, actual_vigorous: 0, contributions: []},
     } : null,
+    ...extra,
   };
 }
 
@@ -175,6 +176,29 @@ test('кнопка закрытия не вынесена в отдельную 
     return !c.querySelector('.goal-head');
   });
   assert.ok(!ownCard, 'кнопка закрытия стоит отдельной карточкой');
+});
+
+/* Графики прогресса — выполнение цели недели. Кирилл попросил их
+ * вернуть после того, как плитки плана убрали: прогресс и план были
+ * разными вещами, просто стояли рядом. */
+test('графики прогресса в карточке фокуса', async () => {
+  await loadApp({
+    week: makeWeek('active', {
+      progress: {
+        hours: {planned: 6.24, actual: 3.1},
+        sessions: {planned: 7, actual: 3},
+        distance_m: {planned: 35000, actual: 15000},
+      },
+    }),
+  });
+
+  const card = document.querySelector('.card.goal');
+  assert.ok(card, 'нет карточки фокуса');
+  const progress = card.querySelector('.progress');
+  assert.ok(progress, 'графики прогресса не в карточке фокуса');
+  assert.equal(progress.querySelectorAll('.prog-row').length, 3,
+    'ожидались часы, сессии и километраж');
+  assert.match(progress.textContent, /из 6\.2/, 'нет плана по часам');
 });
 
 test('закрытая неделя: действий нет, виден итог', async () => {
