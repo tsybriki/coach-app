@@ -2623,6 +2623,9 @@ document.addEventListener('click', async (event) => {
       render();
       return;
     }
+    // Тренировки больше нет — карточка закрывается, иначе она продолжит
+    // показывать удалённую тренировку. Возврат — к списку недели.
+    showPicker();
     showMessage('Тренировка удалена');
     render();
     return;

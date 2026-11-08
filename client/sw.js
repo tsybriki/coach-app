@@ -12,7 +12,7 @@
  * Ответы команд и ошибки не кэшируются никогда.
  */
 
-const CACHE = 'coach-app-shell-v24';
+const CACHE = 'coach-app-shell-v25';
 const SHELL = ['/', '/index.html', '/app.js', '/api.js', '/store.js', '/link.js',
                '/chart.js', '/structure.js', '/style.css', '/manifest.json',
                '/icons/icon-192.png', '/icons/icon-512.png',

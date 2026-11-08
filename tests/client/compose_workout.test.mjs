@@ -352,3 +352,32 @@ test('у непривязанной тренировки удаляется им
   assert.equal(sent[0].args.workout_id, 'w-composed-1',
     'удалять надо тренировку, а не запрос');
 });
+
+test('после удаления карточка закрывается', async () => {
+  await loadApp({
+    week: makeWeek('proposed', {
+      workouts: [],
+      unplaced: [{
+        id: 'r-composed-1', workout_id: 'w-composed-1', request_id: 'r-composed-1',
+        sport: 'run', kind: 'composed', focus: 'Фартлек',
+        duration_min: 54, distance_m: 12000, name: 'Фартлек',
+        objective: {}, steps: [],
+      }],
+    }),
+    onCommand: () => Promise.resolve({version: 43, data: {status: 'applied'}}),
+  });
+
+  click(document.querySelector('.unplaced-open'));
+  await waitFor(() => document.querySelector('[data-remove-workout]'));
+
+  click(document.querySelector('[data-remove-workout]'));
+  await waitFor(() => document.getElementById('cardWrap')
+    .classList.contains('hidden'));
+
+  // Карточка удалённой тренировки закрыта — иначе она продолжит
+  // показывать то, чего уже нет.
+  assert.ok(document.getElementById('cardWrap').classList.contains('hidden'),
+    'карточка удалённой тренировки осталась открытой');
+  assert.match(document.getElementById('picker').textContent,
+    /Фокус недели/, 'не вернулись к списку недели');
+});
