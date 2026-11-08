@@ -29,9 +29,11 @@ const WEEK_METRICS = {
   cadence_work: 84,
   workouts_counted: 8,
   per_workout: [
-    {actual_id: 'g-1', z2_min: 40.0, pace_z2: '5:10 на км', tss: 60.0,
+    {actual_id: 'g-1', date: '2026-11-01', distance_m: 8000,
+     z2_min: 40.0, pace_z2: '5:10 на км', tss: 60.0,
      cadence_work: 84},
-    {actual_id: 'g-2', z2_min: 22.5, pace_z2: '4:55 на км', tss: 45.0,
+    {actual_id: 'g-2', date: '2026-11-03', distance_m: 13500,
+     z2_min: 22.5, pace_z2: '4:55 на км', tss: 45.0,
      cadence_work: 83},
   ],
 };
@@ -196,6 +198,47 @@ test('метрики недели — над тренировками, а не �
   assert.ok(card.querySelectorAll('.metrics-list .mrow').length > 0,
     'нет списка метрик');
   assert.match(card.textContent, /темп 5:10/, 'нет строк по тренировкам');
+});
+
+/* Раньше в списке «По тренировкам» стоял идентификатор Garmin
+ * («g-25010651701»): ни дня, ни объёма — на экране это ничего не
+ * значило. Теперь день недели и километраж. */
+test('в списке тренировок день недели и километраж, а не id Garmin', async () => {
+  await loadApp();
+
+  click(document.querySelector('#nav [data-screen="fact"]'));
+
+  const card = [...document.querySelectorAll('.card')]
+    .find((c) => c.textContent.includes('Метрики формы'));
+  const names = [...card.querySelectorAll('.mrow .mname')].map((n) => n.textContent.trim());
+  const perWorkout = names.slice(-2);
+
+  assert.ok(!perWorkout.some((n) => /^g-\d+$/.test(n)),
+    `в списке остался идентификатор Garmin: ${perWorkout.join(' | ')}`);
+  /* 2026-11-01 — воскресенье, 8 км; 2026-11-03 — вторник, 13,5 км.
+   * Километраж пишется тем же правилом, что в плашке тренировки:
+   * до 10 км всегда с десятой («8,0 км»), дальше — с десятой только
+   * если дробная часть есть. */
+  assert.ok(perWorkout.some((n) => /воскресенье 8,0 км/.test(n)),
+    `нет «воскресенье 8,0 км»: ${perWorkout.join(' | ')}`);
+  assert.ok(perWorkout.some((n) => /вторник 13,5 км/.test(n)),
+    `нет «вторник 13,5 км»: ${perWorkout.join(' | ')}`);
+});
+
+test('тренировки в списке идут по дате, от самой старой', async () => {
+  await loadApp();
+
+  click(document.querySelector('#nav [data-screen="fact"]'));
+
+  const card = [...document.querySelectorAll('.card')]
+    .find((c) => c.textContent.includes('Метрики формы'));
+  const names = [...card.querySelectorAll('.mrow .mname')].map((n) => n.textContent.trim());
+  const perWorkout = names.slice(-2);
+
+  assert.match(perWorkout[0], /воскресенье/,
+    `первой должна идти самая старая тренировка: ${perWorkout.join(' | ')}`);
+  assert.match(perWorkout[1], /вторник/,
+    `второй должна идти самая новая: ${perWorkout.join(' | ')}`);
 });
 
 test('метрики недели показывают факт, а не план', async () => {

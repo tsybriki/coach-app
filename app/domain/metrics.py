@@ -52,6 +52,9 @@ class WorkoutMetrics:
     """
 
     actual_id: str
+    # Дата факта — «воскресенье 13 км» на экране «Факт». Без неё
+    # список тренировок нельзя ни прочитать, ни отсортировать.
+    date: str | None = None
     # 1–3: объём в зонах пульса, минуты
     z2_min: float | None = None
     z3_min: float | None = None
@@ -86,6 +89,7 @@ class WorkoutMetrics:
         """Метрики — в словарь ответа API."""
         return {
             "actual_id": self.actual_id,
+            "date": self.date,
             "z2_min": _round(self.z2_min, 1),
             "z3_min": _round(self.z3_min, 1),
             "z4_min": _round(self.z4_min, 1),
@@ -178,6 +182,7 @@ def workout_metrics(
         metrics.duration_min = float(session.duration_min)
         metrics.distance_m = float(session.distance_m)
         metrics.avg_hr = session.hr_avg
+        metrics.date = session.date.isoformat()
 
     if detail is None:
         return metrics
@@ -415,7 +420,18 @@ def week_metrics(
     form_pace_sum = 0.0
     form_pace_count = 0
 
-    for metrics in per_workout:
+    # Тренировки в неделе — по дате, от самой старой к самой новой.
+    #
+    # Порядок задаёт сервер: клиент не знает, что «раньше» в неделе, и
+    # не должен решать это своей арифметикой. Даты ISO сортируются
+    # лексикографически — «2026-11-08» < «2026-11-09». Тренировка без
+    # даты идёт в конец: она не «раньше всех», она неизвестна.
+    ordered = sorted(
+        per_workout,
+        key=lambda m: (m.date is None, m.date or "", m.actual_id),
+    )
+
+    for metrics in ordered:
         result.per_workout.append(metrics.as_dict())
         result.z2_min += metrics.z2_min or 0.0
         result.z3_min += metrics.z3_min or 0.0

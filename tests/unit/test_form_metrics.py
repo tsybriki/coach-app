@@ -319,6 +319,51 @@ def test_week_metrics_are_empty_without_details():
     assert week.workouts_counted == 0
 
 
+def test_workout_metrics_carry_session_date():
+    """Дата факта едет в метрики — по ней строка «воскресенье 13 км»."""
+    metrics = workout_metrics(
+        detail=make_detail(),
+        session=make_session(date=date(2026, 11, 8)),
+    )
+
+    assert metrics.date == "2026-11-08"
+    assert metrics.as_dict()["date"] == "2026-11-08"
+
+
+def test_week_metrics_sort_workouts_by_date():
+    """Тренировки недели — от самой старой к самой новой.
+
+    Порядок задаёт сервер: клиент своей арифметикой календарь не знает.
+    """
+    later = workout_metrics(
+        detail=make_detail(),
+        session=make_session(id="a2", date=date(2026, 11, 10)),
+    )
+    earlier = workout_metrics(
+        detail=make_detail(),
+        session=make_session(id="a1", date=date(2026, 11, 8)),
+    )
+
+    week = week_metrics("W1", [later, earlier])
+
+    dates = [item["date"] for item in week.per_workout]
+    assert dates == ["2026-11-08", "2026-11-10"]
+
+
+def test_week_metrics_keep_workouts_without_date_at_the_end():
+    """Без даты тренировка идёт в конец — но не теряется."""
+    dated = workout_metrics(
+        detail=make_detail(),
+        session=make_session(id="a2", date=date(2026, 11, 8)),
+    )
+    undated = workout_metrics(detail=make_detail(), session=None)
+
+    week = week_metrics("W1", [undated, dated])
+
+    dates = [item["date"] for item in week.per_workout]
+    assert dates == ["2026-11-08", None]
+
+
 def test_week_pace_in_z2_is_weighted_by_distance():
     """Темп недели в Z2 — средневзвешенный по расстоянию.
 
@@ -413,7 +458,7 @@ def test_workout_metrics_dict_has_all_fields():
 
     data = metrics.as_dict()
 
-    for key in ("actual_id", "z2_min", "z3_min", "z4_min", "hi_min",
+    for key in ("actual_id", "date", "z2_min", "z3_min", "z4_min", "hi_min",
                 "pace_z2_sec_per_km", "pace_z2", "tss", "intensity_factor",
                 "normalized_power_w", "vo2max", "efficiency",
                 "cadence_avg", "cadence_work", "zones"):

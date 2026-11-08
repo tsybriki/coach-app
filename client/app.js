@@ -420,6 +420,28 @@ function dayName(value) {
   return text;
 }
 
+/* День недели по-русски, полным названием: «воскресенье».
+ *
+ * Дата приходит из факта в ISO-формате («2026-11-08»). Разбирается
+ * как дата, а не как строка: «2026-11-08» — это 8 ноября 2026 года,
+ * и день недели из неё считается по календарю, а не выводится из
+ * номера месяца.
+ */
+const WEEKDAY_FULL = [
+  'воскресенье', 'понедельник', 'вторник', 'среда',
+  'четверг', 'пятница', 'суббота',
+];
+
+function weekdayFull(iso) {
+  const parts = String(iso || '').split('-');
+  if (parts.length !== 3) return '';
+  const [year, month, day] = parts.map(Number);
+  if (!year || !month || !day) return '';
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (Number.isNaN(date.getTime())) return '';
+  return WEEKDAY_FULL[date.getUTCDay()] || '';
+}
+
 /* Дата недели — компактно: «5 ноя» или «5 ноя 2027», если год другой. */
 function formatDate(iso) {
   if (!iso) return '';
@@ -1147,6 +1169,25 @@ function metricsRows(metrics, scope) {
   return rows.join('');
 }
 
+/* Название выполненной тренировки для списка: «воскресенье 13 км».
+ *
+ * Раньше здесь стоял идентификатор Garmin («g-25010651701») — на экране
+ * это ничего не значило: ни дня, ни объёма. Человеку нужен день и
+ * сколько он набегал.
+ *
+ * Километраж — тем же `plannedKm`, что и в плашке тренировки: одна
+ * величина на экране пишется одним способом. У силовой и велотренировки
+ * километров нет, и «0 км» читалось бы как «набегал ноль».
+ */
+function workoutLabel(item) {
+  const day = weekdayFull(item.date);
+  const km = plannedKm({distance_m: item.distance_m});
+  if (day && km) return `${day} ${km}`;
+  if (day) return day;
+  if (km) return km;
+  return item.actual_id || '';
+}
+
 function weekMetricsBlock(metrics) {
   if (!metrics) return '';
   const counted = metrics.workouts_counted || 0;
@@ -1167,7 +1208,7 @@ function weekMetricsBlock(metrics) {
     if (item.z2_min) bits.push(`Z2 ${Math.round(item.z2_min)} мин`);
     if (item.tss) bits.push(`нагрузка ${item.tss}`);
     if (item.cadence_work) bits.push(`кад ${item.cadence_work}`);
-    return `<div class="mrow"><span class="mname">${escapeHtml(item.actual_id || '')}</span>
+    return `<div class="mrow"><span class="mname">${escapeHtml(workoutLabel(item))}</span>
       <span class="mval">${escapeHtml(bits.join(' · ') || '—')}</span></div>`;
   }).join('');
 
