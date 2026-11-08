@@ -26,6 +26,9 @@ const state = {
   screen: 'week',
   seasonWeek: Number(localStorage.getItem('coach-app-week')) || null,
   currentWeek: null,     // неделя сезона по календарю — её считает сервер
+  // Неделя выбрана руками в «Сезоне» — её не переключаем на текущую
+  // автоматически: человек сам открыл прошлую неделю, чтобы её посмотреть.
+  seasonWeekPinned: localStorage.getItem('coach-app-week-pinned') === '1',
   version: 0,
   week: null,
   season: null,
@@ -111,6 +114,18 @@ function chromeBar() {
   return appBar();
 }
 
+/* Кнопка «сейчас» — вернуться на текущую неделю.
+ *
+ * Пока человек смотрит прошлую неделю, главный экран остаётся на ней:
+ * он сам её открыл. Но вернуться к «сейчас» должно быть можно в один
+ * тап, иначе придётся перезапускать приложение.
+ */
+function backToCurrentButton() {
+  const current = state.currentWeek;
+  if (!current || !state.seasonWeek || state.seasonWeek === current) return '';
+  return `<button class="now-btn" id="go-current">сейчас</button>`;
+}
+
 /* Шапка приложения: заголовок, счётчик версии, кнопка обновить. */
 function appBar() {
   const stale = state.stale
@@ -125,6 +140,7 @@ function appBar() {
       </div>
       <div class="right">
         ${stale}${queued}
+        ${backToCurrentButton()}
         <span class="ver">v${state.version}</span>
         <button class="refresh" id="refresh">↻</button>
       </div>`;
@@ -848,7 +864,9 @@ function screenSeason() {
  */
 function macroWeekRow(week, color) {
   const closed = week.status === 'closed';
-  const current = week.season_week === state.seasonWeek;
+  // «Сейчас» — неделя по календарю, а не та, которую смотрим: открыв
+  // прошлую из «Сезона», отметка не должна переезжать на неё.
+  const current = week.season_week === state.currentWeek;
   const next = week.season_week === nextPlannableWeek();
   const badge = closed
     ? `<span class="badge done">факт</span>`
@@ -882,7 +900,11 @@ function macroWeekRow(week, color) {
  */
 async function openSeasonWeek(seasonWeek) {
   localStorage.setItem('coach-app-week', String(seasonWeek));
+  // Выбор руками — приложение не будет переключать эту неделю на
+  // текущую само: человек открыл её специально.
+  localStorage.setItem('coach-app-week-pinned', '1');
   state.seasonWeek = seasonWeek;
+  state.seasonWeekPinned = true;
   state.screen = 'week';
   await load();
   showPicker();
@@ -1846,6 +1868,52 @@ function stepAbout(step) {
 
 /* ------------------------------------------------------------------ данные */
 
+/* Какую неделю показывать на главном экране.
+ *
+ * Правило: главный экран — это **сейчас**, а не архив. Если открытая
+ * неделя закрыта и она прошлая (текущая уже началась), показываем
+ * текущую. Остатки закрытой недели на главном экране — шум: неделя
+ * закончилась, её итоги живут в «Сезоне».
+ *
+ * Исключения:
+ *   - неделю выбрали руками в «Сезоне» — человек сам её открыл;
+ *   - текущая неделя ещё не началась по календарю (currentWeek неизвестен).
+ *
+ * Если текущая неделя не запланирована — открывается пустое состояние
+ * с кнопкой «Спланировать неделю». Это и есть нужный вид: неделя
+ * началась, плана у неё нет.
+ */
+function pickSeasonWeek(saved, currentWeek, weeks) {
+  if (!currentWeek) return saved;
+  if (!saved) return currentWeek;
+  if (saved === currentWeek) return currentWeek;
+
+  // Неделя выбрана руками — не трогаем.
+  if (state.seasonWeekPinned) return saved;
+
+  // Статус открытой недели: закрытая ли она.
+  const record = (weeks || []).find((w) => w.season_week === saved);
+  const status = record ? record.status : null;
+  if (status !== 'closed') return saved;
+
+  // Закрытая неделя, которая ещё идёт или прошла — показываем текущую.
+  // Если текущая ещё не началась (saved < current), это прошлая: тоже
+  // переключаем.
+  return currentWeek;
+}
+
+/* Отпустить ручной выбор недели.
+ *
+ * Закрепление нужно только пока человек смотрит прошлую неделю. Как
+ * только он действует с текущей (планирует, активирует, закрывает),
+ * приложение возвращается к жизни по календарю.
+ */
+function unpinSeasonWeek() {
+  if (!state.seasonWeekPinned) return;
+  state.seasonWeekPinned = false;
+  localStorage.removeItem('coach-app-week-pinned');
+}
+
 async function load() {
   // Записи в кэш — в фоне: экран не должен ждать IndexedDB.
   const cacheWrites = [];
@@ -1899,13 +1967,11 @@ async function load() {
     }
 
     // Текущая неделя — по дате на сервере: клиент не знает про начало сезона.
-    // Ручной выбор в localStorage перекрывает.
     if (current) {
       state.currentWeek = current.data.season_week;
-      if (!state.seasonWeek) {
-        state.seasonWeek = current.data.season_week;
-      }
     }
+    state.seasonWeek = pickSeasonWeek(state.seasonWeek, state.currentWeek,
+                                      state.weeks);
     const seasonWeek = state.seasonWeek;
 
     // недели может не быть — это не ошибка, а пустое состояние
@@ -2096,6 +2162,23 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
+  /* Вернуться на текущую неделю.
+   *
+   * Снимаем закрепление: дальше приложение живёт по календарю, и
+   * закрытая прошлая неделя снова уступает место текущей.
+   */
+  if (closest('#go-current')) {
+    const current = state.currentWeek;
+    if (!current) return;
+    unpinSeasonWeek();
+    state.seasonWeek = current;
+    localStorage.setItem('coach-app-week', String(current));
+    state.screen = 'week';
+    await load();
+    showPicker();
+    return;
+  }
+
   // Тап по факту — связать с открытой тренировкой
   const fact = closest('[data-actual]');
   if (fact) {
@@ -2191,10 +2274,12 @@ document.addEventListener('click', async (event) => {
     showMessage('Планирую следующую неделю…');
     state.busy = true;
     render();
+    // Планирование — действие с текущей неделей: ручной выбор отпускаем.
+    unpinSeasonWeek();
     await queueCommand({
       id: `propose-${next}-${Date.now()}`,
       type: 'propose_week',
-      args: { season_week: next },
+      args: {season_week: next},
       reason: 'планирование следующей недели',
       expected_version: state.version,
     });
@@ -2263,10 +2348,13 @@ async function runWeekCommand(type, pendingText, doneText) {
   showMessage(pendingText);
   state.busy = true;
   render();
+  // Команда идёт по текущей неделе — ручной выбор больше не нужен:
+  // снимаем «закрепление», чтобы приложение дальше жило по календарю.
+  unpinSeasonWeek();
   await queueCommand({
     id: `${type}-${Date.now()}`,
     type,
-    args: { season_week: state.seasonWeek },
+    args: {season_week: state.seasonWeek},
     reason: type,
     expected_version: state.version,
   });

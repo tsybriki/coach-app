@@ -42,9 +42,20 @@ export function getCurrentWeek() {
   });
 }
 
-export function getWeek() {
+export function getWeek(seasonWeek) {
   const f = fixture();
-  return Promise.resolve({version: f.version ?? 42, data: f.week});
+  // Недели по номерам — когда в фикстуре их несколько. Иначе одна
+  // фикстурная неделя на все запросы.
+  const byNumber = f.weeksByNumber || {};
+  const week = Object.prototype.hasOwnProperty.call(byNumber, seasonWeek)
+    ? byNumber[seasonWeek]
+    : f.week;
+  if (week === null) {
+    const error = new Error('неделя не найдена');
+    error.code = 'not_found';
+    return Promise.reject(error);
+  }
+  return Promise.resolve({version: f.version ?? 42, data: week});
 }
 
 export function getActual() {

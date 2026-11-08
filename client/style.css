@@ -182,6 +182,18 @@ h3 {
   cursor: pointer;
 }
 
+/* «Сейчас» — возврат с прошлой недели на текущую. */
+.now-btn {
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--accent2);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+
 .refresh:active {
   background: var(--panel2);
 }

@@ -94,21 +94,26 @@ function setupDom() {
   return dom;
 }
 
-async function loadApp({week, onCommand, currentWeek = 4, selectedWeek} = {}) {
+async function loadApp({week, onCommand, currentWeek = 4, selectedWeek,
+                        weeks = [], pinned = false, weeksByNumber} = {}) {
   setupDom();
   // Ручной выбор недели живёт в localStorage: клиент читает его при
   // загрузке. Без него берётся неделя по календарю.
   if (selectedWeek) {
     localStorage.setItem('coach-app-week', String(selectedWeek));
   }
+  if (pinned) {
+    localStorage.setItem('coach-app-week-pinned', '1');
+  }
   globalThis.__fixture = {
     version: 42,
     seasonWeek: selectedWeek ?? currentWeek,
     currentWeek,
     snapshot: SNAPSHOT,
-    week: week || makeWeek('active'),
+    week: week === null ? null : (week || makeWeek('active')),
+    weeksByNumber,
     actual: [],
-    weeks: [],
+    weeks,
     details: {},
     seasonPlan: SEASON_PLAN,
     onCommand,
@@ -116,6 +121,13 @@ async function loadApp({week, onCommand, currentWeek = 4, selectedWeek} = {}) {
   const url = new URL('../../client/app.js', import.meta.url).href;
   await import(`${url}?t=${Date.now()}${Math.random()}`);
   await waitFor(() => document.getElementById('nav').children.length > 0);
+}
+
+/* Что видно на экране: шапка (номер недели) + содержимое. */
+function screenText() {
+  const bar = document.getElementById('appbar').textContent;
+  const picker = document.getElementById('picker').textContent;
+  return `${bar} ${picker}`.replace(/\s+/g, ' ');
 }
 
 async function waitFor(predicate, timeout = 3000) {
@@ -368,4 +380,135 @@ test('метрики формы показаны списком с поясне�
     `плитки метрик формы вернулись: ${tiles.length}`);
   assert.ok(document.querySelector('#picker .metrics-list .mrow'),
     'нет списка метрик');
+});
+
+/* ------------------------------------------------------------------ главный экран */
+
+/* Кирилл: «сейчас уже идёт пятая неделя, показано всё ещё четвёртое.
+ * Четвёртая неделя закрыта, а пятая не запланирована. Остатки
+ * четвёртой недели на главном экране видеть не хочу».
+ *
+ * Правило: главный экран — это «сейчас». Закрытая прошлая неделя
+ * уступает место текущей.
+ */
+test('закрытая прошлая неделя уступает главный экран текущей', async () => {
+  await loadApp({
+    currentWeek: 5,
+    selectedWeek: 4,
+    weeks: [
+      {id: 'W3', season_week: 3, status: 'closed'},
+      {id: 'W4', season_week: 4, status: 'closed'},
+    ],
+    weeksByNumber: {
+      4: makeWeek('closed', {id: 'W4', season_week: 4}),
+      5: null,
+    },
+  });
+
+  const text = screenText();
+  assert.match(text, /Неделя 5/, 'главный экран показывает не текущую неделю');
+  assert.ok(!text.includes('Неделя 4'),
+    'на главном экране остались остатки закрытой недели');
+});
+
+test('незакрытая прошлая неделя остаётся на главном экране', async () => {
+  await loadApp({
+    currentWeek: 5,
+    selectedWeek: 4,
+    weeks: [{id: 'W4', season_week: 4, status: 'active'}],
+    weeksByNumber: {
+      4: makeWeek('active', {id: 'W4', season_week: 4}),
+      5: makeWeek('active', {id: 'W5', season_week: 5}),
+    },
+  });
+
+  const text = screenText();
+  assert.match(text, /Неделя 4/,
+    'незакрытая неделя должна оставаться на главном экране');
+});
+
+test('неделя, выбранная руками в «Сезоне», не переключается', async () => {
+  await loadApp({
+    currentWeek: 5,
+    selectedWeek: 4,
+    pinned: true,
+    weeks: [{id: 'W4', season_week: 4, status: 'closed'}],
+    weeksByNumber: {
+      4: makeWeek('closed', {id: 'W4', season_week: 4}),
+      5: makeWeek('active', {id: 'W5', season_week: 5}),
+    },
+  });
+
+  const text = screenText();
+  assert.match(text, /Неделя 4/,
+    'ручной выбор недели должен уважаться: человек сам её открыл');
+});
+
+test('текущая неделя без плана: кнопка «Спланировать неделю»', async () => {
+  // Недели W5 в хранилище нет: сервер отдаёт 404, клиент показывает
+  // пустое состояние с кнопкой.
+  await loadApp({
+    currentWeek: 5,
+    selectedWeek: 4,
+    weeks: [{id: 'W4', season_week: 4, status: 'closed'}],
+    weeksByNumber: {
+      4: makeWeek('closed', {id: 'W4', season_week: 4}),
+      5: null,
+    },
+  });
+
+  const text = screenText();
+  assert.match(text, /Неделя 5/, 'показана не текущая неделя');
+  assert.match(text, /ещё не спланирована/i,
+    'нет сообщения о незапланированной неделе');
+  assert.ok(document.querySelector('#plan-week'),
+    'нет кнопки «Спланировать неделю»');
+});
+
+test('на просмотренной прошлой неделе есть кнопка «сейчас»', async () => {
+  await loadApp({
+    currentWeek: 5,
+    selectedWeek: 4,
+    pinned: true,
+    weeks: [{id: 'W4', season_week: 4, status: 'closed'}],
+    weeksByNumber: {
+      4: makeWeek('closed', {id: 'W4', season_week: 4}),
+      5: makeWeek('active', {id: 'W5', season_week: 5}),
+    },
+  });
+
+  assert.ok(document.querySelector('#go-current'),
+    'нет кнопки возврата на текущую неделю');
+});
+
+test('на текущей неделе кнопки «сейчас» нет', async () => {
+  await loadApp({
+    currentWeek: 5,
+    selectedWeek: 5,
+    weeksByNumber: {5: makeWeek('active', {id: 'W5', season_week: 5})},
+  });
+
+  assert.ok(!document.querySelector('#go-current'),
+    'на текущей неделе кнопка «сейчас» не нужна');
+});
+
+test('кнопка «сейчас» возвращает на текущую неделю', async () => {
+  await loadApp({
+    currentWeek: 5,
+    selectedWeek: 4,
+    pinned: true,
+    weeks: [{id: 'W4', season_week: 4, status: 'closed'}],
+    weeksByNumber: {
+      4: makeWeek('closed', {id: 'W4', season_week: 4}),
+      5: makeWeek('active', {id: 'W5', season_week: 5}),
+    },
+  });
+
+  click(document.querySelector('#go-current'));
+  await waitFor(() => screenText().includes('Неделя 5'));
+
+  assert.match(screenText(), /Неделя 5/,
+    'после «сейчас» должна быть текущая неделя');
+  assert.equal(localStorage.getItem('coach-app-week-pinned'), null,
+    'закрепление должно сняться');
 });
