@@ -308,6 +308,7 @@ class FileStorage:
         data = self._read_json(self.root / "athlete.json")
         if not data:
             return Athlete(vdot=0.0, hr_zones={}, hr_max=0, rhr=0, lth=0)
+        ftp = data.get("ftp_w")
         return Athlete(
             vdot=float(data.get("vdot", 0.0)),
             hr_zones=data.get("hr_zones", {}),
@@ -317,6 +318,7 @@ class FileStorage:
             weight_kg=data.get("weight_kg"),
             injuries=data.get("injuries", []),
             form=data.get("form"),
+            ftp_w=float(ftp) if ftp else None,
         )
 
     def update_athlete(self, athlete: Athlete) -> None:
@@ -329,6 +331,7 @@ class FileStorage:
             "weight_kg": athlete.weight_kg,
             "injuries": athlete.injuries,
             "form": athlete.form,
+            "ftp_w": athlete.ftp_w,
         })
 
     # ---------------------------------------------------------- низкий уровень: правила

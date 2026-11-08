@@ -59,8 +59,18 @@ export async function getActual(seasonWeek) {
   return request(`/api/v1/actual/${seasonWeek}`);
 }
 
-export async function getAthlete() {
+/* Метрики формы одной тренировки — из разбора FIT. */
+export function getMetrics(actualId) {
+  return request(`/api/v1/metrics/${actualId}`);
+}
+
+export function getAthlete() {
   return request('/api/v1/athlete');
+}
+
+/* Оценка FTP по тренировкам — 95-й перцентиль мощности. */
+export function getFtpEstimate() {
+  return request('/api/v1/ftp-estimate');
 }
 
 export async function getSlots() {

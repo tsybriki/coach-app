@@ -31,8 +31,11 @@ const state = {
   season: null,
   athlete: null,
   actual: [],
+  metrics: null,         // метрики формы недели
+  ftpEstimate: null,     // оценка FTP по тренировкам
   detail: null,
   detailId: null,        // разбор какой факта открыт
+  workoutMetrics: null,  // метрики открытой фактической тренировки
   weeks: [],
   summary: null,
   seasonPlan: null,      // макро-план сезона: фазы и недели целиком
@@ -869,6 +872,12 @@ function screenFact() {
   if (!state.week) return empty('Неделя ещё не загружена');
   const summary = state.summary;
   const sessions = state.actual.length;
+  // Метрики закрытой недели лежат в саммари: они посчитаны при
+  // закрытии. Но неделя могла быть закрыта до появления метрик — тогда
+  // в саммари их нет, и берём посчитанные сервером на лету.
+  const metrics = (summary && summary.metrics && summary.metrics.workouts_counted)
+    ? summary.metrics : state.metrics;
+  const metricsBlock = weekMetricsBlock(metrics);
 
   if (!summary) {
     return `${messageBlock()}<h2>План vs факт</h2>
@@ -880,7 +889,8 @@ function screenFact() {
           <div class="metric"><div class="v">${formatHours(state.actual.reduce((sum, a) => sum + (a.duration_min || 0), 0))}</div><div class="l">ч · время</div></div>
         </div>
         <p>Итога ещё нет: неделя не закрыта.</p>
-      </div>`;
+      </div>
+      ${metricsBlock}`;
   }
 
   const totals = summary.totals || {};
@@ -903,13 +913,133 @@ function screenFact() {
         <div class="metric ${delta >= 0 ? 'good' : 'warn'}"><div class="v">${delta >= 0 ? '+' : ''}${formatHours(delta)}</div><div class="l">ч · дельта</div></div>
       </div>
     </div>
-    <div class="card"><h3>Вердикты</h3><ul class="plain">${rows || '<li>нет</li>'}</ul></div>`;
+    <div class="card"><h3>Вердикты</h3><ul class="plain">${rows || '<li>нет</li>'}</ul></div>
+    ${metricsBlock}`;
+}
+
+/* Метрики формы недели — над тренировками.
+ *
+ * Показываются и для текущей недели, и для закрытой: закрытая хранит
+ * агрегат в саммари, текущая считается на лету сервером. Разница для
+ * пользователя не видна — это один и тот же экран.
+ *
+ * Метрики без данных не рисуются: пустое значение честнее нуля.
+ */
+function weekMetricsBlock(metrics) {
+  if (!metrics) return '';
+  const counted = metrics.workouts_counted || 0;
+  if (!counted) {
+    return `<div class="card">
+      <div class="chead">Метрики формы</div>
+      <p class="lead">Нет разбора FIT — метрики посчитать не из чего.</p>
+    </div>`;
+  }
+
+  const tiles = [];
+  const add = (value, label, extra = '') => {
+    if (value === null || value === undefined) return;
+    tiles.push(`<div class="metric${extra}"><div class="v">${escapeHtml(String(value))}</div><div class="l">${escapeHtml(label)}</div></div>`);
+  };
+
+  add(metrics.z2_min, 'мин · Z2');
+  add(metrics.z3_min, 'мин · Z3');
+  add(metrics.z4_min, 'мин · Z4');
+  add(metrics.hi_min, 'мин · интенс.');
+  add(metrics.pace_z2, 'темп Z2');
+  add(metrics.tss, 'нагрузка');
+  add(metrics.vo2max, 'VO2max');
+  add(metrics.efficiency, 'эффект.');
+  add(metrics.cadence_work, 'кад. работа');
+  add(metrics.cadence_avg, 'кад. ср.');
+
+  if (!tiles.length) return '';
+
+  const perWorkout = metrics.per_workout || [];
+  const rows = perWorkout.map((item) => {
+    const bits = [];
+    if (item.pace_z2) bits.push(`темп Z2 ${item.pace_z2}`);
+    if (item.z2_min) bits.push(`Z2 ${item.z2_min} мин`);
+    if (item.tss) bits.push(`нагрузка ${item.tss}`);
+    if (item.cadence_work) bits.push(`кад ${item.cadence_work}`);
+    return `<div class="row"><span class="wk-focus">${escapeHtml(item.actual_id || '')}</span>
+        <span class="num">${escapeHtml(bits.join(' · ') || '—')}</span></div>`;
+  }).join('');
+
+  return `<div class="card">
+      <div class="chead">Метрики формы</div>
+      <div class="metrics">${tiles.join('')}</div>
+      ${rows ? `<div class="zone-rows">${rows}</div>` : ''}
+    </div>`;
+}
+
+/* Метрики формы одной фактической тренировки.
+ *
+ * Метрики считаются сервером из разбора FIT: без разбора их нет.
+ * Пока грузятся — блок пустой, а не «ноль»: иначе выглядит как
+ * «метрики посчитались и равны нулю».
+ */
+function workoutMetricsBlock(actualId) {
+  const metrics = state.workoutMetrics;
+  if (!metrics || metrics.actual_id !== actualId) return '';
+  if (!metrics.workout_counted) {
+    return `<div class="metrics-note">Нет разбора FIT — метрики посчитать не из чего.</div>`;
+  }
+
+  const tiles = [];
+  const add = (value, label) => {
+    if (value === null || value === undefined) return;
+    tiles.push(`<div class="metric"><div class="v">${escapeHtml(String(value))}</div><div class="l">${escapeHtml(label)}</div></div>`);
+  };
+
+  add(metrics.z2_min, 'мин · Z2');
+  add(metrics.z3_min, 'мин · Z3');
+  add(metrics.z4_min, 'мин · Z4');
+  add(metrics.hi_min, 'мин · интенс.');
+  add(metrics.pace_z2, 'темп Z2');
+  add(metrics.tss, 'нагрузка');
+  add(metrics.vo2max, 'VO2max');
+  add(metrics.efficiency, 'эффект.');
+  add(metrics.cadence_work, 'кад. работа');
+
+  if (!tiles.length) return '';
+  return `<div class="metrics-block">
+      <div class="lbl">Метрики формы</div>
+      <div class="metrics">${tiles.join('')}</div>
+    </div>`;
+}
+
+/* Загрузить метрики тренировки и перерисовать карточку.
+ *
+ * Метрики не входят в ответ недели: они считаются на сервере из
+ * разбора, и тянуть их для всех тренировок недели — лишний запрос.
+ *
+ * `skipReload` разрывает петлю: перерисовка карточки вызывает
+ * `showWorkout` снова, а тот — снова грузит метрики. Без флага
+ * приложение зацикливается.
+ */
+async function loadWorkoutMetrics(actualId, skipReload = false) {
+  if (!actualId) return;
+  try {
+    const response = await api.getMetrics(actualId);
+    state.workoutMetrics = response.data;
+  } catch (error) {
+    state.workoutMetrics = null;
+  }
+  if (skipReload) return;
+  if (state.openWorkoutId) showWorkout(state.openWorkoutId, true);
 }
 
 function screenClose() {
   const week = state.week;
   const status = week ? (week.status || 'proposed') : 'proposed';
   const linked = week ? (week.workouts || []).filter((w) => w.actual_id).length : 0;
+  // Метрики формы: закрытой недели — из саммари, текущей — с сервера.
+  // Неделя, закрытая до появления метрик, в саммари их не имеет —
+  // тогда берём посчитанные сервером.
+  const summaryMetrics = week && week.summary && week.summary.metrics;
+  const metrics = (summaryMetrics && summaryMetrics.workouts_counted)
+    ? summaryMetrics : state.metrics;
+  const metricsBlock = weekMetricsBlock(metrics);
 
   if (status === 'closed') {
     const line = summaryLine(week ? week.summary : null);
@@ -922,7 +1052,8 @@ function screenClose() {
         <div class="metric"><div class="v">${week ? (week.workouts || []).length : 0}</div><div class="l">в плане</div></div>
         <div class="metric"><div class="v">${linked}</div><div class="l">связано</div></div>
       </div>
-    </div>`;
+    </div>
+    ${metricsBlock}`;
   }
 
   if (status !== 'active') {
@@ -947,12 +1078,17 @@ function screenClose() {
       <p class="lead">Закрытие посчитает итог: что планировали против что сделали. `
       + `Факт подтянется из Garmin автоматически.</p>
     </div>
+    ${metricsBlock}
     <button class="action" id="close">Закрыть неделю</button>`;
 }
 
 function screenAthlete() {
   if (!state.athlete) return empty('Профиль ещё не загружен');
   const a = state.athlete;
+  const ftp = state.ftpEstimate;
+  // FTP — порог мощности. Без него нагрузка (TSS) не считается, а
+  // оценить его можно по тренировкам: 95-й перцентиль мощности.
+  const ftpBlock = ftpBlockHtml(ftp, a);
   return `${messageBlock()}<h2>Атлет</h2>
     <div class="card">
       <div class="chead">Нормативы</div>
@@ -966,7 +1102,47 @@ function screenAthlete() {
         <li><div class="row"><span>Состояние</span><span class="num">${escapeHtml(a.form || '—')}</span></div></li>
       </ul>
     </div>
+    ${ftpBlock}
     ${slotsBlock()}`;
+}
+
+/* FTP: текущее значение или оценка по тренировкам.
+ *
+ * Оценка не записывается сама: пока пользователь не подтвердит
+ * значение, нагрузка не считается. Подставить выдуманный порог —
+ * значит показать правдоподобную цифру, которой никто не мерил.
+ */
+function ftpBlockHtml(ftp, athlete) {
+  const current = athlete.ftp_w;
+  const estimated = ftp && ftp.estimated_ftp_w
+    ? Math.round(ftp.estimated_ftp_w) : null;
+
+  if (current) {
+    return `<div class="card">
+      <div class="chead">Порог мощности</div>
+      <div class="metrics">
+        <div class="metric"><div class="v">${current}</div><div class="l">ватт · FTP</div></div>
+      </div>
+    </div>`;
+  }
+
+  if (!estimated) {
+    return `<div class="card">
+      <div class="chead">Порог мощности</div>
+      <p class="lead">FTP не задан — нагрузка не считается. Нужен разбор
+      тренировок с мощностью.</p>
+    </div>`;
+  }
+
+  return `<div class="card">
+    <div class="chead">Порог мощности</div>
+    <div class="metrics">
+      <div class="metric"><div class="v">${estimated}</div><div class="l">ватт · оценка</div></div>
+    </div>
+    <p class="lead">Оценка по ${ftp.workouts_used || 0} тренировкам. Подтверди —
+    и нагрузка (TSS) посчитается.</p>
+    <button class="action primary" id="set-ftp" data-ftp="${estimated}">Принять ${estimated} Вт</button>
+  </div>`;
 }
 
 /* Окна тренировок — расписание, в которое раскладывается неделя.
@@ -1254,7 +1430,7 @@ function unplacedWorkout(u) {
   };
 }
 
-function showWorkout(workoutId) {
+function showWorkout(workoutId, skipMetrics = false) {
   /* Тренировка ищется и среди размещённых, и среди непривязанных.
    *
    * Дефект, который это ловит: по висяку нельзя было посмотреть
@@ -1335,6 +1511,7 @@ function showWorkout(workoutId) {
           ${linkedActual.hr_avg ? ` · HR ${linkedActual.hr_avg}` : ''}
         </div>
         <div class="when">${linkedActual.date} · ${escapeHtml(SPORT_NAME[linkedActual.sport] || linkedActual.sport)}</div>
+        ${workoutMetricsBlock(linkedActual.id)}
         <div class="actual-actions">
           <button class="action" data-detail="${escapeHtml(linkedActual.id)}">Разбор тренировки →</button>
           <button class="action secondary" data-unlink="${escapeHtml(workout.id)}">Отвязать</button>
@@ -1393,6 +1570,12 @@ function showWorkout(workoutId) {
   }
   render();
   window.scrollTo(0, 0);
+
+  /* Метрики формы грузятся после отрисовки: карточка появляется сразу,
+   * а метрики — как ответят. Иначе открытие тренировки ждало бы сеть. */
+  if (linkedActual && !skipMetrics) {
+    loadWorkoutMetrics(linkedActual.id);
+  }
 }
 
 /* Идентификатор тренировки для адреса — латиницей: кириллица в URL
@@ -1611,12 +1794,13 @@ async function load() {
   try {
     // Запросы идут параллельно, а не по очереди: пять последовательных
     // round-trip'ов на телефоне — это и есть «несколько секунд».
-    const [snapshot, weeks, current, seasonPlan, slotsResponse] = await Promise.all([
+    const [snapshot, weeks, current, seasonPlan, slotsResponse, ftp] = await Promise.all([
       api.getSnapshot(),
       api.getWeeks().catch(() => null),
       api.getCurrentWeek().catch(() => null),
       api.getSeason().catch(() => null),
       api.getSlots().catch(() => null),
+      api.getFtpEstimate().catch(() => null),
     ]);
 
     state.version = snapshot.version;
@@ -1634,6 +1818,12 @@ async function load() {
       cacheWrites.push(putCache('slots', state.slots, snapshot.version));
     } else {
       state.slots = (await getCache('slots'))?.value || [];
+    }
+
+    if (ftp) {
+      state.ftpEstimate = ftp.data;
+    } else {
+      state.ftpEstimate = state.ftpEstimate || null;
     }
 
     if (seasonPlan) {
@@ -1671,9 +1861,12 @@ async function load() {
 
     if (week) {
       state.week = week.data;
+      // Метрики формы — с неделей: сервер считает их из разборов.
+      state.metrics = week.data.metrics || null;
       cacheWrites.push(putCache(`week:${seasonWeek}`, week.data, snapshot.version));
     } else {
       state.week = null;
+      state.metrics = null;
     }
 
     if (actual) {
@@ -1955,6 +2148,31 @@ document.addEventListener('click', async (event) => {
       return;
     }
     showMessage('Следующая неделя спланирована');
+    render();
+    return;
+  }
+
+  if (closest('#set-ftp')) {
+    const ftp = Number(closest('#set-ftp').dataset.ftp);
+    if (!ftp) return;
+    showMessage('Записываю порог мощности…');
+    state.busy = true;
+    render();
+    await queueCommand({
+      id: `ftp-${ftp}-${Date.now()}`,
+      type: 'update_athlete',
+      args: {ftp_w: ftp},
+      reason: 'порог мощности для расчёта нагрузки',
+      expected_version: state.version,
+    });
+    await flushOutbox();
+    await load();
+    state.busy = false;
+    if (state.messageKind === 'error' && state.message) {
+      render();
+      return;
+    }
+    showMessage(`Порог мощности: ${ftp} Вт`);
     render();
     return;
   }

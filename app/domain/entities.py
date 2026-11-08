@@ -51,6 +51,10 @@ class Athlete:
     weight_kg: float | None = None
     injuries: list[str] = field(default_factory=list)
     form: str | None = None
+    # FTP — пороговая мощность, ватты. Нужна для TSS (TrainingPeaks):
+    # нагрузка считается от мощности относительно порога. Без него
+    # нагрузку не посчитать — метрика просто не появляется.
+    ftp_w: float | None = None
 
 
 # ---------------------------------------------------------------- цель
@@ -422,6 +426,9 @@ class WeekSummary:
     extra: list[str] = field(default_factory=list)
     deviations: list[dict[str, Any]] = field(default_factory=list)
     intensity: dict[str, Any] = field(default_factory=dict)
+    # Метрики формы недели: зоны пульса, темп в зоне, нагрузка, каденция.
+    # Считаются при закрытии недели — до закрытия они ещё меняются.
+    metrics: dict[str, Any] = field(default_factory=dict)
 
     def actual_moderate(self) -> int:
         """I16: actual_moderate = Σ contributions[].moderate_min."""

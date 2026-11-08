@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from datetime import date, timedelta
 from typing import Any
 
@@ -25,6 +26,7 @@ from app.domain.entities import (
     WorkoutDetail,
 )
 from app.domain.enums import CommandType, PlanStatus
+from app.domain.metrics import estimate_ftp
 from app.ports.storage import (
     DuplicateExternalIdError,
     ExternalSourceError,
@@ -144,10 +146,24 @@ def week(season_week: int, container: AppContainer = Depends(get_container)) -> 
     sessions = container.fact_repo.list_for_week(season_week)
     loaded = container.season_repo.load()
     stored = container.season_repo.weeks()
-    return ok(container, _week_dict(
+    data = _week_dict(
         found, sessions, loaded.slots,
         earlier=[w for w in stored if w.season_week < season_week],
-    ))
+    )
+    # Метрики формы — по всем сессиям недели. Считаются на лету: закрытая
+    # неделя хранит агрегат, а текущая ещё не закрыта.
+    data["metrics"] = _metrics_dict(container, found, sessions)
+    return ok(container, data)
+
+
+def _metrics_dict(
+    container: AppContainer,
+    week: Week,
+    sessions: list[ActualSession],
+) -> dict[str, Any]:
+    """Метрики недели — из разборов тренировок."""
+    metrics = container.metrics.week(week, sessions)
+    return metrics.as_dict()
 
 
 @router.get("/actual/{season_week}")
@@ -155,6 +171,22 @@ def actual(season_week: int, container: AppContainer = Depends(get_container)) -
     """Факт недели."""
     sessions = container.fact_repo.list_for_week(season_week)
     return ok(container, {"sessions": [_session_dict(s) for s in sessions]})
+
+
+@router.get("/metrics/{actual_id}")
+def metrics(actual_id: str,
+            container: AppContainer = Depends(get_container)) -> JSONResponse:
+    """Метрики формы одной тренировки.
+
+    Отдельный маршрут, а не поле в факте: метрики считаются из разбора
+    FIT, а разбор может ещё не быть сделан. Пока его нет — метрик нет,
+    и карточка тренировки это показывает.
+    """
+    session = container.fact_repo.get(actual_id)
+    if session is None:
+        return fail(container, "not_found", f"факт {actual_id} не найден",
+                    status=404)
+    return ok(container, container.metrics.workout(actual_id).as_dict())
 
 
 @router.get("/weeks")
@@ -213,6 +245,34 @@ def detail(actual_id: str,
 def athlete(container: AppContainer = Depends(get_container)) -> JSONResponse:
     """Профиль атлета."""
     return ok(container, _athlete_dict(container))
+
+
+@router.get("/ftp-estimate")
+def ftp_estimate(container: AppContainer = Depends(get_container)) -> JSONResponse:
+    """Оценка FTP по разобранным тренировкам.
+
+    FTP не знает ни Garmin, ни FIT: это пороговая мощность, которую
+    измеряют отдельно. Но её можно **оценить** по данным — 95-й
+    перцентиль мощности в интервальных тренировках.
+
+    Оценка не записывается в профиль сама: пока пользователь не
+    подтвердит значение, нагрузка (TSS) не считается. Подставлять
+    выдуманный порог — значит показывать правдоподобную цифру, которой
+    никто не мерил.
+    """
+    details = []
+    for week in container.season_repo.weeks():
+        for session in container.fact_repo.list_for_week(week.season_week):
+            detail = container.detail_repo.detail(session.id)
+            if detail is not None:
+                details.append(detail)
+    estimate = estimate_ftp(details)
+    athlete = container.athlete_repo.get()
+    return ok(container, {
+        "estimated_ftp_w": estimate,
+        "current_ftp_w": athlete.ftp_w,
+        "workouts_used": len(details),
+    })
 
 
 @router.get("/slots")
@@ -428,10 +488,17 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
                 int(command.args.get("season_week", 0))), sessions)
         for session in sessions:
             container.fact_repo.upsert(session)
+        # Разбор FIT — часть выкачки: без него у тренировки нет метрик
+        # формы (зоны пульса, темп в зоне, нагрузка, каденция).
+        # Разбор не может сорвать выкачку: он просто не делается, если
+        # файла нет.
+        parsed = container.detail_importer.import_many(sessions)
         return {
             "status": "applied",
             "pulled": [s.id for s in sessions],
             "skipped": [],
+            "parsed": parsed["imported"],
+            "not_parsed": parsed["skipped"],
             "new_version": container.season_repo.load().version,
         }
 
@@ -439,6 +506,23 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         text = container.narrator_port.explain(str(command.args.get("about", "")))
         return {"status": "applied", "text": text,
                 "new_version": container.season_repo.load().version}
+
+    if command.type is CommandType.UPDATE_ATHLETE:
+        # Профиль атлета — нормативы, а не план. FTP нужен для нагрузки
+        # (TSS): без него метрика не считается, и задать его — только
+        # здесь.
+        athlete = container.athlete_repo.get()
+        ftp = command.args.get("ftp_w")
+        updated_athlete = replace(
+            athlete,
+            ftp_w=float(ftp) if ftp is not None else athlete.ftp_w,
+        )
+        container.athlete_repo.update(updated_athlete)
+        return {
+            "status": "applied",
+            "ftp_w": updated_athlete.ftp_w,
+            "new_version": container.season_repo.load().version,
+        }
 
     season_week = int(command.args.get("season_week", 0))
     week = container.season_repo.week(season_week)
@@ -498,6 +582,10 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         _pull_remaining_fact(container, season_week, week)
         sessions = container.fact_repo.list_for_week(season_week)
         assessment = container.assessor.assess(week, sessions)
+        # Метрики формы — часть итога недели: их считают при закрытии,
+        # потому что до закрытия недели они ещё меняются.
+        metrics = container.metrics.week(week, sessions)
+        assessment.summary.metrics = metrics.as_dict()
         updated = close_week(week, assessment.summary)
     elif command.type is CommandType.REPLAN_REMAINDER:
         updated = replan_remainder(week, date.today(), [])
@@ -738,6 +826,8 @@ def _summary_dict(summary: WeekSummary) -> dict[str, Any]:
         "deviations": summary.deviations,
         "intensity": summary.intensity,
         "per_session": summary.per_session,
+        # Метрики формы — посчитаны при закрытии недели.
+        "metrics": summary.metrics,
     }
 
 
@@ -865,6 +955,8 @@ def _athlete_dict(container: AppContainer) -> dict[str, Any]:
         "injuries": profile.injuries,
         "form": _form_text(profile.form),
         "form_code": profile.form or "",
+        # FTP — пороговая мощность. Без неё нагрузка (TSS) не считается.
+        "ftp_w": profile.ftp_w,
     }
 
 

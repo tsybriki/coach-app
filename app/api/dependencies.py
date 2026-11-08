@@ -36,6 +36,8 @@ from app.ports.storage import (
     SeasonRepo,
 )
 from app.services.assessment import Assessor
+from app.services.detail_import import DetailImporter
+from app.services.form_metrics import MetricsCollector
 from app.services.goal_feasibility import GoalFeasibility, StubGrowthRule
 from app.services.week_planner import WeekPlanner
 
@@ -109,6 +111,8 @@ class AppContainer:
     feasibility: GoalFeasibility
     planner: WeekPlanner
     clock: Clock
+    metrics: MetricsCollector
+    detail_importer: DetailImporter
 
 
 def build_container(data_root: Path | None = None) -> AppContainer:
@@ -141,21 +145,51 @@ def build_container(data_root: Path | None = None) -> AppContainer:
         target_vdot_for_metric=_target_vdot_for_metric,
     )
 
+    detail_repo = DetailRepoAdapter(storage)
+    fact_repo = FactRepoAdapter(storage)
+    athlete_repo = AthleteRepoAdapter(storage)
+    fit_port = GarminFitPort()
+
+    # Темп по VDOT — по таблице Дэниэлса: он нужен для эффективности
+    # формы (фактический темп против темпа, который даёт форма).
+    paces = methodology.training_paces()
+
+    def vdot_pace(vdot: float) -> float | None:
+        # Зоны справочника Дэниэлса: E (лёгкая), M (марафонская),
+        # T (порог), R (повторная). Порог — та зона, которая отвечает
+        # на вопрос «какой темп даёт эта форма».
+        return paces.pace_sec_per_km("T", vdot)
+
+    metrics = MetricsCollector(
+        detail_repo=detail_repo,
+        fact_repo=fact_repo,
+        athlete_repo=athlete_repo,
+        vdot_pace_lookup=vdot_pace,
+    )
+    detail_importer = DetailImporter(
+        fit_port=fit_port,
+        detail_repo=detail_repo,
+        fact_repo=fact_repo,
+        athlete_repo=athlete_repo,
+    )
+
     return AppContainer(
         storage=storage,
         season_repo=SeasonRepoAdapter(storage),
-        fact_repo=FactRepoAdapter(storage),
-        athlete_repo=AthleteRepoAdapter(storage),
+        fact_repo=fact_repo,
+        athlete_repo=athlete_repo,
         methodology_repo=methodology,
-        detail_repo=DetailRepoAdapter(storage),
+        detail_repo=detail_repo,
         command_log=CommandLogAdapter(storage),
         activity_port=GarminActivityPort(),
-        fit_port=GarminFitPort(),
+        fit_port=fit_port,
         narrator_port=StubNarrator(),
         assessor=Assessor(),
         feasibility=feasibility,
         planner=planner,
         clock=SystemClock(),
+        metrics=metrics,
+        detail_importer=detail_importer,
     )
 
 

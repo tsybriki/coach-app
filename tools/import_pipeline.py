@@ -499,8 +499,11 @@ def build_athlete(athlete_data: dict[str, Any]) -> Athlete:
         item.get("type") if isinstance(item, dict) else str(item)
         for item in athlete_data.get("injuries") or []
     ]
+    current_form = athlete_data.get("current_form") or {}
+    # FTP — пороговая мощность. Без неё нагрузку (TSS) не посчитать.
+    ftp = current_form.get("ftp_w")
     return Athlete(
-        vdot=float((athlete_data.get("current_form") or {}).get("vo2max", 0.0)),
+        vdot=float(current_form.get("vo2max", 0.0)),
         hr_zones=parse_hr_zones(zones.get("zones", {})),
         hr_max=hr_max,
         rhr=rhr,
@@ -508,6 +511,7 @@ def build_athlete(athlete_data: dict[str, Any]) -> Athlete:
         weight_kg=athlete_data.get("weight_kg_current"),
         injuries=[i for i in injuries if i],
         form=athlete_data.get("form_trend_4w"),
+        ftp_w=float(ftp) if ftp else None,
     )
 
 

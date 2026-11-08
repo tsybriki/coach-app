@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 from typing import Protocol
 
 from app.domain.entities import (
@@ -158,6 +159,19 @@ class ActivityPort(Protocol):
         Источник недоступен → исключение `ExternalSourceError` (вызывающий
         превращает в `degraded`), а не молчаливый пустой список.
         """
+        ...
+
+
+class FitPort(Protocol):
+    """Источник FIT-файлов активностей.
+
+    Файл лежит там, куда его положила выкачка: путь известен из
+    индекса активностей. Если файла нет — разбор невозможен, и это
+    `None`, а не пустой разбор.
+    """
+
+    def fit_path_for(self, external_id: str) -> Path | None:
+        """Путь к FIT-файлу активности по её внешнему id."""
         ...
 
 
