@@ -20,7 +20,31 @@ from app.domain.entities import (
     Week,
     Workout,
 )
-from app.domain.enums import FactSource, Sport
+from app.domain.enums import FactSource, Sport, TargetType
+
+
+def workout_distance_m(workout: Workout | None) -> float:
+    """Километраж тренировки — по шагам с дистанцией, в метрах.
+
+    Плану нужна длина тренировки в километрах, а не только в минутах:
+    «55 мин» ничего не говорит о том, длинная это тренировка или нет.
+
+    Считаются **все** шаги с дистанцией, включая отдых: отдых на бегу
+    — это тоже пройденные метры, и итог должен совпадать с фактом.
+    Шаги без дистанции (разминка «по времени», силовая) вклад не дают:
+    метры оттуда неизвестны, а выдумывать их нельзя.
+
+    Ноль означает «дистанция не задана», а не «тренировка нулевая»:
+    показывать ноль в километрах бессмысленно.
+    """
+    if workout is None:
+        return 0.0
+    meters = sum(
+        float(step.target_value)
+        for step in workout.steps
+        if step.target_type == TargetType.DISTANCE
+    )
+    return meters
 
 
 def merged_slots(

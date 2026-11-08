@@ -316,8 +316,21 @@ h3 {
   letter-spacing: 0.5px;
 }
 
-.slot .dur {
+/* Правая колонка плашки: длительность, под ней километраж.
+ *
+ * Два числа в одной колонке, а не в одной строке: плашка не растёт
+ * по ширине, и на телефоне название тренировки остаётся читаемым.
+ */
+.slot .dur-box {
   margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.slot .dur {
   font-size: 10.5px;
   color: var(--muted);
   background: var(--panel2);
@@ -326,6 +339,17 @@ h3 {
   border: 1px solid var(--border);
   font-family: ui-monospace, SFMono-Regular, monospace;
   flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Километраж — тем же моноширинным, что и время: это пара величин
+ * одной тренировки, и разный шрифт сбивает. */
+.slot .km {
+  font-size: 10px;
+  color: var(--accent2);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  padding-right: 2px;
+  white-space: nowrap;
 }
 
 .slot .name {

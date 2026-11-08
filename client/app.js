@@ -305,6 +305,11 @@ const MONTHS_SHORT = [
  * В шапке — день недели, дата и время: без них тренировку нельзя
  * положить в календарь. Дата приходит из окна, в которое попала
  * тренировка (сервер считает), клиент её только показывает.
+ *
+ * **Километраж рядом с длительностью.** «55 мин» ничего не говорит о
+ * том, длинная это тренировка или нет; «55 мин · 6,2 км» говорит. Чтобы
+ * не раздувать плашку, оба числа стоят в одной правой колонке, а
+ * километраж — под временем, мельче.
  */
 function slotButton(workout, actual) {
   const objective = workout.objective || {};
@@ -321,6 +326,15 @@ function slotButton(workout, actual) {
     workout.time || '',
   ].filter((part) => part).join(' · ');
 
+  /* Километраж плана — по шагам с дистанцией (сервер считает). Нет
+   * дистанции — не показываем: «0 км» враньё, а тренировки без
+   * дистанции (силовая, бассейн) её не имеют. */
+  const km = plannedKm(workout);
+  const durBlock = `<span class="dur-box">
+      <span class="dur">${formatDuration(workout.duration_min)}${done}</span>
+      ${km ? `<span class="km">${km}</span>` : ''}
+    </span>`;
+
   const actualLine = actual
     ? `<div class="done-line">${((actual.distance_m || 0) / 1000).toFixed(1)} км · ${formatDuration(actual.duration_min)}${actual.hr_avg ? ` · HR ${actual.hr_avg}` : ''}</div>`
     : '';
@@ -329,12 +343,30 @@ function slotButton(workout, actual) {
       <div class="slot-head">
         <span class="ico">${KIND_ICON[workout.sport] || '🎯'}</span>
         <span class="day">${when}</span>
-        <span class="dur">${formatDuration(workout.duration_min)}${done}</span>
+        ${durBlock}
       </div>
       <div class="name">${escapeHtml(title)}</div>
       ${focus ? `<div class="focus">🎯 ${escapeHtml(focus)}</div>` : ''}
       ${actualLine}
     </button>`;
+}
+
+/* Километраж тренировки — строкой «14,3 км» или пусто, если дистанции нет.
+ *
+ * Метры приходят с сервера (по шагам с дистанцией). Планка: меньше
+ * километра показывать нечего — «0,3 км» это шум, а не объём.
+ *
+ * Разряды: до 10 км — всегда с десятой («8,0 км»), дальше — с десятой
+ * только если дробная часть есть («14,3 км»), иначе целое («14 км»).
+ * Округлять вниз до целых врало бы: «14 км» вместо 14,3.
+ */
+function plannedKm(workout) {
+  const meters = Number(workout.distance_m || 0);
+  if (!meters || meters < 1000) return '';
+  const km = meters / 1000;
+  const withTenth = km < 10 || Math.abs(km - Math.round(km)) > 0.05;
+  const text = withTenth ? km.toFixed(1) : String(Math.round(km));
+  return `${text.replace('.', ',')} км`;
 }
 
 /* День недели по-русски. Приходит либо названием («ПН»), либо номером
@@ -554,12 +586,13 @@ function unplacedBlock(week) {
      * оба действия не мешают друг другу, и привязка остаётся ровно
      * такой, какой была.
      */
+    const km = plannedKm(u);
     return `<div class="unplaced-row">
         <button class="unplaced-open" data-unplaced="${escapeHtml(u.id)}">
           <span class="ico">${icon}</span>
           <span class="body">
             <span class="name">${escapeHtml(label)}</span>
-            <span class="meta">${escapeHtml(formatDuration(u.duration_min))}</span>
+            <span class="meta">${escapeHtml(formatDuration(u.duration_min))}${km ? ` · ${escapeHtml(km)}` : ''}</span>
           </span>
         </button>
         <button class="unplaced-bind" data-bind-pick="${escapeHtml(u.id)}">
@@ -1504,6 +1537,7 @@ function unplacedWorkout(u) {
     time: u.time || '',
     steps: u.steps || [],
     duration_min: u.duration_min,
+    distance_m: u.distance_m || 0,
     status: 'planned',
     rationale: u.rationale || '',
     actual_id: null,
@@ -1606,6 +1640,15 @@ function showWorkout(workoutId, skipMetrics = false) {
       </div>`
       : '';
 
+  /* Подзаголовок: день, время, длительность и километраж.
+   *
+   * Километраж плана — рядом с длительностью: в карточке тренировки
+   * это главное, чего не хватало. Плана по факту тут нет: показан
+   * именно план, чтобы видеть, сколько метров заложено.
+   */
+  const planKm = plannedKm(workout);
+  const subtitle = `${placed ? `${escapeHtml(objective.day || '')} · ` : 'не привязано · '}${escapeHtml(workout.time || '')}${workout.time ? ' · ' : ''}${formatDuration(workout.duration_min)}${planKm ? ` · ${escapeHtml(planKm)}` : ''}`;
+
   cardHost.innerHTML = `<div class="card detail">
       <div class="card-header">
         <div class="headline">
@@ -1614,7 +1657,7 @@ function showWorkout(workoutId, skipMetrics = false) {
         </div>
         <span class="tag kind-${escapeHtml(workout.sport)}">${stepCount} ${plural(stepCount, 'шаг', 'шага', 'шагов')}</span>
       </div>
-      <div class="subtitle">${placed ? `${escapeHtml(objective.day || '')} · ` : 'не привязано · '}${escapeHtml(workout.time || '')}${workout.time ? ' · ' : ''}${formatDuration(workout.duration_min)}</div>
+      <div class="subtitle">${subtitle}</div>
       ${meta.length ? `<div class="meta-row">${meta.join('')}</div>` : ''}
       ${goalHtml}
       ${rationaleHtml}

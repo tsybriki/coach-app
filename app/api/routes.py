@@ -17,7 +17,11 @@ from pydantic import BaseModel, Field
 
 from app.adapters.fit import parse_fit
 from app.api.dependencies import AppContainer, get_container
-from app.domain.derivations import preserve_fact_links, week_progress
+from app.domain.derivations import (
+    preserve_fact_links,
+    week_progress,
+    workout_distance_m,
+)
 from app.domain.entities import (
     ActualSession,
     Command,
@@ -809,6 +813,7 @@ def _unplaced_dict(request: Any, workout: Any = None) -> dict[str, Any]:
     data["name"] = objective.get("name") or workout.focus or request.focus
     data["focus"] = workout.focus or request.focus
     data["duration_min"] = workout.duration_min
+    data["distance_m"] = workout_distance_m(workout)
     data["objective"] = objective
     data["steps"] = _steps_dict(workout.steps)
     data["rationale"] = workout.rationale
@@ -934,6 +939,10 @@ def _workout_dict(
         "slot_id": slot.id if slot else "",
         "rationale": workout.rationale,
         "duration_min": workout.duration_min,
+        # Километраж плана — по шагам с дистанцией. Без него в плашке
+        # тренировки только минуты, а «55 мин» ничего не говорит о том,
+        # длинная это тренировка или нет.
+        "distance_m": workout_distance_m(workout),
         "status": workout.status.value,
         "actual_id": workout.actual_id,
         "steps": _steps_dict(workout.steps),
