@@ -177,7 +177,8 @@ test('экран «Факт»: метрики формы недели показ
 
   const text = document.getElementById('picker').textContent;
   assert.match(text, /Метрики формы/, 'нет блока метрик');
-  assert.match(text, /142\.5/, 'нет минут в Z2');
+  // Минуты в зонах — целые: «143 мин» читается, «142,5 мин» — нет.
+  assert.match(text, /Z2 143/, 'нет минут в Z2');
   assert.match(text, /5:05 на км/, 'нет темпа в Z2');
   assert.match(text, /236\.7/, 'нет нагрузки');
   assert.match(text, /50\.5/, 'нет VO2max');
@@ -191,9 +192,10 @@ test('метрики недели — над тренировками, а не �
   const card = [...document.querySelectorAll('.card')]
     .find((c) => c.textContent.includes('Метрики формы'));
   assert.ok(card, 'нет карточки метрик');
-  // Внутри карточки — и плитки, и строки по тренировкам.
-  assert.ok(card.querySelectorAll('.metric').length > 0, 'нет плиток метрик');
-  assert.match(card.textContent, /темп Z2/, 'нет строк по тренировкам');
+  // Метрики — списком: строки с названием, значением и пояснением.
+  assert.ok(card.querySelectorAll('.metrics-list .mrow').length > 0,
+    'нет списка метрик');
+  assert.match(card.textContent, /темп 5:10/, 'нет строк по тренировкам');
 });
 
 test('метрики недели показывают факт, а не план', async () => {
@@ -203,7 +205,7 @@ test('метрики недели показывают факт, а не пла�
 
   const card = [...document.querySelectorAll('.card')]
     .find((c) => c.textContent.includes('Метрики формы'));
-  const labels = [...card.querySelectorAll('.metric .l')].map((n) => n.textContent);
+  const labels = [...card.querySelectorAll('.mname')].map((n) => n.textContent);
   assert.ok(labels.every((l) => !/план/i.test(l)),
     `в метриках есть план: ${labels.join(', ')}`);
 });
@@ -261,7 +263,7 @@ test('закрытая неделя: метрики видны из плана',
 
   const text = document.getElementById('picker').textContent;
   assert.match(text, /Метрики формы/, 'у закрытой недели нет метрик');
-  assert.match(text, /142\.5/, 'нет минут в Z2');
+  assert.match(text, /Z2 143/, 'нет минут в Z2');
   assert.match(text, /236\.7/, 'нет нагрузки');
 });
 
@@ -282,7 +284,7 @@ test('неделя, закрытая до появления метрик: бе�
   click(document.querySelector('#nav [data-screen="fact"]'));
 
   const text = document.getElementById('picker').textContent;
-  assert.match(text, /142\.5/, 'метрики не показаны');
+  assert.match(text, /Z2 143/, 'метрики не показаны');
   assert.ok(!/Нет разбора FIT/.test(text),
     'неделя должна брать метрики с сервера, а не из пустого саммари');
 });
@@ -294,7 +296,7 @@ test('экран закрытия недели: метрики формы на �
 
   const text = document.getElementById('picker').textContent;
   assert.match(text, /Метрики формы/, 'на экране закрытия нет метрик');
-  assert.match(text, /142\.5/);
+  assert.match(text, /Z2 143/);
 });
 
 test('экран атлета: без FTP показана оценка и кнопка', async () => {

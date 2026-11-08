@@ -423,12 +423,27 @@ function screenWeek() {
 
 /* Следующая неделя, которую можно планировать.
  *
- * Одна неделя наперёд: планируется неделя после текущей по календарю.
- * Номер текущей недели считает сервер — клиент о горизонте сезона не знает.
+ * Это **первая неделя, с которой ещё надо что-то сделать**, начиная с
+ * текущей. Не «текущая + 1»:
+ *
+ *   - воскресенье: началась W5, плана у неё нет — планировать надо её;
+ *   - вторник: W4 активна и запланирована — планировать W5.
+ *
+ * Если у текущей недели плана нет — предлагаем её. Если есть — берём
+ * следующую по календарю: там уже может быть предложение (тогда её
+ * открывают) или не быть (тогда её планируют).
  */
 function nextPlannableWeek() {
-  if (!state.currentWeek) return null;
-  return state.currentWeek + 1;
+  const macro = (state.seasonPlan && state.seasonPlan.macro_weeks) || [];
+  const current = state.currentWeek;
+  if (!current) return null;
+
+  const byNumber = new Map(macro.map((w) => [w.season_week, w]));
+  const currentMacro = byNumber.get(current);
+  if (currentMacro && !currentMacro.status) return current;
+
+  const next = current + 1;
+  return byNumber.has(next) ? next : null;
 }
 
 /* Неделя макро-плана — по номеру. В ней и объём, и состояние: планы
@@ -444,15 +459,20 @@ function macroWeekOf(seasonWeek) {
  * нельзя. Карточка ведёт в следующую неделю: спланировать её, если её
  * ещё нет, или открыть, если она уже запланирована.
  *
- * Живёт на экране текущей недели: на экране самой следующей недели она
- * не нужна — там и так видно, что с ней делать.
+ * **Показывается всегда**, кроме одного случая: когда открыта сама
+ * следующая неделя — там она тавто, и так видно, что с ней делать.
+ *
+ * Раньше карточка жила только на экране текущей недели, и в воскресенье
+ * (когда текущая неделя только началась, а открыта была прошлая) кнопки
+ * «Спланировать неделю» не было вообще. Планировать следующую можно
+ * независимо от того, какая неделя открыта.
  */
 function nextWeekCard() {
   const next = nextPlannableWeek();
   if (!next) return '';
-  // Только на экране текущей недели: на прошлой карточка «следующая» —
-  // шум, а на экране самой следующей — тавто.
-  if (state.seasonWeek !== state.currentWeek) return '';
+  // На экране самой следующей недели карточка не нужна: там её собственные
+  // действия — спланировать, привязать, активировать.
+  if (state.seasonWeek === next) return '';
 
   const macro = macroWeekOf(next);
   if (!macro) return '';
@@ -890,7 +910,8 @@ function screenFact() {
         </div>
         <p>Итога ещё нет: неделя не закрыта.</p>
       </div>
-      ${metricsBlock}`;
+      ${metricsBlock}
+      ${nextWeekCard()}`;
   }
 
   const totals = summary.totals || {};
@@ -914,7 +935,8 @@ function screenFact() {
       </div>
     </div>
     <div class="card"><h3>Вердикты</h3><ul class="plain">${rows || '<li>нет</li>'}</ul></div>
-    ${metricsBlock}`;
+    ${metricsBlock}
+    ${nextWeekCard()}`;
 }
 
 /* Метрики формы недели — над тренировками.
@@ -925,6 +947,72 @@ function screenFact() {
  *
  * Метрики без данных не рисуются: пустое значение честнее нуля.
  */
+/* Метрики формы одной недели или тренировки.
+ *
+ * **Не плитки.** Квадраты с числами без пояснений — суета: непонятно,
+ * где что и почему «0,68». Здесь строки «что — значение — что значит».
+ * Читается взглядом, а не разбором.
+ *
+ * `scope` — 'week' или 'workout': у тренировки нет недельных итогов
+ * («форма растёт» — про неделю), но всё остальное то же.
+ */
+function metricsRows(metrics, scope) {
+  const rows = [];
+  const row = (name, value, note) => {
+    if (value === null || value === undefined || value === '') return;
+    rows.push(`<div class="mrow">
+      <span class="mname">${escapeHtml(name)}</span>
+      <span class="mval">${escapeHtml(String(value))}</span>
+      ${note ? `<span class="mnote">${escapeHtml(note)}</span>` : ''}
+    </div>`);
+  };
+
+  // Объём в зонах: главный ответ на «какая неделя». Группируем в одну
+  // строку — четыре отдельных числа в четырех плитках читались хуже.
+  const zoneParts = [];
+  const zmin = (v) => (v === null || v === undefined ? null : Math.round(v));
+  const z2 = zmin(metrics.z2_min);
+  const z3 = zmin(metrics.z3_min);
+  const z4 = zmin(metrics.z4_min);
+  const hi = zmin(metrics.hi_min);
+  if (z2 !== null) zoneParts.push(`Z2 ${z2}`);
+  if (z3 !== null) zoneParts.push(`Z3 ${z3}`);
+  if (z4 !== null) zoneParts.push(`Z4 ${z4}`);
+  if (hi !== null) zoneParts.push(`инт ${hi}`);
+  row('Минуты в зонах', zoneParts.join(' · '),
+    'пульс: Z2 лёгкая, Z3 порог, Z4 выше, инт — интенсивная');
+
+  row('Темп в Z2', metrics.pace_z2, 'какой темп держишь на низком пульсе');
+  row('Нагрузка', metrics.tss ? `${metrics.tss} TSS` : null,
+    'объём × интенсивность, как в TrainingPeaks');
+
+  if (metrics.efficiency !== null && metrics.efficiency !== undefined) {
+    // Эффективность без расшифровки — просто дробь. Показываем темп
+    // по форме рядом: «форма 4:22, факт 5:52» объясняет всё.
+    const eff = Math.round(metrics.efficiency * 100);
+    const note = metrics.form_pace
+      ? `форма ${metrics.form_pace} — фактический темп составляет ${eff}% от неё`
+      : `${eff}% от темпа, который позволяет форма`;
+    row('Эффективность', `${eff}%`, note);
+  }
+
+  row('VO₂max', metrics.vo2max, 'форма по Garmin');
+
+  if (metrics.cadence_work) {
+    row('Каденция', `${metrics.cadence_work} ш/мин`,
+      metrics.cadence_avg
+        ? `в рабочей части; в среднем ${metrics.cadence_avg}`
+        : 'в рабочей части');
+  }
+
+  if (scope === 'week' && metrics.workouts_counted) {
+    row('Тренировок с разбором', metrics.workouts_counted,
+      'остальным без FIT-разбора метрики посчитать не из чего');
+  }
+
+  return rows.join('');
+}
+
 function weekMetricsBlock(metrics) {
   if (!metrics) return '';
   const counted = metrics.workouts_counted || 0;
@@ -935,40 +1023,25 @@ function weekMetricsBlock(metrics) {
     </div>`;
   }
 
-  const tiles = [];
-  const add = (value, label, extra = '') => {
-    if (value === null || value === undefined) return;
-    tiles.push(`<div class="metric${extra}"><div class="v">${escapeHtml(String(value))}</div><div class="l">${escapeHtml(label)}</div></div>`);
-  };
-
-  add(metrics.z2_min, 'мин · Z2');
-  add(metrics.z3_min, 'мин · Z3');
-  add(metrics.z4_min, 'мин · Z4');
-  add(metrics.hi_min, 'мин · интенс.');
-  add(metrics.pace_z2, 'темп Z2');
-  add(metrics.tss, 'нагрузка');
-  add(metrics.vo2max, 'VO2max');
-  add(metrics.efficiency, 'эффект.');
-  add(metrics.cadence_work, 'кад. работа');
-  add(metrics.cadence_avg, 'кад. ср.');
-
-  if (!tiles.length) return '';
+  const rows = metricsRows(metrics, 'week');
+  if (!rows) return '';
 
   const perWorkout = metrics.per_workout || [];
-  const rows = perWorkout.map((item) => {
+  const items = perWorkout.map((item) => {
     const bits = [];
-    if (item.pace_z2) bits.push(`темп Z2 ${item.pace_z2}`);
-    if (item.z2_min) bits.push(`Z2 ${item.z2_min} мин`);
+    if (item.pace_z2) bits.push(`темп ${item.pace_z2}`);
+    if (item.z2_min) bits.push(`Z2 ${Math.round(item.z2_min)} мин`);
     if (item.tss) bits.push(`нагрузка ${item.tss}`);
     if (item.cadence_work) bits.push(`кад ${item.cadence_work}`);
-    return `<div class="row"><span class="wk-focus">${escapeHtml(item.actual_id || '')}</span>
-        <span class="num">${escapeHtml(bits.join(' · ') || '—')}</span></div>`;
+    return `<div class="mrow"><span class="mname">${escapeHtml(item.actual_id || '')}</span>
+      <span class="mval">${escapeHtml(bits.join(' · ') || '—')}</span></div>`;
   }).join('');
 
   return `<div class="card">
       <div class="chead">Метрики формы</div>
-      <div class="metrics">${tiles.join('')}</div>
-      ${rows ? `<div class="zone-rows">${rows}</div>` : ''}
+      <div class="metrics-list">${rows}</div>
+      ${items ? `<div class="chead sub">По тренировкам</div>
+      <div class="metrics-list">${items}</div>` : ''}
     </div>`;
 }
 
@@ -985,26 +1058,11 @@ function workoutMetricsBlock(actualId) {
     return `<div class="metrics-note">Нет разбора FIT — метрики посчитать не из чего.</div>`;
   }
 
-  const tiles = [];
-  const add = (value, label) => {
-    if (value === null || value === undefined) return;
-    tiles.push(`<div class="metric"><div class="v">${escapeHtml(String(value))}</div><div class="l">${escapeHtml(label)}</div></div>`);
-  };
-
-  add(metrics.z2_min, 'мин · Z2');
-  add(metrics.z3_min, 'мин · Z3');
-  add(metrics.z4_min, 'мин · Z4');
-  add(metrics.hi_min, 'мин · интенс.');
-  add(metrics.pace_z2, 'темп Z2');
-  add(metrics.tss, 'нагрузка');
-  add(metrics.vo2max, 'VO2max');
-  add(metrics.efficiency, 'эффект.');
-  add(metrics.cadence_work, 'кад. работа');
-
-  if (!tiles.length) return '';
+  const rows = metricsRows(metrics, 'workout');
+  if (!rows) return '';
   return `<div class="metrics-block">
       <div class="lbl">Метрики формы</div>
-      <div class="metrics">${tiles.join('')}</div>
+      <div class="metrics-list">${rows}</div>
     </div>`;
 }
 

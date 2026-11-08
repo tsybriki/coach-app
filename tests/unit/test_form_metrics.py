@@ -361,6 +361,40 @@ def test_week_metrics_average_efficiency():
         (240.0 / 260.0 + 1.0) / 2)
 
 
+def test_week_metrics_expose_form_pace_and_gap():
+    """Темп по форме и отставание от него — читаемое представление
+    эффективности: «форма 4:22, факт 5:52»."""
+    metr = workout_metrics(detail=make_detail(duration_s=2600.0,
+                                              distance_m=5200.0),
+                            session=make_session(),
+                            vdot_pace_sec_per_km=262.0)
+
+    assert metr.form_pace_sec_per_km == 262.0
+    assert metr.pace_gap_sec_per_km is not None
+    assert metr.pace_gap_sec_per_km > 0, 'факт медленнее формы — разница положительна'
+
+    data = metr.as_dict()
+    assert data['form_pace'] == '4:22 на км'
+    assert data['pace_gap_sec_per_km'] is not None
+
+
+def test_week_metrics_average_form_pace():
+    """Темп по форме на уровне недели — средний по тренировкам."""
+    first = workout_metrics(detail=make_detail(duration_s=2600.0,
+                                              distance_m=5200.0),
+                            session=make_session(),
+                            vdot_pace_sec_per_km=262.0)
+    second = workout_metrics(detail=make_detail(duration_s=2600.0,
+                                               distance_m=5200.0),
+                             session=make_session(),
+                             vdot_pace_sec_per_km=272.0)
+
+    week = week_metrics(week_id='W4', per_workout=[first, second])
+
+    assert week.form_pace_sec_per_km == 267.0
+    assert week.as_dict()['form_pace'] == '4:27 на км'
+
+
 def test_week_metrics_dict_has_all_fields():
     """В ответе API — все метрики, даже пустые."""
     week = week_metrics("W1", [])

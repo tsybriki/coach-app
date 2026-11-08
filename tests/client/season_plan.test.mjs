@@ -191,8 +191,8 @@ test('вкладка «Сезон»: будущая неделя не клика
   await loadApp();
   openSeason();
 
-  // Текущая неделя — W2, планируется вперёд одна: W3. W4 — дальше
-  // текущей, её не планируют.
+  // Текущая неделя — W2, и она сама ещё не спланирована: планировать
+  // надо её. W4 — дальше текущей, её не планируют.
   const future = [...document.querySelectorAll('.macro-week')]
     .find((row) => row.textContent.includes('W4'));
   assert.ok(future, 'дальняя неделя не найдена');
@@ -200,17 +200,17 @@ test('вкладка «Сезон»: будущая неделя не клика
   assert.ok(!future.hasAttribute('data-week'));
 });
 
-test('вкладка «Сезон»: следующая неделя кликабельна', async () => {
+test('вкладка «Сезон»: неделя, которую планируем, кликабельна', async () => {
   await loadApp();
   openSeason();
 
-  // W3 — неделя после текущей (W2): её можно спланировать до закрытия
-  // текущей, поэтому строка кликабельна.
+  // W2 — текущая неделя, плана у неё нет: её и предлагают. Планировать
+  // можно до закрытия предыдущей (I45).
   const next = [...document.querySelectorAll('.macro-week')]
-    .find((row) => row.textContent.includes('W3'));
-  assert.ok(next, 'следующая неделя не найдена');
-  assert.equal(next.tagName, 'BUTTON', 'следующая неделя должна быть кликабельна');
-  assert.equal(next.dataset.week, '3');
+    .find((row) => row.textContent.includes('W2'));
+  assert.ok(next, 'планируемая неделя не найдена');
+  assert.equal(next.tagName, 'BUTTON', 'планируемая неделя должна быть кликабельна');
+  assert.equal(next.dataset.week, '2');
 });
 
 test('вкладка «Сезон»: без макро-плана — понятное сообщение', async () => {

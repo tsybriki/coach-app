@@ -261,3 +261,111 @@ test('в «Сезоне» следующая неделя кликабельна
   assert.ok(far, 'дальняя неделя не найдена');
   assert.equal(far.tagName, 'DIV', 'дальняя неделя не кликабельна');
 });
+
+/* ------------------------------------------------------------------ регрессы */
+
+/* Кирилл: «воскресенье, вижу закрытую неделю на главном экране, и нет
+ * никакой возможности предложить следующую». Воскресенье — первый день
+ * новой недели: текущая неделя только началась, а открыта прошала.
+ *
+ * Этот тест повторяет ровно эту ситуацию: currentWeek = 5 (началась),
+ * открыта закрытая W4, плана у W5 нет. Кнопка «Спланировать неделю»
+ * обязана быть на главном экране.
+ */
+test('воскресенье: на главном экране есть кнопка спланировать текущую неделю',
+  async () => {
+    await loadApp({
+      week: makeWeek('closed', {id: 'W4', season_week: 4}),
+      currentWeek: 5,
+      selectedWeek: 4,
+    });
+
+    const text = document.getElementById('picker').textContent;
+    assert.ok(document.querySelector('#plan-next-week'),
+      `нет кнопки «Спланировать неделю» на главном экране (текст: ${text.slice(0, 120)})`);
+    assert.match(text, /W5/, 'не указан номер планируемой недели');
+  });
+
+test('воскресенье: планируется та неделя, что только началась, а не следующая за ней',
+  async () => {
+    const sent = [];
+    await loadApp({
+      week: makeWeek('closed', {id: 'W4', season_week: 4}),
+      currentWeek: 5,
+      selectedWeek: 4,
+      onCommand: (command) => {
+        sent.push(command);
+        return Promise.resolve({version: 43, data: {status: 'applied'}});
+      },
+    });
+
+    click(document.querySelector('#plan-next-week'));
+    await waitFor(() => sent.length > 0);
+
+    assert.equal(sent[0].type, 'propose_week');
+    assert.equal(sent[0].args.season_week, 5,
+      'планироваться должна начавшаяся неделя, а не следующая за ней');
+  });
+
+test('кнопка есть и на экране «Факт» открытой прошлой недели', async () => {
+  await loadApp({
+    week: makeWeek('closed', {id: 'W4', season_week: 4}),
+    currentWeek: 5,
+    selectedWeek: 4,
+  });
+
+  click(document.querySelector('#nav [data-screen="fact"]'));
+
+  assert.ok(document.querySelector('#plan-next-week'),
+    'на экране «Факт» нет кнопки спланировать неделю');
+});
+
+test('на своей неделе карточки нет — там и так видно, что с ней делать',
+  async () => {
+    await loadApp({
+      week: makeWeek('proposed', {id: 'W5', season_week: 5}),
+      currentWeek: 5,
+      selectedWeek: 5,
+    });
+
+    const text = document.getElementById('picker').textContent;
+    assert.ok(!text.includes('Следующая неделя'),
+      'на самой планируемой неделе карточка не нужна');
+  });
+
+/* Метрики формы — списком, а не плитками: числа без пояснений не читаются. */
+test('метрики формы показаны списком с пояснениями, а не плитками', async () => {
+  const metrics = {
+    week_id: 'W5',
+    z2_min: 142.5, z3_min: 34.1, z4_min: 17.9, hi_min: 12,
+    pace_z2: '5:20 на км',
+    tss: 391.9,
+    efficiency: 0.726,
+    form_pace: '4:22 на км',
+    vo2max: 51,
+    cadence_work: 72, cadence_avg: 71,
+    workouts_counted: 9,
+    per_workout: [],
+  };
+  await loadApp({
+    currentWeek: 5,
+    selectedWeek: 5,
+    week: makeWeek('active', {metrics}),
+  });
+
+  click(document.querySelector('#nav [data-screen="fact"]'));
+
+  const text = document.getElementById('picker').textContent;
+  assert.match(text, /Минуты в зонах/, 'нет строки «Минуты в зонах»');
+  assert.match(text, /Темп в Z2/, 'нет строки «Темп в Z2»');
+  assert.match(text, /Нагрузка/, 'нет строки «Нагрузка»');
+  assert.match(text, /73%/, 'эффективность без расшифровки в процентах');
+  assert.match(text, /форма 4:22/, 'нет пояснения, что такое эффективность');
+  // Плитки остались у итогов недели («ч план / ч факт / дельта») —
+  // там три числа с подписями, и они читаются. Метрики формы — нет.
+  const tiles = document.querySelectorAll('#picker .metrics .metric');
+  assert.ok(tiles.length <= 3,
+    `плитки метрик формы вернулись: ${tiles.length}`);
+  assert.ok(document.querySelector('#picker .metrics-list .mrow'),
+    'нет списка метрик');
+});

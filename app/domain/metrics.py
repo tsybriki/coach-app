@@ -67,6 +67,10 @@ class WorkoutMetrics:
     vo2max: float | None = None
     # 12: эффективность — VDOT-темп против фактического
     efficiency: float | None = None
+    # Темп по форме и отставание от него: «темп по форме 4:11, факт 5:52»
+    # понятнее голого отношения 0,68.
+    form_pace_sec_per_km: float | None = None
+    pace_gap_sec_per_km: float | None = None
     # 14: каденция
     cadence_avg: int | None = None
     cadence_work: int | None = None
@@ -93,6 +97,9 @@ class WorkoutMetrics:
             "normalized_power_w": self.normalized_power_w,
             "vo2max": self.vo2max,
             "efficiency": _round(self.efficiency, 3),
+            "form_pace_sec_per_km": _round(self.form_pace_sec_per_km, 1),
+            "form_pace": _format_pace(self.form_pace_sec_per_km),
+            "pace_gap_sec_per_km": _round(self.pace_gap_sec_per_km, 1),
             "cadence_avg": self.cadence_avg,
             "cadence_work": self.cadence_work,
             "workout_counted": self.workout_counted,
@@ -116,6 +123,9 @@ class WeekMetrics:
     pace_z2_sec_per_km: float | None = None
     vo2max: float | None = None
     efficiency: float | None = None
+    # Темп по форме и отставание от него (секунды на км).
+    form_pace_sec_per_km: float | None = None
+    pace_gap_sec_per_km: float | None = None
     cadence_avg: int | None = None
     cadence_work: int | None = None
     workouts_counted: int = 0
@@ -133,6 +143,9 @@ class WeekMetrics:
             "pace_z2": _format_pace(self.pace_z2_sec_per_km),
             "vo2max": _round(self.vo2max, 1),
             "efficiency": _round(self.efficiency, 3),
+            "form_pace_sec_per_km": _round(self.form_pace_sec_per_km, 1),
+            "form_pace": _format_pace(self.form_pace_sec_per_km),
+            "pace_gap_sec_per_km": _round(self.pace_gap_sec_per_km, 1),
             "cadence_avg": self.cadence_avg,
             "cadence_work": self.cadence_work,
             "workouts_counted": self.workouts_counted,
@@ -197,11 +210,18 @@ def workout_metrics(
                 ftp_w=ftp_w,
             )
 
-    # 12: эффективность — VDOT-темп против фактического темпа.
+    # 12: эффективность — VDOT-темп против фактического.
     metrics.efficiency = efficiency(
         actual_pace_sec_per_km=_pace_of(detail),
         vdot_pace_sec_per_km=vdot_pace_sec_per_km,
     )
+    # Темп по форме и отставание от него — читаемое представление
+    # эффективности: «темп по форме 4:11, факт 5:52» понятнее, чем
+    # отношение 0,68 без пояснений.
+    metrics.form_pace_sec_per_km = vdot_pace_sec_per_km
+    actual_pace = _pace_of(detail)
+    if actual_pace and vdot_pace_sec_per_km:
+        metrics.pace_gap_sec_per_km = actual_pace - vdot_pace_sec_per_km
 
     # 14: каденция — средняя и в рабочей части (пульс выше Z1).
     metrics.cadence_avg = detail.avg_cadence
@@ -390,6 +410,10 @@ def week_metrics(
     cadence_work_count = 0
     efficiency_sum = 0.0
     efficiency_count = 0
+    gap_sum = 0.0
+    gap_count = 0
+    form_pace_sum = 0.0
+    form_pace_count = 0
 
     for metrics in per_workout:
         result.per_workout.append(metrics.as_dict())
@@ -412,6 +436,12 @@ def week_metrics(
         if metrics.efficiency:
             efficiency_sum += metrics.efficiency
             efficiency_count += 1
+        if metrics.pace_gap_sec_per_km is not None:
+            gap_sum += metrics.pace_gap_sec_per_km
+            gap_count += 1
+        if metrics.form_pace_sec_per_km:
+            form_pace_sum += metrics.form_pace_sec_per_km
+            form_pace_count += 1
 
     if z2_distance > 0 and z2_seconds > 0:
         result.pace_z2_sec_per_km = z2_seconds / z2_distance
@@ -421,6 +451,12 @@ def week_metrics(
         result.cadence_work = int(round(cadence_work_sum / cadence_work_count))
     if efficiency_count:
         result.efficiency = efficiency_sum / efficiency_count
+    # Отставание от темпа по форме: насколько фактический темп медленнее
+    # того, что позволяет форма. Знак читается: минус — быстрее формы.
+    if gap_count:
+        result.pace_gap_sec_per_km = gap_sum / gap_count
+    if form_pace_count:
+        result.form_pace_sec_per_km = form_pace_sum / form_pace_count
 
     if vo2max_values:
         result.vo2max = sum(vo2max_values) / len(vo2max_values)
