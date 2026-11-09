@@ -324,23 +324,50 @@ test('отказ сервера виден на экране, а не молчи
   assert.match(msg.className, /error/, 'отказ должен быть помечен как ошибка');
 });
 
-test('экран закрытия у proposed-недели объясняет, что сначала активировать', async () => {
-  await loadApp({week: makeWeek('proposed')});
+test('экран «Факт» у proposed-недели объясняет, что сначала активировать',
+  async () => {
+    await loadApp({week: makeWeek('proposed')});
 
-  click(document.querySelector('#nav [data-screen="close"]'));
-  // Экран перерисовывается сразу — ждать нечего, только текст.
-  const text = document.getElementById('picker').textContent;
-  assert.match(text, /активировать/i);
-  assert.ok(!document.querySelector('#close'), 'не должно быть кнопки закрытия');
-});
+    click(document.querySelector('#nav [data-screen="fact"]'));
+    // Экран перерисовывается сразу — ждать нечего, только текст.
+    const text = document.getElementById('picker').textContent;
+    assert.match(text, /активировать/i);
+    assert.ok(!document.querySelector('#close'), 'не должно быть кнопки закрытия');
+  });
 
-test('экран закрытия у закрытой недели показывает итог', async () => {
+test('экран «Факт» у закрытой недели показывает итог', async () => {
   await loadApp({week: makeWeek('closed')});
 
-  click(document.querySelector('#nav [data-screen="close"]'));
+  click(document.querySelector('#nav [data-screen="fact"]'));
   const text = document.getElementById('picker').textContent;
   assert.match(text, /закрыта/i);
   assert.ok(!document.querySelector('#close'), 'не должно быть кнопки закрытия');
+});
+
+/* Раздела «Закрыть» больше нет: он был мусором — отдельный экран с
+ * тремя счётчиками, которые и так есть рядом. Закрытие относится к
+ * факту: посчитать итог можно только когда факт вытянут. */
+test('раздела «Закрыть» в меню нет', async () => {
+  await loadApp();
+
+  assert.ok(!document.querySelector('#nav [data-screen="close"]'),
+    'в меню остался раздел «Закрыть»');
+});
+
+test('кнопка закрытия — внизу экрана «Факт»', async () => {
+  await loadApp({week: makeWeek('active')});
+
+  click(document.querySelector('#nav [data-screen="fact"]'));
+
+  const btn = document.querySelector('#close');
+  assert.ok(btn, 'на экране «Факт» нет кнопки закрытия');
+  assert.match(btn.textContent, /Закрыть неделю/);
+
+  /* Кнопка — в самом низу: сначала факт и метрики, потом закрытие. */
+  const children = [...document.getElementById('picker').children];
+  assert.ok(children.length > 1, 'на экране «Факт» один блок');
+  assert.ok(btn.closest('#picker'),
+    'кнопка закрытия вне экрана «Факт»');
 });
 
 test('пока идёт команда, кнопки заблокированы и плашка не гаснет', async () => {

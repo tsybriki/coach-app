@@ -79,7 +79,6 @@ const SCREENS = [
   ['week', 'Неделя', '📅'],
   ['fact', 'Факт', '📊'],
   ['season', 'Сезон', '🏆'],
-  ['close', 'Закрыть', '🔒'],
   ['athlete', 'Атлет', '👤'],
 ];
 
@@ -212,7 +211,6 @@ function renderScreen() {
   const body = state.screen === 'week' ? screenWeek()
     : state.screen === 'season' ? screenSeason()
     : state.screen === 'fact' ? screenFact()
-    : state.screen === 'close' ? screenClose()
     : state.screen === 'compose' ? screenCompose()
     : screenAthlete();
   picker.innerHTML = body;
@@ -1085,6 +1083,7 @@ function screenFact() {
     ? summary.metrics : state.metrics;
   const metricsBlock = weekMetricsBlock(metrics);
   const head = headWithNext(nextWeekButton());
+  const closeBlock = weekCloseBlock();
 
   if (!summary) {
     return `${messageBlock()}${head}
@@ -1097,7 +1096,8 @@ function screenFact() {
         </div>
         <p>Итога ещё нет: неделя не закрыта.</p>
       </div>
-      ${metricsBlock}`;
+      ${metricsBlock}
+      ${closeBlock}`;
   }
 
   const totals = summary.totals || {};
@@ -1121,7 +1121,63 @@ function screenFact() {
       </div>
     </div>
     <div class="card"><h3>Вердикты</h3><ul class="plain">${rows || '<li>нет</li>'}</ul></div>
-    ${metricsBlock}`;
+    ${metricsBlock}
+    ${closeBlock}`;
+}
+
+/* Закрытие недели — внизу экрана «Факт».
+ *
+ * Отдельного раздела «Закрыть» больше нет: он был мусором — отдельный
+ * экран с тремя счётчиками, которые и так есть рядом. Закрытие относится
+ * к факту: посчитать итог можно только когда факт вытянут, поэтому
+ * кнопка стоит внизу «Факта», после метрик.
+ *
+ * Что показывает блок:
+ *   - активная неделя — кнопку закрытия;
+ *   - закрытая — итог закрытия (что планировали против что сделали);
+ *   - не-активная — что сначала надо активировать.
+ *
+ * Счётчики — строками списка, а не плитками: плитки на экране «Факт»
+ * принадлежат итогам недели, и метрики формы показываются списком.
+ */
+function weekCloseBlock() {
+  const week = state.week;
+  const status = week ? (week.status || 'proposed') : 'proposed';
+  const linked = week ? (week.workouts || []).filter((w) => w.actual_id).length : 0;
+  const counters = `<div class="metrics-list">
+      <div class="mrow"><span class="mname">Сессий в факте</span>
+        <span class="mval">${state.actual.length}</span></div>
+      <div class="mrow"><span class="mname">Тренировок в плане</span>
+        <span class="mval">${week ? (week.workouts || []).length : 0}</span></div>
+      <div class="mrow"><span class="mname">Связано с планом</span>
+        <span class="mval">${linked}</span></div>
+    </div>`;
+
+  if (status === 'closed') {
+    const line = summaryLine(week ? week.summary : null);
+    return `<div class="card"><div class="chead">Неделя закрыта</div>
+      ${line ? `<p class="lead">${escapeHtml(line)}</p>` : ''}
+      ${counters}
+    </div>`;
+  }
+
+  if (status !== 'active') {
+    // Закрыть можно только активную неделю: сначала активация.
+    return `<div class="card"><div class="chead">Сначала активируй неделю</div>
+      <p class="lead">Неделя ${escapeHtml(WEEK_STATUS[status] || status)}: `
+      + `закрыть можно только активную. Нажми «Активировать неделю» `
+      + `на экране недели.</p>
+    </div>`;
+  }
+
+  const disabled = state.busy ? ' disabled' : '';
+  return `<div class="card">
+      <div class="chead">Закрыть неделю</div>
+      ${counters}
+      <p class="lead">Закрытие посчитает итог: что планировали против что сделали. `
+      + `Факт подтянется из Garmin автоматически.</p>
+    </div>
+    <button class="action primary" id="close"${disabled}>Закрыть неделю</button>`;
 }
 
 /* Метрики формы недели — над тренировками.
@@ -1291,58 +1347,6 @@ async function loadWorkoutMetrics(actualId, skipReload = false) {
   if (state.openWorkoutId) showWorkout(state.openWorkoutId, true);
 }
 
-function screenClose() {
-  const week = state.week;
-  const status = week ? (week.status || 'proposed') : 'proposed';
-  const linked = week ? (week.workouts || []).filter((w) => w.actual_id).length : 0;
-  // Метрики формы: закрытой недели — из саммари, текущей — с сервера.
-  // Неделя, закрытая до появления метрик, в саммари их не имеет —
-  // тогда берём посчитанные сервером.
-  const summaryMetrics = week && week.summary && week.summary.metrics;
-  const metrics = (summaryMetrics && summaryMetrics.workouts_counted)
-    ? summaryMetrics : state.metrics;
-  const metricsBlock = weekMetricsBlock(metrics);
-
-  if (status === 'closed') {
-    const line = summaryLine(week ? week.summary : null);
-    return `${messageBlock()}<h2>Закрытие недели</h2>
-    <div class="card">
-      <div class="chead">Неделя закрыта</div>
-      ${line ? `<p class="lead">${escapeHtml(line)}</p>` : ''}
-      <div class="metrics">
-        <div class="metric"><div class="v">${state.actual.length}</div><div class="l">сессий в факте</div></div>
-        <div class="metric"><div class="v">${week ? (week.workouts || []).length : 0}</div><div class="l">в плане</div></div>
-        <div class="metric"><div class="v">${linked}</div><div class="l">связано</div></div>
-      </div>
-    </div>
-    ${metricsBlock}`;
-  }
-
-  if (status !== 'active') {
-    // Закрыть можно только активную неделю: сначала активация.
-    return `${messageBlock()}<h2>Закрытие недели</h2>
-    <div class="card">
-      <div class="chead">Сначала активируй неделю</div>
-      <p class="lead">Неделя ${escapeHtml(WEEK_STATUS[status] || status)}: `
-      + `закрыть можно только активную. Нажми «Активировать неделю» `
-      + `на экране недели.</p>
-    </div>`;
-  }
-
-  return `${messageBlock()}<h2>Закрытие недели</h2>
-    <div class="card">
-      <div class="chead">Неделя ${state.week ? state.week.season_week : ''}</div>
-      <div class="metrics">
-        <div class="metric"><div class="v">${state.actual.length}</div><div class="l">сессий в факте</div></div>
-        <div class="metric"><div class="v">${week ? (week.workouts || []).length : 0}</div><div class="l">в плане</div></div>
-        <div class="metric"><div class="v">${linked}</div><div class="l">связано</div></div>
-      </div>
-      <p class="lead">Закрытие посчитает итог: что планировали против что сделали. `
-      + `Факт подтянется из Garmin автоматически.</p>
-    </div>
-    ${metricsBlock}
-    <button class="action" id="close">Закрыть неделю</button>`;
-}
 
 /* Экран «Предложить тренировку»: текст пожеланий → структура.
  *

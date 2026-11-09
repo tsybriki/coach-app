@@ -301,9 +301,9 @@ test('карточка атлета: окна идут по дням недел�
   assert.ok(times[1].startsWith('18:30'), 'вечернее окно вторника не второе');
 });
 
-test('все пять экранов открываются и не падают', () => {
+test('все четыре экрана открываются и не падают', () => {
   const screens = [...document.querySelectorAll('#nav [data-screen]')];
-  assert.equal(screens.length, 5);
+  assert.equal(screens.length, 4);
   for (const button of screens) {
     click(button);
     const id = button.dataset.screen;
@@ -647,7 +647,7 @@ test('событие с той же версией не перезагружае
 /* ------------------------------------------------- скорость переключения */
 
 /* Главные экраны приложения — по порядку нижнего меню. */
-const MAIN_SCREENS = ['week', 'fact', 'season', 'close', 'athlete'];
+const MAIN_SCREENS = ['week', 'fact', 'season', 'athlete'];
 
 /* Допустимое время переключения экрана.
  *
@@ -718,7 +718,7 @@ test('переключение туда-обратно тоже быстрое',
   await loadApp();
   openWeek();
 
-  const order = ['fact', 'season', 'close', 'athlete', 'week'];
+  const order = ['fact', 'season', 'athlete', 'week'];
   const timings = [];
   for (let i = 0; i < 2; i += 1) {
     for (const screen of order) {

@@ -332,13 +332,13 @@ test('неделя, закрытая до появления метрик: бе�
     'неделя должна брать метрики с сервера, а не из пустого саммари');
 });
 
-test('экран закрытия недели: метрики формы на месте', async () => {
+test('экран «Факт»: метрики формы на месте', async () => {
   await loadApp();
 
-  click(document.querySelector('#nav [data-screen="close"]'));
+  click(document.querySelector('#nav [data-screen="fact"]'));
 
   const text = document.getElementById('picker').textContent;
-  assert.match(text, /Метрики формы/, 'на экране закрытия нет метрик');
+  assert.match(text, /Метрики формы/, 'на экране «Факт» нет метрик');
   assert.match(text, /Z2 143/);
 });
 
