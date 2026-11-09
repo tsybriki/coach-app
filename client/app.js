@@ -116,7 +116,11 @@ function chromeBar() {
       const objective = workout.objective || {};
       const placed = objective.day !== undefined && objective.day !== null
         && objective.day !== '';
-      const subtitle = placed ? (objective.day || '')
+      /* Дата — в шапке, рядом с днём недели: «ПН · 9.11». Раньше там
+       * был только день, и когда именно это было — не сказано. */
+      const shortDate = formatDateShort(objective.date || workout.date);
+      const subtitle = placed
+        ? [objective.day || '', shortDate].filter((part) => part).join(' · ')
         : 'не привязано';
       return detailBar(objective.name || workout.kind || 'Тренировка',
                        subtitle);
@@ -359,7 +363,7 @@ function slotButton(workout, actual) {
 
   const when = [
     day,
-    date ? `<span class="date">${escapeHtml(formatDate(date))}</span>` : '',
+    date ? `<span class="date">${escapeHtml(formatDateShort(date))}</span>` : '',
     workout.time || '',
   ].filter((part) => part).join(' · ');
 
@@ -454,6 +458,23 @@ function formatDate(iso) {
   return year === current
     ? `${Number(parts[2])} ${month}`
     : `${Number(parts[2])} ${month} ${year}`;
+}
+
+/* Дата — совсем коротко, числами: «9.11».
+ *
+ * Для мест, где важна длина строки, а не читаемость месяца: день
+ * недели и время там уже стоят рядом («ПН · 18:45»), и «9 ноя» рядом
+ * с ними превращается в «ПН · 18:45 · 9 ноя» — три куска данных о
+ * времени подряд. «9.11» занимает меньше места и читается как дата.
+ */
+function formatDateShort(iso) {
+  if (!iso) return '';
+  const parts = String(iso).split('-');
+  if (parts.length !== 3) return '';
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+  if (!month || !day) return '';
+  return `${day}.${month}`;
 }
 
 /* Тренировки в порядке дней недели, внутри дня — по времени.
@@ -1861,6 +1882,17 @@ function showWorkout(workoutId, skipMetrics = false) {
    */
   const planKm = plannedKm(workout);
   const subtitle = `${placed ? `${escapeHtml(objective.day || '')} · ` : 'не привязано · '}${escapeHtml(workout.time || '')}${workout.time ? ' · ' : ''}${formatDuration(workout.duration_min)}${planKm ? ` · ${escapeHtml(planKm)}` : ''}`;
+  /* Дата — отдельным мелким элементом рядом со строкой.
+   *
+   * Раньше в карточке тренировки даты не было вообще: день недели и
+   * время есть, а когда именно это было — непонятно. Дата короткая,
+   * числами («9.11»), и отдельным элементом: в строке «ПН · 18:45 ·
+   * 53 мин · 7,2 км» ей было бы не место, а рядом — в самый раз.
+   */
+  const shortDate = formatDateShort(objective.date || workout.date);
+  const dateHtml = shortDate
+    ? `<span class="when-date">${escapeHtml(shortDate)}</span>`
+    : '';
 
   cardHost.innerHTML = `<div class="card detail">
       <div class="card-header">
@@ -1870,7 +1902,7 @@ function showWorkout(workoutId, skipMetrics = false) {
         </div>
         <span class="tag kind-${escapeHtml(workout.sport)}">${stepCount} ${plural(stepCount, 'шаг', 'шага', 'шагов')}</span>
       </div>
-      <div class="subtitle">${subtitle}</div>
+      <div class="subtitle">${subtitle}${dateHtml}</div>
       ${meta.length ? `<div class="meta-row">${meta.join('')}</div>` : ''}
       ${goalHtml}
       ${rationaleHtml}

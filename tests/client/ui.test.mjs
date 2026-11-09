@@ -14,9 +14,16 @@
 import {test, before} from 'node:test';
 import assert from 'node:assert/strict';
 
+import {readFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+
 import {JSDOM} from 'jsdom';
 
 import {nameHasReps, repsLabel, setReps} from '../../client/structure.js';
+
+/* Корень репозитория — для чтения CSS: в jsdom его не положить, а
+ * размер шрифта задаёт stylesheet. */
+const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
 /* ------------------------------------------------------------------ фикстуры */
 
@@ -250,7 +257,9 @@ test('плашка тренировки: день недели, дата и вр
   assert.ok(when, 'в плашке нет блока с днём');
   const text = when.textContent;
   assert.match(text, /ПН/, 'нет дня недели');
-  assert.match(text, /26\s+окт/, 'нет даты');
+  /* Дата в плашке — коротко и числами: «26.10». Месяц прописан
+   * («26 окт») занимал место рядом с днём и временем и спорил с ними. */
+  assert.match(text, /26\.10/, 'нет даты');
   assert.match(text, /18:45/, 'нет времени');
 });
 
@@ -259,9 +268,26 @@ test('дата тренировки — из данных, а не из сосе
   const slots = [...document.querySelectorAll('.slot')];
   const first = slots[0].querySelector('.slot-head .day').textContent;
   const second = slots[1].querySelector('.slot-head .day').textContent;
-  assert.match(first, /26\s+окт/);
-  assert.match(second, /28\s+окт/);
+  assert.match(first, /26\.10/);
+  assert.match(second, /28\.10/);
   assert.notEqual(first, second, 'у разных тренировок одна и та же дата');
+});
+
+test('дата в плашке — мелким шрифтом, не спорит с днём и временем', () => {
+  openWeek();
+  const date = document.querySelector('.slot .day .date');
+  assert.ok(date, 'в плашке нет даты');
+  /* Дата — отдельный элемент внутри строки: если бы она встала в строку
+   * тем же шрифтом, то занимала бы место главного — дня недели и
+   * времени. Размер задаёт CSS, его и проверяем. */
+  assert.ok(date.className.includes('date'), 'нет класса .date');
+  assert.ok(date.parentElement, 'дата вне строки');
+
+  const css = readFileSync(`${ROOT}client/style.css`, 'utf-8');
+  const rule = css.match(/\.slot \.day \.date\s*\{([^}]*)\}/);
+  assert.ok(rule, 'в CSS нет правила для даты в плашке');
+  assert.match(rule[1], /font-size:\s*9px/,
+    'дата в плашке не мелкая');
 });
 
 test('шапка недели: даты по-русски, а не «11-01»', () => {
