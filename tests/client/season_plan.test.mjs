@@ -26,16 +26,20 @@ const SEASON_PLAN = {
   macro_weeks: [
     {season_week: 1, phase_id: 'run_base', focus: 'progression',
      goal_text: 'Развиваем базу', run_km: 27, total_h: 4.99,
-     sessions_target: 6, deload: false, status: 'closed', has_fact: true},
+     sessions_target: 6, deload: false, status: 'closed', has_fact: true,
+     start: '2026-10-11', end: '2026-10-17'},
     {season_week: 2, phase_id: 'run_base', focus: 'vo2max',
      goal_text: 'Развиваем VO2max', run_km: 35, total_h: 6.24,
-     sessions_target: 7, deload: false, status: null, has_fact: false},
+     sessions_target: 7, deload: false, status: null, has_fact: false,
+     start: '2026-10-18', end: '2026-10-24'},
     {season_week: 3, phase_id: 'run_taper', focus: 'taper_race_pace',
      goal_text: 'Снимаем объём', run_km: 16, total_h: 3.15,
-     sessions_target: 5, deload: true, status: null, has_fact: false},
+     sessions_target: 5, deload: true, status: null, has_fact: false,
+     start: '2026-10-25', end: '2026-10-31'},
     {season_week: 4, phase_id: 'run_taper', focus: 'taper_race_pace',
      goal_text: 'Снимаем объём', run_km: 12, total_h: 2.8,
-     sessions_target: 4, deload: true, status: null, has_fact: false},
+     sessions_target: 4, deload: true, status: null, has_fact: false,
+     start: '2026-11-01', end: '2026-11-07'},
   ],
 };
 
@@ -149,6 +153,24 @@ test('вкладка «Сезон»: недели по фазам, с фокус
   assert.match(first, /Развиваем базу/);
   assert.match(first, /27 км/, 'нет километража');
   assert.match(first, /5\.0 ч|4\.99 ч/, 'нет часов');
+});
+
+/* В макроплане неделя стоит по номеру («W1»), а номер не говорит, когда
+ * она идёт: W1 в начале сезона и W1 в середине — одно и то же слово.
+ * Поэтому рядом с номером нужны даты. */
+test('в макроплане у недели есть даты, а не только номер', async () => {
+  await loadApp();
+  openSeason();
+
+  const rows = document.querySelectorAll('.macro-week');
+  /* Один месяц — месяц пишется один раз: «11–17.10». */
+  assert.match(rows[0].textContent, /11–17\.10/,
+    `нет дат первой недели: ${rows[0].textContent}`);
+  assert.match(rows[1].textContent, /18–24\.10/,
+    `нет дат второй недели: ${rows[1].textContent}`);
+  /* Месяц сменился — оба числа с месяцем. */
+  assert.match(rows[3].textContent, /1–7\.11/,
+    `нет дат четвёртой недели: ${rows[3].textContent}`);
 });
 
 test('вкладка «Сезон»: закрытая неделя помечена фактом', async () => {

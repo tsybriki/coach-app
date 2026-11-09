@@ -442,6 +442,26 @@ function weekdayFull(iso) {
   return WEEKDAY_FULL[date.getUTCDay()] || '';
 }
 
+/* Даты недели — коротко: «11–17.10».
+ *
+ * В макроплане неделя стоит по номеру («W1»), а номер не говорит, когда
+ * она идёт: W1 в начале сезона и W1 в середине — одно и то же слово.
+ * Диапазон умещается в одну короткую строку: день начала, тире, день
+ * конца с месяцем. Если месяц один и тот же, он пишется один раз.
+ */
+function weekRangeShort(start, end) {
+  const from = String(start || '').split('-');
+  const to = String(end || '').split('-');
+  if (from.length !== 3 || to.length !== 3) return '';
+  const dayFrom = Number(from[2]);
+  const dayTo = Number(to[2]);
+  const monthFrom = Number(from[1]);
+  const monthTo = Number(to[1]);
+  if (!dayFrom || !dayTo || !monthFrom || !monthTo) return '';
+  if (monthFrom === monthTo) return `${dayFrom}–${dayTo}.${monthFrom}`;
+  return `${dayFrom}.${monthFrom}–${dayTo}.${monthTo}`;
+}
+
 /* Дата недели — компактно: «5 ноя» или «5 ноя 2027», если год другой. */
 function formatDate(iso) {
   if (!iso) return '';
@@ -984,6 +1004,15 @@ function macroWeekRow(week, color) {
   const volume = week.run_km
     ? `<span class="vol">${Math.round(week.run_km)} км · ${formatHours(week.total_h * 60)} ч</span>`
     : '';
+  /* Даты недели — в строке макроплана.
+   *
+   * Раньше был только номер недели («W1»), и когда эта неделя
+   * начинается — по календарю не понять: W1 в базе и W1 через полгода —
+   * одно и то же слово. Даты приходят с сервера (горизонт сезона
+   * клиенту неизвестен), пишутся коротко: «11–17.10».
+   */
+  const dates = weekRangeShort(week.start, week.end);
+  const dateLine = dates ? `<span class="wk-dates">${escapeHtml(dates)}</span>` : '';
   const clickable = closed || week.status || next;
   const tag = clickable ? 'button' : 'div';
   const attrs = clickable
@@ -994,7 +1023,7 @@ function macroWeekRow(week, color) {
       <span class="wk">W${week.season_week}</span>
       <span class="wk-body">
         <span class="wk-focus">${escapeHtml(week.goal_text || week.focus || '')}</span>
-        <span class="wk-meta">${volume}</span>
+        <span class="wk-meta">${volume}${dateLine ? ` · ${dateLine}` : ''}</span>
       </span>
       ${badge}
     </${tag}>`;
