@@ -14,9 +14,16 @@
 import {test, before} from 'node:test';
 import assert from 'node:assert/strict';
 
+import {readFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+
 import {JSDOM} from 'jsdom';
 
 import {nameHasReps, repsLabel, setReps} from '../../client/structure.js';
+
+/* Корень репозитория — для чтения CSS: в jsdom его не положить, а
+ * размеры и раскладку задаёт stylesheet. */
+const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
 /* ------------------------------------------------------------------ фикстуры */
 
@@ -311,6 +318,39 @@ test('все четыре экрана открываются и не падаю
     assert.ok(picker.innerHTML.length > 0, `экран ${id} пуст`);
     assert.ok(!picker.innerHTML.includes('undefined'), `экран ${id} содержит undefined`);
   }
+});
+
+/* Нижнее меню — flex, а не сетка с фиксированным числом колонок.
+ *
+ * Когда разделов было пять, в сетке стояло `repeat(5, 1fr)`. Раздел
+ * «Закрыть» убрали — колонок осталось пять, пунктов четыре, и пустая
+ * пятая сдвинула всё меню влево. С жёстким числом колонок такое
+ * повторится с любым следующим разделом.
+ */
+test('нижнее меню: пунктов столько, сколько колонок', () => {
+  const css = readFileSync(`${ROOT}client/style.css`, 'utf-8');
+  /* Правило с display — основное; в media-запросе для широкого экрана
+   * правило другое (там только ширина и центрирование). */
+  const rules = [...css.matchAll(/\.bottomnav\s*\{([^}]*)\}/g)];
+  const main = rules.find((m) => /display\s*:/.test(m[1]));
+  assert.ok(main, 'в CSS нет основного правила для нижнего меню');
+  assert.match(main[1], /display:\s*flex/,
+    'меню должно быть flex: жёсткое число колонок ломает раскладку');
+  assert.doesNotMatch(main[1], /grid-template-columns/,
+    'в меню не должно быть фиксированного числа колонок');
+});
+
+test('нижнее меню: активный пункт отмечен, иконки не обесцвечены', () => {
+  const css = readFileSync(`${ROOT}client/style.css`, 'utf-8');
+  /* Активный пункт — полоской сверху: это читается на телефоне лучше,
+   * чем смена цвета подписи. */
+  assert.match(css, /\.bottomnav button\.on::before/,
+    'активный пункт не отмечен');
+  /* Полный grayscale делает меню серым и выключенным. */
+  const ico = css.match(/\.bottomnav \.ico\s*\{([^}]*)\}/);
+  assert.ok(ico, 'в CSS нет правила для иконок меню');
+  assert.doesNotMatch(ico[1], /grayscale\(1\)/,
+    'иконки меню обесцвечены полностью');
 });
 
 test('навигация: экран меняется, заголовок соответствует', () => {
