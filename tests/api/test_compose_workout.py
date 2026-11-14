@@ -238,6 +238,44 @@ def test_add_composed_workout_creates_unplaced_training(
                for u in week["unplaced"])
 
 
+def test_add_composed_workout_builds_alternating_set(
+    client: TestClient, data_root: Path, stub_composer
+):
+    """Команда собирает набор: работа — отдых — работа, всё в одной группе."""
+    version = seed_week(data_root)
+    stub_composer(StubComposer())
+
+    response = client.post("/api/v1/commands", json={
+        "id": "cmd-compose-set",
+        "type": "add_composed_workout",
+        "args": {
+            "season_week": 1,
+            "name": "Интервалы",
+            "intents": [
+                {"role": "work", "sport": "run", "target_type": "distance",
+                 "target_value": 200, "intent": "interval", "label": "Интервалы",
+                 "reps": 6, "rest_type": "distance", "rest_value": 200},
+            ],
+        },
+        "reason": "тренировка из твоего описания",
+        "expected_version": version,
+    })
+
+    assert response.status_code == 200
+    week = client.get("/api/v1/week/1").json()["data"]
+    composed = [w for w in week["workouts"] if w["kind"] == "composed"]
+    assert len(composed) == 1
+    steps = composed[0]["steps"]
+    roles = [s["role"] for s in steps]
+    assert roles == [
+        "work", "rest", "work", "rest", "work", "rest",
+        "work", "rest", "work", "rest", "work",
+    ]
+    groups = {s["group"] for s in steps}
+    assert len(groups) == 1
+    assert "6×200" in groups.pop()
+
+
 def test_add_composed_workout_needs_intents(
     client: TestClient, data_root: Path, stub_composer
 ):

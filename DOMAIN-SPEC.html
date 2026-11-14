@@ -360,7 +360,7 @@
 </ul></div>
 <div class="ent">
 <div class="eh"><span>WorkoutIntent</span><span class="k">value</span></div>
-<div class="role">модель, а не набор правил.</div>
+<div class="role">«на старт», после — это уже интервальная работа.</div>
 <ul class="pl">
 <li><code>role{warmup,work,rest,cooldown,transition}</code> · <code>sport</code></li>
 <li><code>target_type{distance,time}</code> · <code>target_value</code> — объём, который назвал человек</li>
@@ -417,6 +417,7 @@
 </ul></div>
 <div class="ent">
 <div class="eh"><span>Step</span><span class="k">value</span></div>
+<div class="role"><code>round=2</code> означает начало нового набора, даже если название совпало.</div>
 <ul class="pl">
 <li><code>role{warmup,work,rest,cooldown,transition}</code></li>
 <li><code>sport</code> · <code>target_type{time,distance,laps,reps,open}</code> · <code>target_value</code> — длительности в минутах; для силовой/ОФП — общая длительность тренировки, округлённая до минут</li>

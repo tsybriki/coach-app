@@ -19,7 +19,7 @@ import {fileURLToPath} from 'node:url';
 
 import {JSDOM} from 'jsdom';
 
-import {nameHasReps, repsLabel, setReps} from '../../client/structure.js';
+import {groupBlocks, isSetSteps, nameHasReps, repsLabel, setReps} from '../../client/structure.js';
 
 /* Корень репозитория — для чтения CSS: в jsdom его не положить, а
  * размеры и раскладку задаёт stylesheet. */
@@ -457,6 +457,70 @@ test('склонение числа повторов', () => {
   assert.equal(repsLabel(5), '5 повторов');
   assert.equal(repsLabel(11), '11 повторов');
   assert.equal(repsLabel(21), '21 повтор');
+});
+
+test('структура: два набора с одинаковым названием — два блока', () => {
+  // Два разных набора («6×200» и «5×400») нельзя склеить в один блок:
+  // у них разный объём, разный отдых и разное число повторов.
+  const steps = [
+    {group: '6×200м через 200м', round: 1, focus_value: {set_reps: 6}},
+    {group: '6×200м через 200м', round: 2, focus_value: {set_reps: 6}},
+    {group: '5×400м', round: 1, focus_value: {set_reps: 5}},
+    {group: '5×400м', round: 2, focus_value: {set_reps: 5}},
+  ];
+
+  const blocks = groupBlocks(steps);
+
+  assert.equal(blocks.length, 2);
+  assert.equal(setReps(blocks[0].steps), 6);
+  assert.equal(setReps(blocks[1].steps), 5);
+});
+
+test('структура: два одинаково названных набора — всё равно два блока', () => {
+  // Название может совпасть (например, два одинаковых «6×200»), но
+  // второй набор начинается с круга 1 — значит это другой набор.
+  const steps = [
+    {group: '6×200м', round: 1, focus_value: {set_reps: 6}},
+    {group: '6×200м', round: 2, focus_value: {set_reps: 6}},
+    {group: '6×200м', round: 1, focus_value: {set_reps: 6}},
+    {group: '6×200м', round: 2, focus_value: {set_reps: 6}},
+  ];
+
+  const blocks = groupBlocks(steps);
+
+  assert.equal(blocks.length, 2);
+  assert.equal(blocks[0].steps.length, 2);
+  assert.equal(blocks[1].steps.length, 2);
+});
+
+test('структура: чередование работы и отдыха не рвёт блок', () => {
+  const steps = [
+    {group: '6×200м через 200м', round: 1, role: 'work', focus_value: {set_reps: 6}},
+    {group: '6×200м через 200м', round: 1, role: 'rest', focus_value: {set_reps: 6}},
+    {group: '6×200м через 200м', round: 2, role: 'work', focus_value: {set_reps: 6}},
+    {group: '6×200м через 200м', round: 2, role: 'rest', focus_value: {set_reps: 6}},
+  ];
+
+  const blocks = groupBlocks(steps);
+
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].steps.length, 4);
+  assert.equal(setReps(blocks[0].steps), 6);
+});
+
+test('набор из одного показанного шага — тоже набор', () => {
+  // В превью разбора может быть показан только первый круг набора.
+  // Это всё равно набор: без этого он выглядит отдельной работой без
+  // названия.
+  const steps = [{group: '5×400м через 200м', round: 1, focus_value: {set_reps: 5}}];
+
+  assert.equal(isSetSteps(steps), true);
+  assert.equal(setReps(steps), 5);
+});
+
+test('обычный шаг без круга — не набор', () => {
+  assert.equal(isSetSteps([{group: null, round: null}]), false);
+  assert.equal(isSetSteps([]), false);
 });
 
 test('информационная плашка гаснет сама', async () => {

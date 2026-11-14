@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.adapters.composer import MiniMaxComposer
+from app.adapters.composer import SYSTEM_PROMPT, MiniMaxComposer
 from app.domain.enums import Sport, StepRole, TargetType
 from app.ports.storage import ComposeContext, ExternalSourceError
 
@@ -130,6 +130,19 @@ def test_reps_and_rest_are_kept():
     assert plan.intents[0].reps == 8
     assert plan.intents[0].rest_type is TargetType.TIME
     assert plan.intents[0].rest_value == 90.0
+
+
+def test_prompt_asks_for_rest_between_repeats():
+    """Промпт требует называть отдых и запрещает выдумывать шаги.
+
+    Без этого модель теряет «через 200» и вставляет переходы, которых
+    в тексте нет.
+    """
+    prompt = SYSTEM_PROMPT
+
+    assert "rest_value" in prompt
+    assert "через 200" in prompt
+    assert "Не выдумывай шаги" in prompt
 
 
 def test_garbage_raises_external_source_error():

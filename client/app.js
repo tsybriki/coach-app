@@ -17,6 +17,7 @@ import {
   groupBlocks,
   isExerciseBlock,
   isSetBlock,
+  isSetSteps,
   nameHasReps,
   repsLabel,
   setReps,
@@ -1374,8 +1375,65 @@ function screenCompose() {
   if (!state.compose) return `${head}${input}`;
 
   const c = state.compose;
-  const steps = (c.steps || []).map((s) => {
-    const step = s.step || {};
+  const rows = composeRows(c.steps || []);
+
+  const assumptions = (c.assumptions || []).length
+    ? `<div class="card"><div class="chead">Что я додумал</div>
+        <ul class="plain">${c.assumptions.map((a) => `<li>${escapeHtml(a)}</li>`).join('')}</ul>
+      </div>`
+    : '';
+
+  const total = `${(c.distance_m / 1000).toFixed(1).replace('.', ',')} км · ${formatDuration(c.duration_min)}`;
+
+  return `${head}
+    <div class="card">
+      <div class="chead">${escapeHtml(c.name || 'Тренировка')}</div>
+      <div class="metrics-list">${rows}</div>
+      <div class="mrow total"><span class="mname">Итого</span>
+        <span class="mval">${escapeHtml(total)}</span></div>
+    </div>
+    ${assumptions}
+    <div class="card">
+      <p class="lead">Тренировка станет непривязанной: время и окно
+      выберешь сам.</p>
+      <button class="action primary" id="compose-add">Добавить в неделю</button>
+      <button class="action secondary" id="compose-reset">Изменить текст</button>
+    </div>`;
+}
+
+/* Строки разбора: набор — одна строка, а не двенадцать шагов.
+ *
+ * «6 по 200 через 200» — это один блок: работа, отдых, работа, отдых…
+ * Показывать каждый шаг отдельно значит превратить один набор в список
+ * из одиннадцати строк, в котором видно всё и ничего.
+ */
+function composeRows(steps) {
+  /* Ответ сервера: шаги обёрнуты в {assumption, step}. Разворачиваем. */
+  const raw = (steps || []).map((s) => s.step || s);
+  const blocks = groupBlocks(raw);
+  return blocks.map((block) => {
+    const blockSteps = block.steps;
+    if (isSetSteps(blockSteps)) {
+      const work = blockSteps.filter((s) => s.role === 'work');
+      const first = work[0] || blockSteps[0];
+      const focus = first.focus_value || {};
+      const distance = work.reduce(
+        (sum, s) => sum + (s.target_type === 'distance' ? s.target_value : 0), 0);
+      const detail = [
+        focus.zone ? `пульс до ${focus.zone}` : '',
+        focus.pace_min_per_km ? `${focus.pace_min_per_km}/км` : '',
+        focus.hr_target ? `HR ${focus.hr_target}` : '',
+      ].filter((x) => x).join(' · ');
+      const amount = distance
+        ? `${(distance / 1000).toFixed(1).replace('.', ',')} км`
+        : `${setReps(blockSteps)} повторов`;
+      return `<div class="mrow">
+          <span class="mname">${escapeHtml(block.group || 'сет')}</span>
+          <span class="mval">${escapeHtml(amount)}</span>
+          ${detail ? `<span class="mnote">${escapeHtml(detail)}</span>` : ''}
+        </div>`;
+    }
+    const step = blockSteps[0] || {};
     const focus = step.focus_value || {};
     const detail = [
       focus.zone ? `пульс до ${focus.zone}` : '',
@@ -1392,29 +1450,6 @@ function screenCompose() {
         ${detail ? `<span class="mnote">${escapeHtml(detail)}</span>` : ''}
       </div>`;
   }).join('');
-
-  const assumptions = (c.assumptions || []).length
-    ? `<div class="card"><div class="chead">Что я додумал</div>
-        <ul class="plain">${c.assumptions.map((a) => `<li>${escapeHtml(a)}</li>`).join('')}</ul>
-      </div>`
-    : '';
-
-  const total = `${(c.distance_m / 1000).toFixed(1).replace('.', ',')} км · ${formatDuration(c.duration_min)}`;
-
-  return `${head}
-    <div class="card">
-      <div class="chead">${escapeHtml(c.name || 'Тренировка')}</div>
-      <div class="metrics-list">${steps}</div>
-      <div class="mrow total"><span class="mname">Итого</span>
-        <span class="mval">${escapeHtml(total)}</span></div>
-    </div>
-    ${assumptions}
-    <div class="card">
-      <p class="lead">Тренировка станет непривязанной: время и окно
-      выберешь сам.</p>
-      <button class="action primary" id="compose-add">Добавить в неделю</button>
-      <button class="action secondary" id="compose-reset">Изменить текст</button>
-    </div>`;
 }
 
 function screenAthlete() {
@@ -2682,20 +2717,25 @@ document.addEventListener('click', async (event) => {
   if (closest('#compose-add')) {
     const c = state.compose;
     if (!c) return;
-    const intents = (c.steps || []).map((s) => {
-      const step = s.step || {};
-      return {
-        role: step.role,
-        sport: step.sport,
-        target_type: step.target_type,
-        target_value: step.target_value,
-        intent: (step.focus_value || {}).intent || 'easy',
-        label: step.label || '',
-        reps: 1,
-        rest_type: 'distance',
-        rest_value: 0,
-      };
-    });
+    /* Намерения из разбора — с повторами и отдыхом. Если их нет
+     * (старый ответ сервера), собираем из шагов: тогда повторы
+     * превращаются в отдельные шаги, но тренировка всё равно создаётся. */
+    const intents = (c.intents || []).length
+      ? c.intents
+      : (c.steps || []).map((s) => {
+        const step = s.step || {};
+        return {
+          role: step.role,
+          sport: step.sport,
+          target_type: step.target_type,
+          target_value: step.target_value,
+          intent: (step.focus_value || {}).intent || 'easy',
+          label: step.label || '',
+          reps: 1,
+          rest_type: 'distance',
+          rest_value: 0,
+        };
+      });
     showMessage('Добавляю тренировку в неделю…');
     state.busy = true;
     render();

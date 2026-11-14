@@ -21,6 +21,10 @@ from app.domain.enums import FocusType, Sport, StepRole, TargetType
 # Секунды на километр.
 PACE = {"E": 330.0, "T": 240.0, "I": 220.0, "R": 200.0, "M": 270.0}
 
+# Темпы настоящего спортсмена (VDOT 51) из таблицы Дэниэлса.
+# Лёгкая зона здесь — 5:13, но лёгкий бег в приложении всегда 5:30.
+REAL_PACE = {"E": 313.0, "M": 267.0, "T": 251.0, "I": 231.0, "R": 215.0}
+
 
 def make_athlete() -> Athlete:
     return Athlete(
@@ -127,6 +131,132 @@ def test_reps_become_separate_steps():
     assert work[0].step.target_value == 400.0
     assert work[0].step.round == 1
     assert work[-1].step.round == 8
+
+
+def repetition_intent(
+    reps: int = 6,
+    distance_m: float = 200.0,
+    rest_m: float = 200.0,
+) -> WorkoutIntent:
+    """«6 по 200 через 200» — модель так и отдаёт."""
+    return WorkoutIntent(
+        role=StepRole.WORK,
+        sport=Sport.RUN,
+        target_type=TargetType.DISTANCE,
+        target_value=distance_m,
+        intent="interval",
+        label="Интервальная тренировка",
+        reps=reps,
+        rest_type=TargetType.DISTANCE,
+        rest_value=rest_m,
+    )
+
+
+def test_short_repeats_use_repetition_pace():
+    """6 по 200 — повторный темп (R), а не интервальный (I).
+
+    Короткие отрезки с отдыхом трусцой — это R по Дэниэлсу. Если взять
+    темп зоны I, 200-метровые отрезки получатся заметно медленнее, чем
+    должны быть.
+    """
+    composition = build_steps(
+        [repetition_intent()], athlete=make_athlete(), pace_by_zone=REAL_PACE)
+
+    work = [s.step for s in composition.steps if s.step.role is StepRole.WORK]
+    assert work[0].focus is FocusType.PACE
+    assert work[0].focus_value["pace_min_per_km"] == "3:35"  # R = 215 с/км
+
+
+def test_longer_repeats_keep_interval_zone():
+    """6 по 800 — это уже интервалы (I), а не повторный темп."""
+    composition = build_steps(
+        [repetition_intent(reps=6, distance_m=800.0, rest_m=200.0)],
+        athlete=make_athlete(),
+        pace_by_zone=REAL_PACE,
+    )
+
+    work = [s.step for s in composition.steps if s.step.role is StepRole.WORK]
+    assert work[0].focus_value["zone"] == "Z7"
+    assert work[0].focus_value["pace_min_per_km"] == "3:51"  # I = 231 с/км
+
+
+def test_work_and_rest_alternate():
+    """Шаги идут вперемешку: работа — отдых — работа.
+
+    Раньше все работы шли подряд, и только после них — весь отдых.
+    """
+    composition = build_steps(
+        [repetition_intent()], athlete=make_athlete(), pace_by_zone=PACE)
+
+    roles = [s.step.role for s in composition.steps]
+    assert roles.count(StepRole.WORK) == 6
+    assert roles.count(StepRole.REST) == 5, 'отдых — между повторами, не после'
+    assert roles == [
+        StepRole.WORK, StepRole.REST,
+        StepRole.WORK, StepRole.REST,
+        StepRole.WORK, StepRole.REST,
+        StepRole.WORK, StepRole.REST,
+        StepRole.WORK, StepRole.REST,
+        StepRole.WORK,
+    ]
+
+
+def test_each_set_is_its_own_group():
+    """Два набора — две группы, а не один блок на всю тренировку."""
+    composition = build_steps(
+        [repetition_intent(reps=6, distance_m=200.0, rest_m=200.0),
+         repetition_intent(reps=5, distance_m=400.0, rest_m=0.0)],
+        athlete=make_athlete(),
+        pace_by_zone=PACE,
+    )
+
+    groups = {s.step.group for s in composition.steps if s.step.group}
+    assert len(groups) == 2
+    reps_by_group = {
+        group: next(
+            s.step.focus_value["set_reps"]
+            for s in composition.steps
+            if s.step.group == group and "set_reps" in s.step.focus_value
+        )
+        for group in groups
+    }
+    assert sorted(reps_by_group.values()) == [5, 6]
+
+
+def test_group_name_describes_the_set():
+    """Название группы — сам набор: сколько повторов, какой объём, отдых."""
+    composition = build_steps(
+        [repetition_intent(reps=6, distance_m=200.0, rest_m=200.0),
+         repetition_intent(reps=5, distance_m=400.0, rest_m=0.0)],
+        athlete=make_athlete(),
+        pace_by_zone=PACE,
+    )
+
+    groups = {s.step.group for s in composition.steps if s.step.group}
+    assert any("6×200" in g and "через 200" in g for g in groups)
+    assert any("5×400" in g for g in groups)
+
+
+def test_easy_steps_use_easy_pace_5_30():
+    """Лёгкий бег — 5:30 на всех местах, включая разбор текста."""
+    composition = build_steps(
+        [easy_intent(5000.0)], athlete=make_athlete(), pace_by_zone=REAL_PACE)
+
+    step = composition.steps[0].step
+    assert step.focus_value["pace_min_per_km"] == "5:30"
+    assert step.duration_min == pytest.approx(5000.0 / 1000.0 * 330.0 / 60.0)
+
+
+def test_composition_carries_intents_for_round_trip():
+    """Намерения едут вместе с разбором — иначе повторы теряются."""
+    intents = [easy_intent(5000.0), repetition_intent()]
+
+    composition = build_steps(intents, athlete=make_athlete(), pace_by_zone=PACE)
+
+    data = composition.as_dict()
+    assert data["intents"][1]["reps"] == 6
+    assert data["intents"][1]["rest_value"] == 200.0
+    assert data["intents"][1]["rest_type"] == "distance"
 
 
 def test_assumptions_are_carried_through():

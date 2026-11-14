@@ -104,6 +104,7 @@ class WorkoutComposer:
                 steps=composition.steps,
                 assumptions=composition.assumptions,
                 source_text=text,
+                intents=composition.intents,
             ),
             source_text=text,
         )

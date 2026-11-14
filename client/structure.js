@@ -28,6 +28,10 @@ export function setReps(steps) {
 /* Блок структуры: одиночный шаг, сет интервалов или упражнения ОФП.
  *
  * Блок начинается, если сменилась группа или тип шага (упражнение / нет).
+ *
+ * Набор делится ещё и по кругу: номер повтора 1 после круга 2 означает
+ * начало нового набора, даже если группа названа одинаково. Иначе два
+ * одинаковых «6×200» склеились бы в один блок на 12 повторов.
  */
 export function groupBlocks(steps) {
   const blocks = [];
@@ -35,7 +39,13 @@ export function groupBlocks(steps) {
 
   for (const step of steps || []) {
     const isExercise = Boolean(step.label && step.focus_value?.reps);
-    if (current && (step.group !== current.group || isExercise !== current.isExercise)) {
+    const restartsRound = current && step.round === 1
+      && current.steps.some((s) => (s.round || 0) > 1);
+    if (current && (
+      step.group !== current.group
+      || isExercise !== current.isExercise
+      || restartsRound
+    )) {
       current = {group: step.group, steps: [], isExercise};
       blocks.push(current);
     } else if (!current) {
@@ -55,6 +65,17 @@ export function isExerciseBlock(steps) {
 /* Являются ли шаги сетом интервалов: у каждого есть номер повтора. */
 export function isSetBlock(steps) {
   return steps.length > 1
+    && steps.every((s) => s.round !== null && s.round !== undefined);
+}
+
+/* Шаги с номерами повтора — сет, даже если шаг один.
+ *
+ * Отдельная проверка нужна там, где показан не весь набор: блок из
+ * одного шага с `round=1` — это всё равно набор («5×400м»), иначе он
+ * покажется отдельной работой без названия.
+ */
+export function isSetSteps(steps) {
+  return Boolean(steps && steps.length)
     && steps.every((s) => s.round !== null && s.round !== undefined);
 }
 

@@ -739,6 +739,18 @@ def _add_composed_workout(
             continue
         if target_value <= 0:
             continue
+        try:
+            rest_type = TargetType(str(item.get("rest_type") or "distance"))
+        except ValueError:
+            rest_type = TargetType.DISTANCE
+        try:
+            rest_value = float(item.get("rest_value") or 0.0)
+        except (TypeError, ValueError):
+            rest_value = 0.0
+        try:
+            reps = max(1, int(item.get("reps") or 1))
+        except (TypeError, ValueError):
+            reps = 1
         intents.append(WorkoutIntent(
             role=role,
             sport=sport,
@@ -746,10 +758,10 @@ def _add_composed_workout(
             target_value=target_value,
             intent=str(item.get("intent") or "easy"),
             label=str(item.get("label") or ""),
-            reps=max(1, int(item.get("reps") or 1)),
+            reps=reps,
             notes=str(item.get("notes") or ""),
-            rest_type=TargetType(str(item.get("rest_type") or "distance")),
-            rest_value=float(item.get("rest_value") or 0.0),
+            rest_type=rest_type,
+            rest_value=max(0.0, rest_value),
         ))
     if not intents:
         raise ValueError("намерения не разобрались")

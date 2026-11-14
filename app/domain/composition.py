@@ -33,6 +33,7 @@ from app.domain.enums import (
     WorkoutStatus,
 )
 from app.domain.methodology import (
+    EASY_PACE_SEC_PER_KM,
     ZONE_EASY,
     ZONE_INTERVAL,
     ZONE_MARATHON,
@@ -83,6 +84,38 @@ ROLE_DEFAULT_INTENT: dict[StepRole, str] = {
     StepRole.WORK: ZONE_EASY,
     StepRole.TRANSITION: ZONE_EASY,
 }
+
+# Короткий отрезок с отдыхом трусцой — это повторный темп (R), а не
+# интервальный (I).
+#
+# Граница 600 м: до неё отрезок настолько короткий, что держится в темпе
+# «на старт», а не в интервальном, — и в методике Дэниэлса это R.
+# «6 по 200 через 200» — именно R. «6 по 800» — уже I.
+#
+# Почему нельзя оставлять intent модели: модель читает «интервалы» из
+# любого повторного отрезка и темп I медленнее R — работа получается
+# медленнее названного.
+SHORT_REPEAT_MAX_M = 600.0
+
+
+def _zone_for_intent(intent: WorkoutIntent) -> str:
+    """Зона правила для намерения.
+
+    Намерение модели важнее, но короткие повторы домен уточняет сам:
+    «6 по 200 через 200» — повторный темп, даже если модель назвала
+    «интервал».
+    """
+    zone = INTENT_ZONES.get(intent.intent)
+    if zone is None:
+        zone = ROLE_DEFAULT_INTENT.get(intent.role, ZONE_EASY)
+    if (
+        zone == ZONE_INTERVAL
+        and intent.reps > 1
+        and intent.target_type is TargetType.DISTANCE
+        and 0 < intent.target_value <= SHORT_REPEAT_MAX_M
+    ):
+        return ZONE_REPETITION
+    return zone
 
 
 @dataclass(frozen=True)
@@ -161,6 +194,10 @@ class Composition:
     assumptions: list[str] = field(default_factory=list)
     # Текст пожеланий — чтобы показать, из чего разобрали.
     source_text: str = ""
+    # Намерения, из которых собраны шаги. Едут вместе с разбором: без них
+    # повторы («6 по 200 через 200») пришлось бы угадывать по шагам, и они
+    # терялись бы при добавлении тренировки в неделю.
+    intents: list[WorkoutIntent] = field(default_factory=list)
 
     @property
     def duration_min(self) -> float:
@@ -182,6 +219,7 @@ class Composition:
             "distance_m": self.distance_m,
             "assumptions": list(self.assumptions),
             "source_text": self.source_text,
+            "intents": [i.as_dict() for i in self.intents],
             "steps": [s.as_dict() for s in self.steps],
         }
 
@@ -202,14 +240,16 @@ def build_steps(
     Зоны и темпы — по профилю атлета и таблице Дэниэлса. Модель в этом
     не участвует: она сказала «порог», домен знает, что это 164 уд/мин
     и 4:05/км.
+
+    Повторы разворачиваются в чередующуюся последовательность:
+    работа — отдых — работа. Раньше все работы шли подряд и отдых
+    добавлялся после них, хотя на часах это разные круги.
     """
     steps: list[ComposedStep] = []
     notes: list[str] = list(assumptions or [])
 
     for index, intent in enumerate(intents):
-        zone = INTENT_ZONES.get(intent.intent)
-        if zone is None:
-            zone = ROLE_DEFAULT_INTENT.get(intent.role, ZONE_EASY)
+        zone = _zone_for_intent(intent)
 
         step_assumption = ""
         focus, focus_value = _focus_for(zone, athlete, pace_by_zone)
@@ -217,7 +257,7 @@ def build_steps(
         # Объём в шаге — то, что назвал человек.
         if intent.target_type is TargetType.DISTANCE:
             target_value = float(intent.target_value)
-            pace = pace_by_zone.get(zone)
+            pace = _pace_for(zone, pace_by_zone)
             duration = (target_value / 1000.0) * pace / 60.0 if pace else 0.0
             if not pace:
                 step_assumption = "темп для этого объёма не найден — время шага неизвестно"
@@ -236,8 +276,13 @@ def build_steps(
 
         # Повторы: «8×400» — это восемь шагов с одним и тем же объёмом.
         reps = max(1, intent.reps)
+        group = _group_name(intent) if reps > 1 else (label or None)
+        rest_min = _rest_minutes(intent, pace_by_zone)
         for rep in range(reps):
             step_id = f"s{index + 1}" if reps == 1 else f"s{index + 1}-{rep + 1}"
+            step_focus_value = dict(focus_value)
+            if reps > 1:
+                step_focus_value["set_reps"] = reps
             steps.append(ComposedStep(
                 step=Step(
                     id=step_id,
@@ -246,8 +291,8 @@ def build_steps(
                     target_type=intent.target_type,
                     target_value=target_value,
                     focus=focus,
-                    focus_value=dict(focus_value),
-                    group=label or None,
+                    focus_value=step_focus_value,
+                    group=group,
                     round=rep + 1 if reps > 1 else None,
                     label=label or None,
                     notes=intent.notes or None,
@@ -256,15 +301,8 @@ def build_steps(
                 assumption=step_assumption,
             ))
 
-        # Отдых между повторами — отдельными шагами.
-        if reps > 1 and intent.rest_value > 0:
-            for rep in range(reps - 1):
-                rest_min = 0.0
-                if intent.rest_type is TargetType.DISTANCE:
-                    pace = pace_by_zone.get(ZONE_EASY)
-                    rest_min = (intent.rest_value / 1000.0) * pace / 60.0 if pace else 0.0
-                else:
-                    rest_min = intent.rest_value
+            # Отдых — между повторами, а не после всех работ.
+            if reps > 1 and intent.rest_value > 0 and rep < reps - 1:
                 steps.append(ComposedStep(
                     step=Step(
                         id=f"s{index + 1}-r{rep + 1}",
@@ -274,7 +312,7 @@ def build_steps(
                         target_value=float(intent.rest_value),
                         focus=FocusType.HR,
                         focus_value={"zone": "Z2"},
-                        group=label or None,
+                        group=group,
                         round=rep + 1,
                         label="отдых",
                         duration_min=round(rest_min, 2),
@@ -291,7 +329,60 @@ def build_steps(
         sport=sport,
         steps=steps,
         assumptions=notes,
+        intents=list(intents),
     )
+
+
+def _pace_for(zone: str, pace_by_zone: dict[str, float]) -> float | None:
+    """Темп зоны. Лёгкий бег — всегда 5:30.
+
+    «E» из таблицы Дэниэлса для этого спортсмена — 5:13, верх лёгкой
+    зоны: в нём HR упирается в верх Z2, и лёгкий бег перестаёт быть
+    лёгким. Правило одно на все места, где встречается лёгкий бег.
+    """
+    if zone == ZONE_EASY:
+        return EASY_PACE_SEC_PER_KM
+    return pace_by_zone.get(zone)
+
+
+def _rest_minutes(intent: WorkoutIntent, pace_by_zone: dict[str, float]) -> float:
+    """Длительность отдыха между повторами — в минутах."""
+    if intent.rest_type is TargetType.DISTANCE:
+        pace = _pace_for(ZONE_EASY, pace_by_zone)
+        return (intent.rest_value / 1000.0) * pace / 60.0 if pace else 0.0
+    return intent.rest_value
+
+
+def _group_name(intent: WorkoutIntent) -> str:
+    """Название набора — сам набор: «6×200м через 200м».
+
+    Название должно различать наборы: два набора с одинаковой подписью
+    клиент склеил бы в один блок, и тогда «6 по 200» и «5 по 400»
+    показались бы одним сетом. Поэтому подпись собирается из самого
+    набора, а не берётся из названия тренировки.
+    """
+    amount = _amount_label(intent)
+    rest = ""
+    if intent.rest_value > 0:
+        rest = f" через {_rest_label(intent)}"
+    return f"{max(1, intent.reps)}×{amount}{rest}"
+
+
+def _amount_label(intent: WorkoutIntent) -> str:
+    """Объём шага словами: «200м» или «90с»."""
+    if intent.target_type is TargetType.DISTANCE:
+        return f"{int(intent.target_value)}м"
+    if intent.target_type is TargetType.TIME:
+        seconds = int(round(intent.target_value * 60))
+        return f"{seconds}с"
+    return str(int(intent.target_value))
+
+
+def _rest_label(intent: WorkoutIntent) -> str:
+    """Отдых словами: «200м» или «90с»."""
+    if intent.rest_type is TargetType.DISTANCE:
+        return f"{int(intent.rest_value)}м"
+    return f"{int(round(intent.rest_value * 60))}с"
 
 
 def _focus_for(
@@ -305,7 +396,7 @@ def _focus_for(
     максимума пульса) — такой шаг задаётся темпом.
     """
     athlete_zone = athlete_zone_for(zone, athlete)
-    pace = pace_by_zone.get(zone)
+    pace = _pace_for(zone, pace_by_zone)
     if athlete_zone:
         value: dict[str, Any] = {"zone": athlete_zone}
         if pace:

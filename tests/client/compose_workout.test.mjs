@@ -239,6 +239,113 @@ test('добавление в неделю шлёт команду с намер
   assert.ok(sent[0].reason, 'у команды нет причины');
 });
 
+test('повторы и отдых доживают до команды', async () => {
+  // Разбор отдаёт намерения: повторы и отдых должны уйти в команду
+  // как есть. Иначе «6 по 200 через 200» станет шестью отдельными
+  // шагами без отдыха.
+  const sent = [];
+  const composeResult = {
+    name: 'Интервальная тренировка',
+    sport: 'run',
+    duration_min: 30,
+    distance_m: 5000,
+    assumptions: [],
+    source_text: '6 по 200 через 200',
+    intents: [
+      {
+        role: 'work', sport: 'run', target_type: 'distance',
+        target_value: 200, intent: 'interval', label: 'Интервалы',
+        reps: 6, rest_type: 'distance', rest_value: 200, notes: '',
+      },
+    ],
+    steps: [
+      {assumption: '', step: {
+        id: 's2-1', role: 'work', sport: 'run',
+        target_type: 'distance', target_value: 200,
+        focus: 'pace', focus_value: {intent: 'interval'},
+        duration_min: 0.72, label: 'Интервалы', group: '6×200м через 200м',
+        round: 1, notes: '',
+      }},
+    ],
+  };
+  await loadApp({
+    composeResult,
+    onCommand: (command) => {
+      sent.push(command);
+      return Promise.resolve({version: 43, data: {status: 'applied'}});
+    },
+  });
+
+  click(document.querySelector('#compose-open'));
+  document.querySelector('#compose-text').value = '6 по 200 через 200';
+  click(document.querySelector('#compose-run'));
+  await waitFor(() => document.querySelector('#compose-add'));
+  click(document.querySelector('#compose-add'));
+  await waitFor(() => sent.length > 0);
+
+  const intents = sent[0].args.intents;
+  assert.equal(intents.length, 1);
+  assert.equal(intents[0].reps, 6);
+  assert.equal(intents[0].rest_value, 200);
+  assert.equal(intents[0].rest_type, 'distance');
+});
+
+test('разбор показывает набор одной строкой, а не списком шагов', async () => {
+  // Живой ответ разбора: два набора, отдых между кругами.
+  const composeResult = {
+    name: 'Интервальная тренировка',
+    sport: 'run',
+    duration_min: 48.87,
+    distance_m: 10000,
+    assumptions: [],
+    source_text: '6 по 200 через 200 и 5 по 400',
+    intents: [],
+    steps: [
+      {assumption: '', step: {
+        id: 's2-1', role: 'work', sport: 'run',
+        target_type: 'distance', target_value: 200,
+        focus: 'pace', focus_value: {pace_min_per_km: '3:35'},
+        duration_min: 0.72, label: 'Интервалы',
+        group: '6×200м через 200м', round: 1, notes: '',
+      }},
+      {assumption: '', step: {
+        id: 's2-r1', role: 'rest', sport: 'run',
+        target_type: 'distance', target_value: 200,
+        focus: 'hr', focus_value: {zone: 'Z2'},
+        duration_min: 1.1, label: 'отдых',
+        group: '6×200м через 200м', round: 1, notes: '',
+      }},
+      {assumption: '', step: {
+        id: 's2-2', role: 'work', sport: 'run',
+        target_type: 'distance', target_value: 200,
+        focus: 'pace', focus_value: {pace_min_per_km: '3:35'},
+        duration_min: 0.72, label: 'Интервалы',
+        group: '6×200м через 200м', round: 2, notes: '',
+      }},
+      {assumption: '', step: {
+        id: 's3-1', role: 'work', sport: 'run',
+        target_type: 'distance', target_value: 400,
+        focus: 'pace', focus_value: {pace_min_per_km: '3:35'},
+        duration_min: 1.43, label: 'Интервалы',
+        group: '5×400м через 200м', round: 1, notes: '',
+      }},
+    ],
+  };
+  await loadApp({composeResult});
+
+  click(document.querySelector('#compose-open'));
+  document.querySelector('#compose-text').value = '6 по 200 через 200 и 5 по 400';
+  click(document.querySelector('#compose-run'));
+  await waitFor(() => document.querySelector('#compose-add'));
+
+  const rows = document.querySelectorAll('#picker .mrow:not(.total)');
+  assert.equal(rows.length, 2, 'набор должен быть одной строкой, а не списком шагов');
+  const text = document.getElementById('picker').textContent.replace(/\s+/g, ' ');
+  assert.match(text, /6×200м через 200м/);
+  assert.match(text, /5×400м через 200м/);
+  assert.match(text, /3:35\/км/);
+});
+
 test('после добавления возвращаемся к неделе', async () => {
   await loadApp({
     onCommand: () => Promise.resolve({version: 43, data: {status: 'applied'}}),
