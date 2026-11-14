@@ -19,7 +19,7 @@ import {fileURLToPath} from 'node:url';
 
 import {JSDOM} from 'jsdom';
 
-import {groupBlocks, isSetSteps, nameHasReps, repsLabel, setReps} from '../../client/structure.js';
+import {groupBlocks, isSetSteps, nameHasReps, repsLabel, setBlocks, setReps} from '../../client/structure.js';
 
 /* Корень репозитория — для чтения CSS: в jsdom его не положить, а
  * размеры и раскладку задаёт stylesheet. */
@@ -404,6 +404,55 @@ test('название сета не дублирует число повтор�
   assert.equal(reps, null, 'число повторов продублировано рядом с названием');
 });
 
+test('структура набора: круги, а в круге — блоки работы и отдыха', async () => {
+  // Набор «6 по 200 через 200»: шесть кругов, у каждого два блока —
+  // работа (200 м по 3:35) и отдых (200 м по 5:30).
+  const steps = [];
+  for (let round = 1; round <= 6; round += 1) {
+    steps.push({
+      id: `w${round}`, role: 'work', sport: 'run',
+      target_type: 'distance', target_value: 200,
+      focus: 'pace',
+      focus_value: {set_reps: 6, set_blocks: 2, set_block: 1,
+                    pace_min_per_km: '3:35'},
+      duration_min: 0.67, group: '6×200м через 200м', round,
+      label: null, notes: null,
+    });
+    steps.push({
+      id: `r${round}`, role: 'rest', sport: 'run',
+      target_type: 'distance', target_value: 200,
+      focus: 'hr',
+      focus_value: {set_reps: 6, set_blocks: 2, set_block: 2, zone: 'Z2'},
+      duration_min: 1.1, group: '6×200м через 200м', round,
+      label: 'отдых', notes: null,
+    });
+  }
+  const week = {
+    ...WEEK,
+    workouts: [{
+      id: 'w-set', request_id: 'r-set', sport: 'run', kind: 'quality',
+      focus: 'Интервалы', objective: {name: 'Интервалы', day: 'ПН'},
+      duration_min: 12, distance_m: 2400, status: 'planned', actual_id: null,
+      steps,
+    }],
+  };
+  await loadApp({week});
+
+  openWeek();
+  click(document.querySelectorAll('.slot')[0]);
+  await waitFor(() => document.querySelector('.step-set'));
+
+  const rounds = document.querySelectorAll('.step-set .set-round');
+  assert.equal(rounds.length, 6, 'шесть кругов, а не плоский список шагов');
+
+  const firstRound = rounds[0].querySelectorAll('.set-block');
+  assert.equal(firstRound.length, 2, 'в круге два блока: работа и отдых');
+  assert.match(firstRound[0].textContent, /работа/);
+  assert.match(firstRound[0].textContent, /200 м/);
+  assert.match(firstRound[0].textContent, /3:35/);
+  assert.match(firstRound[1].textContent, /отдых/);
+});
+
 test('плашка «Состояние изменилось» не остаётся после конфликта версий', async () => {
   // Команда отвечает конфликтом версий один раз, потом проходит.
   let calls = 0;
@@ -521,6 +570,38 @@ test('набор из одного показанного шага — тоже 
 test('обычный шаг без круга — не набор', () => {
   assert.equal(isSetSteps([{group: null, round: null}]), false);
   assert.equal(isSetSteps([]), false);
+});
+
+test('структура: у набора есть блоки круга', () => {
+  // «6 по 200 через 200»: внутри набора круги, у круга — два блока:
+  // работа (200 м по 3:35) и отдых (200 м по 5:30).
+  const steps = [];
+  for (let round = 1; round <= 6; round += 1) {
+    steps.push({
+      group: '6×200м через 200м', round, role: 'work',
+      focus_value: {set_reps: 6, set_blocks: 2, set_block: 1,
+                    pace_min_per_km: '3:35'},
+    });
+    steps.push({
+      group: '6×200м через 200м', round, role: 'rest',
+      focus_value: {set_reps: 6, set_blocks: 2, set_block: 2, zone: 'Z2'},
+    });
+  }
+
+  const blocks = groupBlocks(steps);
+  assert.equal(blocks.length, 1, 'весь набор — один блок');
+
+  const rounds = setBlocks(blocks[0].steps);
+  assert.equal(rounds.length, 6, 'шесть кругов');
+  assert.equal(rounds[0].steps.length, 2, 'в круге два блока: работа и отдых');
+  assert.equal(rounds[0].steps[0].role, 'work');
+  assert.equal(rounds[0].steps[1].role, 'rest');
+  assert.equal(rounds[0].steps[0].focus_value.pace_min_per_km, '3:35');
+});
+
+test('структура: блок без кругов — пустой список кругов', () => {
+  assert.deepEqual(setBlocks([{group: null, round: null}]), []);
+  assert.deepEqual(setBlocks([]), []);
 });
 
 test('информационная плашка гаснет сама', async () => {

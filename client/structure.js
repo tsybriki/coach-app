@@ -79,6 +79,27 @@ export function isSetSteps(steps) {
     && steps.every((s) => s.round !== null && s.round !== undefined);
 }
 
+/* Круги набора: внутри набора — круги, у круга — свои блоки.
+ *
+ * «6 по 200 через 200» — это повтор из 6 кругов, каждый круг состоит
+ * из двух блоков: «200 м по 3:35» (работа) и «200 м по 5:30» (отдых).
+ * Без этого набор показывается плоским списком из двенадцати шагов,
+ * в котором видно всё и ничего.
+ */
+export function setBlocks(steps) {
+  const rounds = [];
+  for (const step of steps || []) {
+    if (step.round === null || step.round === undefined) continue;
+    const round = rounds.find((r) => r.round === step.round);
+    if (round) {
+      round.steps.push(step);
+    } else {
+      rounds.push({round: step.round, steps: [step]});
+    }
+  }
+  return rounds;
+}
+
 /* Человекочитаемое число повторов: «3 повтора» / «1 повтор». */
 export function repsLabel(reps) {
   if (reps === 1) return '1 повтор';

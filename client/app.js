@@ -20,6 +20,7 @@ import {
   isSetSteps,
   nameHasReps,
   repsLabel,
+  setBlocks,
   setReps,
 } from './structure.js';
 
@@ -1417,7 +1418,9 @@ function composeRows(steps) {
       const work = blockSteps.filter((s) => s.role === 'work');
       const first = work[0] || blockSteps[0];
       const focus = first.focus_value || {};
-      const distance = work.reduce(
+      /* Объём набора — работа ПЛЮС отдых: «6 по 200 через 200» — это
+       * 2400 м, а не 1200. Отдых на бегу — пройденные метры. */
+      const distance = blockSteps.reduce(
         (sum, s) => sum + (s.target_type === 'distance' ? s.target_value : 0), 0);
       const detail = [
         focus.zone ? `пульс до ${focus.zone}` : '',
@@ -2109,7 +2112,7 @@ function renderBlock(block) {
           <span class="step-phase">${escapeHtml(block.group || 'сет')}</span>
           ${repsTag}
         </div>
-        <ol class="step-sublist">${steps.map(renderSubStep).join('')}</ol>
+        ${renderSetRounds(steps)}
       </li>`;
   }
 
@@ -2138,6 +2141,46 @@ function renderBlock(block) {
       </li>`;
   }
   return `<li class="step">${renderSubStep(steps[0])}</li>`;
+}
+
+/* Круги набора: каждый круг — свои блоки (работа, отдых).
+ *
+ * «6 по 200 через 200» показывается как повтор из шести кругов, а в
+ * круге — два блока: «200 м по 3:35» и «200 м по 5:30». Плоский список
+ * из двенадцати шагов читать невозможно: там не видно ни числа
+ * повторов, ни того, где работа, а где отдых.
+ */
+function renderSetRounds(steps) {
+  const rounds = setBlocks(steps);
+  if (!rounds.length) {
+    return `<ol class="step-sublist">${steps.map(renderSubStep).join('')}</ol>`;
+  }
+  return `<ol class="set-rounds">${rounds.map(renderSetRound).join('')}</ol>`;
+}
+
+/* Один круг набора: номер круга и его блоки. */
+function renderSetRound(round) {
+  const blocks = round.steps.map(renderSetBlock).join('');
+  return `<li class="set-round">
+      <span class="set-round-num">${round.round}</span>
+      <ol class="set-blocks">${blocks}</ol>
+    </li>`;
+}
+
+/* Блок круга: работа или отдых — с объёмом и темпом. */
+function renderSetBlock(step) {
+  const fv = step.focus_value || {};
+  const amount = step.target_type === 'distance'
+    ? `${Math.round(step.target_value)} м`
+    : `${Math.round(step.duration_min)} мин`;
+  const pace = fv.pace_min_per_km ? ` @ ${escapeHtml(fv.pace_min_per_km)}/км` : '';
+  const zone = fv.zone ? ` ${escapeHtml(fv.zone)}` : '';
+  const role = step.role === 'rest' ? 'отдых' : 'работа';
+  return `<li class="set-block set-block-${escapeHtml(step.role)}">
+      <span class="set-block-role">${escapeHtml(role)}</span>
+      <span class="set-block-amount">${escapeHtml(amount)}</span>
+      ${pace}${zone ? `<span class="set-block-zone">${zone}</span>` : ''}
+    </li>`;
 }
 
 /* Шаг внутри: зона, роль, объём, пульс, темп. */

@@ -145,6 +145,16 @@ def test_prompt_asks_for_rest_between_repeats():
     assert "Не выдумывай шаги" in prompt
 
 
+def test_prompt_forbids_volume_dump_as_name():
+    """Название — короткое, а не перечисление объёмов.
+
+    Модель отдавала «5 км + 200 м + 400 м»: это пересказ текста, а не
+    название тренировки.
+    """
+    assert "5 км + 200 м + 400 м" in SYSTEM_PROMPT
+    assert "короткое и человеческое" in SYSTEM_PROMPT
+
+
 def test_garbage_raises_external_source_error():
     """Мусор вместо JSON — понятная ошибка, а не падение."""
     with pytest.raises(ExternalSourceError) as error:

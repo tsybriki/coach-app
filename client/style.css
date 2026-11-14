@@ -1663,6 +1663,82 @@ p.lead {
   font-size: 12px;
 }
 
+/* Круги набора: «6 по 200 через 200» — шесть кругов, у каждого
+ * свои блоки (работа, отдых). */
+.set-rounds {
+  margin: 6px 0 2px;
+  padding: 0;
+  list-style: none;
+}
+
+.set-round {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 3px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.set-round:first-child {
+  border-top: none;
+}
+
+.set-round-num {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  text-align: center;
+  line-height: 18px;
+}
+
+.set-blocks {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.set-block {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.set-block-role {
+  color: var(--muted);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.set-block-work .set-block-role {
+  color: var(--accent);
+}
+
+.set-block-rest .set-block-role {
+  color: var(--good);
+}
+
+.set-block-amount {
+  color: var(--text);
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.set-block-zone {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
 .step-sub {
   padding: 4px 6px;
   margin-bottom: 2px;

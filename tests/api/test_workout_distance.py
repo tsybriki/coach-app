@@ -7,14 +7,23 @@
 Километраж плана считается по шагам с дистанцией: шаг планировщика
 знает метры, а тренировка их не хранит. Проверяем доменную функцию и
 то, что она доезжает до API.
+
+Правило одно и для планировщика, и для разбора текста: **круг = работа
++ отдых**. «6 по 200 через 200» — это 6 × 400 = 2400 м, а не 1200.
+Отдых на бегу — пройденные метры, и итог должен совпадать с фактом.
 """
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
+import pytest
+
+from app.domain.composition import WorkoutIntent, build_steps
 from app.domain.derivations import workout_distance_m
 from app.domain.entities import (
     Assignment,
+    Athlete,
     Request,
     Season,
     Slot,
@@ -23,6 +32,8 @@ from app.domain.entities import (
     Workout,
 )
 from app.domain.enums import Sport, StepRole, TargetType, WeekStatus
+
+PACE = {"E": 330.0, "T": 240.0, "I": 220.0, "R": 200.0, "M": 270.0}
 
 
 def make_step(step_id: str, target_type: TargetType, value: float,
@@ -69,6 +80,123 @@ def test_distance_of_workout_without_distance_steps_is_zero():
 
 def test_distance_of_missing_workout_is_zero():
     assert workout_distance_m(None) == 0.0
+
+
+def _athlete() -> Athlete:
+    return Athlete(
+        vdot=50.0,
+        hr_zones={"Z2": (111, 130), "Z5": (159, 168), "Z7": (172, 182)},
+        hr_max=182, rhr=50, lth=164,
+    )
+
+
+def test_distance_of_composed_set_counts_rest():
+    """Дистанция набора из разбора — работа ПЛЮС отдых.
+
+    «6 по 200 через 200» = 6 × (200 + 200) = 2400 м.
+    """
+    intents = [WorkoutIntent(
+        role=StepRole.WORK,
+        sport=Sport.RUN,
+        target_type=TargetType.DISTANCE,
+        target_value=200.0,
+        intent="interval",
+        label="Интервалы",
+        reps=6,
+        rest_type=TargetType.DISTANCE,
+        rest_value=200.0,
+    )]
+    composition = build_steps(intents, athlete=_athlete(), pace_by_zone=PACE)
+    workout = Workout(
+        id="w1", request_id="r1", sport=Sport.RUN, kind="composed",
+        focus="Интервалы", steps=[s.step for s in composition.steps],
+        duration_min=composition.duration_min,
+    )
+
+    assert workout_distance_m(workout) == 2400.0
+
+
+def test_duration_of_composed_set_counts_rest():
+    """Время набора из разбора — работа ПЛЮС отдых."""
+    intents = [WorkoutIntent(
+        role=StepRole.WORK,
+        sport=Sport.RUN,
+        target_type=TargetType.DISTANCE,
+        target_value=200.0,
+        intent="interval",
+        label="Интервалы",
+        reps=6,
+        rest_type=TargetType.DISTANCE,
+        rest_value=200.0,
+    )]
+    composition = build_steps(intents, athlete=_athlete(), pace_by_zone=PACE)
+
+    work_min = sum(
+        s.step.duration_min for s in composition.steps
+        if s.step.role is StepRole.WORK
+    )
+    rest_min = sum(
+        s.step.duration_min for s in composition.steps
+        if s.step.role is StepRole.REST
+    )
+    assert work_min > 0
+    assert rest_min > 0
+    assert composition.duration_min == pytest.approx(work_min + rest_min)
+
+
+def test_planner_and_composer_agree_on_set_distance():
+    """Планировщик и разбор считают объём набора одинаково.
+
+    Набор из методики: «6 по 200 через 200». Планировщик собирает его из
+    рецепта, разбор — из намерения модели. Объём должен совпасть.
+    """
+    from app.adapters.daniels import load_paces
+    from app.domain.methodology import (
+        RecipeSegment,
+        RecipeSet,
+        WorkoutRecipe,
+    )
+    from app.domain.methodology import build_steps as build_recipe_steps
+
+    workout_recipe = WorkoutRecipe(
+        kind="R",
+        label="Работа в повторном темпе",
+        sets=(RecipeSet(
+            reps_min=6, reps_max=6,
+            segments=(
+                RecipeSegment(zone="R", distance_m=200.0),
+                RecipeSegment(zone="E", distance_m=200.0),
+            ),
+            label="6×200м через 200м",
+        ),),
+    )
+    paces = load_paces(
+        Path(__file__).resolve().parent.parent.parent / "reference" / "daniels"
+    ).pace_by_zone(50)
+    planner_steps = build_recipe_steps(workout_recipe, paces, _athlete())
+
+    intents = [WorkoutIntent(
+        role=StepRole.WORK,
+        sport=Sport.RUN,
+        target_type=TargetType.DISTANCE,
+        target_value=200.0,
+        intent="interval",
+        label="Интервалы",
+        reps=6,
+        rest_type=TargetType.DISTANCE,
+        rest_value=200.0,
+    )]
+    composed = build_steps(intents, athlete=_athlete(), pace_by_zone=paces)
+
+    planner_m = sum(
+        s.target_value for s in planner_steps
+        if s.target_type is TargetType.DISTANCE
+    )
+    composed_m = sum(
+        s.step.target_value for s in composed.steps
+        if s.step.target_type is TargetType.DISTANCE
+    )
+    assert planner_m == composed_m == 2400.0
 
 
 def test_api_returns_planned_distance(client, data_root):

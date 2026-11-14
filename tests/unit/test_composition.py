@@ -127,7 +127,7 @@ def test_reps_become_separate_steps():
     work = [s for s in composition.steps if s.step.role is StepRole.WORK]
     rest = [s for s in composition.steps if s.step.role is StepRole.REST]
     assert len(work) == 8
-    assert len(rest) == 7, 'отдых — между повторами, не после последнего'
+    assert len(rest) == 8, 'у каждого круга свой отдых, включая последний'
     assert work[0].step.target_value == 400.0
     assert work[0].step.round == 1
     assert work[-1].step.round == 8
@@ -190,15 +190,107 @@ def test_work_and_rest_alternate():
 
     roles = [s.step.role for s in composition.steps]
     assert roles.count(StepRole.WORK) == 6
-    assert roles.count(StepRole.REST) == 5, 'отдых — между повторами, не после'
+    assert roles.count(StepRole.REST) == 6, 'у каждого круга свой отдых'
     assert roles == [
         StepRole.WORK, StepRole.REST,
         StepRole.WORK, StepRole.REST,
         StepRole.WORK, StepRole.REST,
         StepRole.WORK, StepRole.REST,
         StepRole.WORK, StepRole.REST,
-        StepRole.WORK,
+        StepRole.WORK, StepRole.REST,
     ]
+
+
+def test_set_distance_includes_rest():
+    """Дистанция набора — работа ПЛЮС отдых.
+
+    «6 по 200 через 200» — это 6 × (200 + 200) = 2400 м, а не 1200.
+    Отдых на бегу — это пройденные метры, и итог должен совпадать с тем,
+    что человек реально пробежал.
+    """
+    composition = build_steps(
+        [repetition_intent()], athlete=make_athlete(), pace_by_zone=PACE)
+
+    work_m = sum(
+        s.step.target_value for s in composition.steps
+        if s.step.role is StepRole.WORK
+    )
+    rest_m = sum(
+        s.step.target_value for s in composition.steps
+        if s.step.role is StepRole.REST
+    )
+    assert work_m == 1200.0
+    assert rest_m == 1200.0
+    assert composition.distance_m == 2400.0
+
+
+def test_set_duration_includes_rest():
+    """Время набора — работа ПЛЮС отдых.
+
+    Отдых 200 м по 5:30 — это 1,1 минуты на круг; шесть кругов дают
+    шесть минут отдыха сверх работы. Время шага округлено до сотых,
+    поэтому сумма считается по округлённым шагам — как и показывает
+    приложение.
+    """
+    composition = build_steps(
+        [repetition_intent()], athlete=make_athlete(), pace_by_zone=PACE)
+
+    work_min = sum(
+        s.step.duration_min for s in composition.steps
+        if s.step.role is StepRole.WORK
+    )
+    rest_min = sum(
+        s.step.duration_min for s in composition.steps
+        if s.step.role is StepRole.REST
+    )
+    assert work_min == pytest.approx(4.02)
+    assert rest_min == pytest.approx(6.6)
+    assert composition.duration_min == pytest.approx(work_min + rest_min)
+
+
+def test_set_has_round_blocks():
+    """Набор разбит на круги, а у круга — свои блоки: работа и отдых.
+
+    «6 по 200 через 200» — это повтор из 6 кругов, каждый круг — два
+    блока: «200 м по 3:35» и «200 м по 5:30».
+    """
+    composition = build_steps(
+        [repetition_intent()], athlete=make_athlete(), pace_by_zone=PACE)
+
+    rounds = {s.step.round for s in composition.steps}
+    assert rounds == {1, 2, 3, 4, 5, 6}
+    # У круга два блока: работа и отдых.
+    first_round = [s for s in composition.steps if s.step.round == 1]
+    assert len(first_round) == 2
+    assert first_round[0].step.role is StepRole.WORK
+    assert first_round[1].step.role is StepRole.REST
+    # Блок работы помечен: он первый в круге.
+    assert first_round[0].step.focus_value["set_block"] == 1
+    assert first_round[1].step.focus_value["set_block"] == 2
+
+
+def test_set_round_carries_reps_and_block_count():
+    """Шаг знает, в каком круге он и сколько блоков в круге."""
+    composition = build_steps(
+        [repetition_intent()], athlete=make_athlete(), pace_by_zone=PACE)
+
+    work = [s.step for s in composition.steps if s.step.role is StepRole.WORK]
+    assert work[0].focus_value["set_reps"] == 6
+    assert work[0].focus_value["set_blocks"] == 2
+
+
+def test_rest_block_has_its_pace():
+    """У блока отдыха свой темп: отдых 200 м — это «200 м по 5:30».
+
+    Без темпа отдых в структуре выглядит пустым: «отдых» без объёма
+    и скорости.
+    """
+    composition = build_steps(
+        [repetition_intent()], athlete=make_athlete(), pace_by_zone=PACE)
+
+    rest = [s.step for s in composition.steps if s.step.role is StepRole.REST]
+    assert rest[0].focus_value["pace_min_per_km"] == "5:30"
+    assert rest[0].focus_value["zone"] == "Z2"
 
 
 def test_each_set_is_its_own_group():

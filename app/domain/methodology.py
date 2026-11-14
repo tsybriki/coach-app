@@ -783,7 +783,9 @@ def build_steps(recipe: WorkoutRecipe,
     def add_segment(segment: RecipeSegment, group: str | None,
                     round_number: int | None, role: StepRole,
                     reps: int | None = None,
-                    pace_offset_sec: float = 0.0) -> None:
+                    pace_offset_sec: float = 0.0,
+                    block_index: int | None = None,
+                    blocks_per_round: int | None = None) -> None:
         nonlocal index
         index += 1
         duration = segment_duration_min(segment, pace_by_zone)
@@ -829,6 +831,10 @@ def build_steps(recipe: WorkoutRecipe,
 
         if reps:
             focus_value["set_reps"] = reps
+        if block_index is not None:
+            focus_value["set_block"] = block_index
+        if blocks_per_round is not None:
+            focus_value["set_blocks"] = blocks_per_round
         focus_value["daniels_zone"] = segment.zone
 
         steps.append(Step(
@@ -845,11 +851,16 @@ def build_steps(recipe: WorkoutRecipe,
         ))
 
     for recipe_set in recipe.sets:
+        # Блок круга: работа и отдых — два блока. Метка нужна клиенту,
+        # чтобы показать круг блоками, а не плоским списком шагов.
+        blocks_per_round = len(recipe_set.segments)
         for position in range(1, recipe_set.reps_min + 1):
-            for segment in recipe_set.segments:
+            for block_index, segment in enumerate(recipe_set.segments, start=1):
                 role = StepRole.REST if segment.zone == ZONE_EASY else StepRole.WORK
                 add_segment(segment, recipe_set.label or recipe.label,
-                            position, role, reps=recipe_set.reps_min)
+                            position, role, reps=recipe_set.reps_min,
+                            block_index=block_index,
+                            blocks_per_round=blocks_per_round)
 
     for segment in recipe.flat:
         role = StepRole.REST if segment.zone == ZONE_EASY else StepRole.WORK

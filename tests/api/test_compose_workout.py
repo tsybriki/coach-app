@@ -267,9 +267,11 @@ def test_add_composed_workout_builds_alternating_set(
     assert len(composed) == 1
     steps = composed[0]["steps"]
     roles = [s["role"] for s in steps]
+    # Отдых — часть своего круга, включая последний: без него объём
+    # набора не сходится с тем, что человек пробежал.
     assert roles == [
         "work", "rest", "work", "rest", "work", "rest",
-        "work", "rest", "work", "rest", "work",
+        "work", "rest", "work", "rest", "work", "rest",
     ]
     groups = {s["group"] for s in steps}
     assert len(groups) == 1

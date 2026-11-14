@@ -274,15 +274,20 @@ def build_steps(
         focus_value = dict(focus_value)
         focus_value["intent"] = intent.intent
 
-        # Повторы: «8×400» — это восемь шагов с одним и тем же объёмом.
+        # Повторы: «8×400» — это восемь кругов, у каждого — свои блоки:
+        # работа и (если задан) отдых.
         reps = max(1, intent.reps)
         group = _group_name(intent) if reps > 1 else (label or None)
         rest_min = _rest_minutes(intent, pace_by_zone)
+        has_rest = reps > 1 and intent.rest_value > 0
+        blocks_per_round = 2 if has_rest else 1
         for rep in range(reps):
             step_id = f"s{index + 1}" if reps == 1 else f"s{index + 1}-{rep + 1}"
             step_focus_value = dict(focus_value)
             if reps > 1:
                 step_focus_value["set_reps"] = reps
+                step_focus_value["set_blocks"] = blocks_per_round
+                step_focus_value["set_block"] = 1
             steps.append(ComposedStep(
                 step=Step(
                     id=step_id,
@@ -301,8 +306,20 @@ def build_steps(
                 assumption=step_assumption,
             ))
 
-            # Отдых — между повторами, а не после всех работ.
-            if reps > 1 and intent.rest_value > 0 and rep < reps - 1:
+            # Отдых — часть своего круга. Последний круг тоже: без него
+            # объём набора не сходится с тем, что человек пробежал
+            # (6 по 200 через 200 = 2400 м, а не 1200).
+            if has_rest:
+                rest_focus_value: dict[str, Any] = {"zone": "Z2"}
+                # Темп отдыха виден в блоке круга: отдых 200 м — это
+                # «200 м по 5:30», а не просто «отдых».
+                rest_pace = _pace_for(ZONE_EASY, pace_by_zone)
+                if rest_pace:
+                    rest_focus_value["pace_min_per_km"] = format_pace(rest_pace)
+                if reps > 1:
+                    rest_focus_value["set_reps"] = reps
+                    rest_focus_value["set_blocks"] = blocks_per_round
+                    rest_focus_value["set_block"] = 2
                 steps.append(ComposedStep(
                     step=Step(
                         id=f"s{index + 1}-r{rep + 1}",
@@ -311,7 +328,7 @@ def build_steps(
                         target_type=intent.rest_type,
                         target_value=float(intent.rest_value),
                         focus=FocusType.HR,
-                        focus_value={"zone": "Z2"},
+                        focus_value=rest_focus_value,
                         group=group,
                         round=rep + 1,
                         label="отдых",
