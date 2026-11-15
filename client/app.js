@@ -60,6 +60,7 @@ const state = {
   messageKind: 'info',   // 'info' — гаснет само, 'error' — ждёт действия
   messageTimer: null,
   busy: false,           // идёт команда: плашка не гаснет и экран не мигает
+  internalNav: false,    // наш собственный back: экран уже показан
   base: localStorage.getItem('coach-app-base') || location.origin,
 };
 
@@ -2027,7 +2028,38 @@ function detailBar(title, day) {
     </div>`;
 }
 
-/* Обратно к списку. */
+/* Показать раздел (неделя / факт / сезон / атлет) на верхнем уровне.
+ *
+ * Раздел — не уровень вложенности: у него **нет** своей записи
+ * истории, и переключение между разделами не должно её трогать.
+ * Поэтому здесь глубина истории не уменьшается — просто рисуется
+ * нужный раздел.
+ */
+function showScreen(screen) {
+  state.screen = screen;
+  state.openWorkoutId = null;
+  state.detailId = null;
+  state.pickUnplaced = null;
+  cardWrap.classList.add('hidden');
+  detailWrap.classList.add('hidden');
+  picker.classList.remove('hidden');
+  renderScreen();
+  bar.innerHTML = chromeBar();
+  renderNav();
+  if (window.scrollY > 0) window.scrollTo(0, 0);
+}
+
+/* Обратно к списку.
+ *
+ * Выход из вложенного экрана (детали тренировки, разбор, compose)
+ * должен **убрать** запись истории, а не перезаписать её:
+ * `replaceState` не уменьшает глубину, и следующий свайп-назад ушёл бы
+ * за пределы приложения.
+ *
+ * `backToRoot()` различает два случая: мы действительно вложены (тогда
+ * `history.back()`, и экран восстановит обработчик `popstate`), или уже
+ * на верхнем уровне (тогда адрес чистится на месте).
+ */
 function showPicker() {
   state.openWorkoutId = null;
   state.detailId = null;
@@ -2038,9 +2070,7 @@ function showPicker() {
   cardWrap.classList.add('hidden');
   detailWrap.classList.add('hidden');
   picker.classList.remove('hidden');
-  if (window.location.hash) {
-    try { history.replaceState(history.state, '', ' '); } catch (error) { /* нет */ }
-  }
+  backToRoot();
   renderScreen();
   bar.innerHTML = chromeBar();
   // Меню перерисовываем отдельно: в нём подсветка активного раздела,
@@ -2556,10 +2586,14 @@ document.addEventListener('click', async (event) => {
   // Переход в раздел: тап по кнопке, её иконке или подписи.
   const screen = closest('[data-screen]');
   if (screen) {
-    state.screen = screen.dataset.screen;
-    // showPicker() уже перерисовывает экран и шапку — второй render()
-    // делал ту же работу дважды.
-    showPicker();
+    /* Раздел — не уровень вложенности. Если мы были внутри тренировки,
+     * вложенность убирается, но запись истории не добавляется: иначе
+     * копящиеся записи выкидывали бы человека из приложения при свайпе.
+     */
+    if (state.openWorkoutId || state.detailId) {
+      backToRoot();
+    }
+    showScreen(screen.dataset.screen);
     return;
   }
 
@@ -2736,13 +2770,40 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
-  /* Открыть экран разбора тренировки. */
+  /* Открыть экран разбора тренировки.
+   *
+   * Экран ввода пожеланий — подэкран недели, но у него **своя запись
+   * истории**: иначе свайп-назад с него уходит за пределы приложения.
+   * Разделы нижней навигации, наоборот, записи не добавляют: это не
+   * уровни вложенности, и копящаяся история выкидывала бы человека из
+   * приложения при первом же свайпе.
+   */
   if (closest('#compose-open')) {
     state.screen = 'compose';
     state.compose = null;
     state.composeError = null;
     state.composeText = '';
-    showPicker();
+    /* Экран ввода пожеланий — подэкран недели, у него **своя запись
+     * истории**: иначе свайп-назад с него уходит за пределы приложения.
+     *
+     * Если открываем из тренировки, её запись убирается на месте
+     * (`replaceState`), а не через `history.back()`: back здесь
+     * асинхронный, и следующий pushState попал бы в другую запись —
+     * история бы перепуталась.
+     */
+    try {
+      history.replaceState({page: 'week'}, '', ' ');
+    } catch (error) { /* история недоступна */ }
+    try {
+      history.pushState({page: 'week', screen: 'compose'}, '', ' ');
+    } catch (error) { /* история недоступна */ }
+    cardWrap.classList.add('hidden');
+    detailWrap.classList.add('hidden');
+    picker.classList.remove('hidden');
+    renderScreen();
+    bar.innerHTML = chromeBar();
+    renderNav();
+    if (window.scrollY > 0) window.scrollTo(0, 0);
     return;
   }
 
@@ -2902,6 +2963,60 @@ async function runWeekCommand(type, pendingText, doneText) {
   render();
 }
 
+/* Инициализация истории.
+ *
+ * У приложения должна быть **своя** запись истории: без неё первый же
+ * свайп-назад уходит на предыдущую страницу — то есть выбрасывает из
+ * приложения. Это и было: `history.state` был null, и телефон уводил
+ * на пустую страницу.
+ *
+ * Запись помечается `page: 'week'` — по ней обработчик `popstate`
+ * понимает, что приложение на верхнем уровне.
+ */
+function initHistory() {
+  try {
+    if (!history.state || !history.state.page) {
+      /* Прямая ссылка на тренировку приходит с хэшем: его не затираем,
+       * иначе ссылка перестанет открывать тренировку. */
+      const hash = window.location.hash || '';
+      history.replaceState({page: 'week'}, '', hash || ' ');
+      /* Подушка: под корневой записью — тоже своя. Без неё свайп из
+       * корня ушёл бы на предыдущую страницу браузера — то есть
+       * выбрасывал из приложения. Теперь под корнем всегда наша
+       * запись, и свайп приземляется в приложение. */
+      history.pushState({page: 'week'}, '', hash || ' ');
+    }
+  } catch (error) { /* история недоступна — работаем без неё */ }
+}
+
+/* Убрать вложенность из истории.
+ *
+ * `history.back()` — асинхронный: `popstate` придёт позже. Если
+ * вызывающий код уже нарисовал нужный экран (переход в раздел из
+ * тренировки), обработчик `popstate` не должен перерисовывать его
+ * обратно. Флаг `internalNav` говорит: «это наш back, экран уже
+ * показан — не трогай».
+ */
+function backToRoot() {
+  try {
+    /* Если мы в приложении глубже одной записи — убираем её. */
+    const deep = history.state && history.state.page
+      && (history.state.page !== 'week' || history.state.actual
+          || history.state.slot || history.state.screen);
+    if (deep && history.length > 1) {
+      state.internalNav = true;
+      history.back();
+      return;
+    }
+  } catch (error) { /* история недоступна */ }
+  /* Уже на верхнем уровне: адрес чистим, глубину не трогаем. */
+  try {
+    if (window.location.hash) {
+      history.replaceState({page: 'week'}, '', ' ');
+    }
+  } catch (error) { /* нет */ }
+}
+
 /* Кнопка «назад» на телефоне — убрать верхний уровень вложенности.
  *
  * Уровни: неделя → тренировка → разбор. Свайп назад из разбора
@@ -2909,7 +3024,32 @@ async function runWeekCommand(type, pendingText, doneText) {
  */
 window.addEventListener('popstate', (event) => {
   const current = event.state;
-  if (current && current.page === 'detail' && current.actual) {
+  /* Внутренний back (мы сами убрали вложенность и уже показали
+   * нужный экран) — экран не перерисовываем. Иначе переход в раздел
+   * из тренировки сбрасывался бы на неделю. */
+  if (state.internalNav) {
+    state.internalNav = false;
+    return;
+  }
+  /* Мы вышли за пределы приложения: пустая страница или чужой экран.
+   * Именно это и выкидывало человека при свайпе-назад — запись истории
+   * у приложения была, но первая запись вкладки ей не принадлежала.
+   * Возвращаемся внутрь: адрес становится нашим, и следующий свайп
+   * снова уйдёт по нашей истории, а не наружу. */
+  if (!current || !current.page) {
+    try {
+      history.replaceState({page: 'week'}, '', ' ');
+    } catch (error) { /* история недоступна */ }
+    if (state.screen === 'compose') state.screen = 'week';
+    cardWrap.classList.add('hidden');
+    detailWrap.classList.add('hidden');
+    picker.classList.remove('hidden');
+    renderScreen();
+    bar.innerHTML = chromeBar();
+    renderNav();
+    return;
+  }
+  if (current.page === 'detail' && current.actual) {
     // Вперёд: открыт разбор.
     state.detailId = current.actual;
     detailWrap.classList.remove('hidden');
@@ -2919,14 +3059,39 @@ window.addEventListener('popstate', (event) => {
     render();
     return;
   }
-  if (current && current.page === 'detail') {
+  if (current.page === 'detail') {
     // Назад с разбора: мы на уровне тренировки.
     state.detailId = null;
     detailWrap.classList.add('hidden');
     showWorkout(current.slot);
     return;
   }
-  showPicker();
+  if (current.screen === 'compose') {
+    // Вперёд: открыт экран ввода пожеланий.
+    state.screen = 'compose';
+    state.compose = null;
+    state.composeError = null;
+    render();
+    return;
+  }
+  /* Назад к верхнему уровню приложения.
+   *
+   * Экран не перерисовывается целиком: showPicker() сам убирает
+   * вложенность, а popstate уже пришёл сюда — второй раз убирать
+   * глубину истории нельзя.
+   *
+   * Раздел (неделя / факт / сезон / атлет) **не сбрасывается**: он не
+   * уровень вложенности, и выход из тренировки возвращает в тот же
+   * раздел, из которого её открыли. Сбрасывается только compose —
+   * он подэкран недели.
+   */
+  if (state.screen === 'compose') state.screen = 'week';
+  cardWrap.classList.add('hidden');
+  detailWrap.classList.add('hidden');
+  picker.classList.remove('hidden');
+  renderScreen();
+  bar.innerHTML = chromeBar();
+  renderNav();
 });
 
 /* Разбор тренировки: сначала пробуем готовый, иначе разбираем FIT. */
@@ -3185,13 +3350,19 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+/* Своя запись истории — при старте. Без неё свайп-назад выбрасывает из
+ * приложения (уводит на предыдущую страницу браузера). */
+initHistory();
+
 load().then(flushOutbox).then(render).then(() => {
   // Если в адресе есть хэш тренировки — открыть её (ссылка на детали).
   const hash = window.location.hash.replace('#', '');
   if (hash && state.week) {
     const match = (state.week.workouts || []).find((w) => slotSlug(w) === hash);
     if (match) {
-      history.replaceState({page: 'init'}, '', ' ');
+      /* Запись — как у обычной тренировки, а не `page: 'init'`: обработчик
+       * popstate должен понимать её, иначе свайп с разбора по прямой
+       * ссылке выбросил бы из приложения. */
       showWorkout(match.id);
     }
   }
