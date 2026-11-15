@@ -703,7 +703,7 @@ function slotPickerFor(requestId, sport) {
  */
 function slotPicker(requestId, windows, sport) {
   if (!windows.length) {
-    return '<div class="card warn"><div class="chead">Окна недели неизвестны</div></div>';
+    return '<div class="card warn slot-picker"><div class="chead">Окна недели неизвестны</div></div>';
   }
   const rows = windows.map((slot) => {
     const day = slot.day_name || dayName(slot.day);
@@ -722,7 +722,7 @@ function slotPicker(requestId, windows, sport) {
         ${fits ? '' : '<span class="warn">не подходит</span>'}
       </button>`;
   }).join('');
-  return `<div class="card">
+  return `<div class="card slot-picker">
       <div class="chead">Куда привязать</div>
       <div class="slot-choices">${rows}</div>
     </div>`;
@@ -1863,19 +1863,20 @@ function showWorkout(workoutId, skipMetrics = false) {
    * Кнопка «привязать» на экране деталей ведёт себя ровно как раньше:
    * открывает выбор окна недели. Здесь она нужна, чтобы можно было
    * посмотреть детали и сразу решить, куда поставить.
+   *
+   * Выбор окон стоит **сразу под шапкой** карточки, а не внизу: список
+   * окон — это ответ на нажатую кнопку, и искать его внизу длинной
+   * карточки неудобно.
    */
   const placed = objective.day !== undefined && objective.day !== null
     && objective.day !== '';
-  const bindBlock = placed
+  const requestId = workout.request_id || workout.id;
+  const bindHint = placed
     ? ''
-    : `<div class="bind-block">
-        <div class="lbl">Тренировка не привязана</div>
-        <div class="hint">Выбери окно недели — и тренировка встанет на это время.</div>
-        <button class="action primary" data-bind-pick="${escapeHtml(workout.request_id || workout.id)}">
-          Привязать к окну
-        </button>
-        ${slotPickerFor(workout.request_id || workout.id, workout.sport)}
-      </div>`;
+    : '<div class="bind-hint">Тренировка не привязана</div>';
+  const slotPickerBlock = placed
+    ? ''
+    : slotPickerFor(requestId, workout.sport);
 
   const linkedActual = workout.actual_id
     ? state.actual.find((a) => a.id === workout.actual_id)
@@ -1907,22 +1908,28 @@ function showWorkout(workoutId, skipMetrics = false) {
       </div>`
       : '';
 
-  /* Кнопка удаления — только пока неделя не активна.
+  /* Действия карточки — иконками в шапке.
    *
-   * В активной неделе план уже исполняется: удалять тренировку из неё
-   * нельзя (и сервер не даст). В proposed-неделе план ещё можно
-   * переделать — это и есть время убрать лишнее.
+   * Кирилл: «кнопку удалить нужно достать из деталей тренировки, положить
+   * рядом с кнопкой привязать… Это должно получиться две кнопки, одна
+   * корзина и просто удалить. И вторая привязать».
+   *
+   * Две кнопки рядом с названием: корзина 🗑 (удалить) и скрепка 🔗
+   * (привязать к окну). Иконки вместо текста: в шапке карточки текстовая
+   * кнопка ломает строку с длинным названием.
+   *
+   * Удаление — только пока неделя не активна: в активной план уже
+   * исполняется, и сервер удаление не примет.
    */
   const weekStatus = state.week ? (state.week.status || 'proposed') : 'proposed';
-  const removeBlock = weekStatus === 'proposed'
-    ? `<div class="card"><div class="chead">Удалить тренировку</div>
-        <p class="lead">Пока неделя не активирована, тренировку можно
-        убрать из плана.</p>
-        <button class="action secondary" data-remove-workout="${escapeHtml(workout.id)}">
-          Удалить тренировку
-        </button>
-      </div>`
+  const removeBtn = weekStatus === 'proposed'
+    ? `<button class="card-act card-act-danger" data-remove-workout="${escapeHtml(workout.id)}"
+         title="Удалить тренировку" aria-label="Удалить тренировку">🗑</button>`
     : '';
+  const bindBtn = placed
+    ? ''
+    : `<button class="card-act" data-bind-pick="${escapeHtml(workout.request_id || workout.id)}"
+         title="Привязать к окну" aria-label="Привязать к окну">🔗</button>`;
 
   /* Подзаголовок: день, время, длительность и километраж.
    *
@@ -1939,18 +1946,21 @@ function showWorkout(workoutId, skipMetrics = false) {
           <span class="kind-ico">${KIND_ICON[workout.sport] || '🎯'}</span>
           <span class="name">${escapeHtml(title)}</span>
         </div>
-        <span class="tag kind-${escapeHtml(workout.sport)}">${stepCount} ${plural(stepCount, 'шаг', 'шага', 'шагов')}</span>
+        <div class="goal-acts">
+          <span class="tag kind-${escapeHtml(workout.sport)}">${stepCount} ${plural(stepCount, 'шаг', 'шага', 'шагов')}</span>
+          ${bindBtn}${removeBtn}
+        </div>
       </div>
       <div class="subtitle">${subtitle}</div>
       ${meta.length ? `<div class="meta-row">${meta.join('')}</div>` : ''}
+      ${bindHint}
+      ${slotPickerBlock}
       ${goalHtml}
       ${rationaleHtml}
       ${invHtml}
       <h3>Структура тренировки</h3>
       ${structureHtml(workout)}
-      ${bindBlock}
       ${actualBlock}
-      ${removeBlock}
     </div>
     <div id="detail-block"></div>`;
 

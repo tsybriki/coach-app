@@ -419,6 +419,28 @@ test('у неактивной недели тренировку можно уд�
   assert.equal(sent[0].args.season_week, 5);
 });
 
+test('корзина удаления стоит в шапке карточки', async () => {
+  /* Кирилл: «кнопку удалить нужно достать из деталей тренировки, положить
+   * рядом с кнопкой привязать». То есть действие — в шапке, рядом с
+   * названием, а не отдельной карточкой внизу. */
+  await loadApp();
+
+  click(document.querySelector('.slot'));
+  await waitFor(() => document.querySelector('[data-remove-workout]'));
+
+  const header = document.querySelector('#cardHost .card-header');
+  assert.ok(header, 'нет шапки карточки');
+  const remove = header.querySelector('[data-remove-workout]');
+  assert.ok(remove, 'кнопка удаления не в шапке карточки');
+  assert.match(remove.textContent, /🗑/, 'удаление — не иконка корзины');
+  assert.equal(remove.getAttribute('aria-label'), 'Удалить тренировку');
+
+  /* Отдельной карточки с удалением больше нет. */
+  const cards = [...document.querySelectorAll('#cardHost .card .chead')];
+  assert.ok(!cards.some((c) => /Удалить тренировку/.test(c.textContent)),
+    'старая карточка удаления осталась');
+});
+
 test('в активной неделе кнопки удаления нет', async () => {
   await loadApp({week: makeWeek('active')});
 
@@ -427,6 +449,20 @@ test('в активной неделе кнопки удаления нет', as
 
   assert.ok(!document.querySelector('[data-remove-workout]'),
     'в активной неделе удалять нельзя');
+});
+
+test('у привязанной тренировки кнопки привязки нет', async () => {
+  /* Привязка нужна только непривязанной: привязанную переставляют
+   * другим действием. */
+  await loadApp();
+
+  click(document.querySelector('.slot'));
+  await waitFor(() => document.querySelector('#cardHost .name'));
+
+  const header = document.querySelector('#cardHost .card-header');
+  assert.ok(header, 'нет шапки карточки');
+  assert.ok(!header.querySelector('[data-bind-pick]'),
+    'у привязанной тренировки есть кнопка привязки');
 });
 
 /* У висяка id — это id запроса, а у тренировки свой. Удалять надо

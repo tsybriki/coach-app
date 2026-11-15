@@ -28,6 +28,10 @@ const WEEK = {
   unplaced: [
     {
       id: 'r4-6',
+      /* У висяка два id: запроса (r4-…) и тренировки (w-composed-1).
+       * Удалять надо тренировку. */
+      workout_id: 'w-composed-1',
+      request_id: 'r4-6',
       sport: 'run',
       kind: 'easy',
       focus: 'Лёгкий бег + отрезки',
@@ -206,6 +210,73 @@ test('на экране деталей висяка есть кнопка при
   const bind = document.querySelector('#cardHost [data-bind-pick]');
   assert.ok(bind, 'нет кнопки привязки на экране деталей');
   assert.equal(bind.dataset.bindPick, 'r4-6');
+});
+
+test('кнопки деталей — иконки в шапке: корзина и привязка', async () => {
+  /* Кирилл: «Это должно получиться две кнопки, одна скорзина и просто
+   * удалить. И вторая привязать». Обе — в шапке карточки, рядом с
+   * названием, а не отдельными карточками внизу. */
+  click(document.querySelector('.unplaced-open'));
+  await waitFor(() => document.getElementById('cardHost').textContent.trim());
+
+  const header = document.querySelector('#cardHost .card-header');
+  assert.ok(header, 'нет шапки карточки');
+
+  const remove = header.querySelector('[data-remove-workout]');
+  assert.ok(remove, 'в шапке нет кнопки удаления');
+  assert.match(remove.textContent, /🗑/, 'удаление — не иконка корзины');
+  assert.ok(remove.getAttribute('title'), 'у иконки нет подписи');
+  assert.ok(remove.getAttribute('aria-label'), 'у иконки нет aria-label');
+
+  const bind = header.querySelector('[data-bind-pick]');
+  assert.ok(bind, 'в шапке нет кнопки привязки');
+  assert.match(bind.textContent, /🔗/, 'привязка — не иконка');
+  assert.ok(bind.getAttribute('title'), 'у иконки привязки нет подписи');
+
+  /* Отдельной карточки «Удалить тренировку» больше нет. */
+  const cardText = document.getElementById('cardHost').textContent;
+  assert.doesNotMatch(cardText, /Удалить тренировку/,
+    'старая карточка удаления осталась');
+});
+
+test('кнопка удаления в шапке шлёт remove_workout', async () => {
+  click(document.querySelector('.unplaced-open'));
+  await waitFor(() => document.getElementById('cardHost').textContent.trim());
+
+  const remove = document.querySelector('#cardHost .card-header [data-remove-workout]');
+  assert.ok(remove, 'в шапке нет кнопки удаления');
+  click(remove);
+  await waitFor(() => commands.some((c) => c.type === 'remove_workout'));
+
+  const command = commands.find((c) => c.type === 'remove_workout');
+  assert.ok(command, 'команда удаления не отправлена');
+  assert.equal(command.args.workout_id, 'w-composed-1');
+});
+
+test('выбор окна открывается сразу под шапкой карточки', async () => {
+  /* Кирилл: «карточка с доступными слотами должна открываться сразу под
+   * тренировкой, а не внизу экрана». То есть выбор окон — первый блок
+   * после шапки, а не в конце длинной карточки. */
+  click(document.querySelector('.unplaced-open'));
+  await waitFor(() => document.getElementById('cardHost').textContent.trim());
+  click(document.querySelector('#cardHost [data-bind-pick]'));
+  await waitFor(() => document.querySelectorAll('#cardHost .slot-choice').length > 0);
+
+  const header = document.querySelector('#cardHost .card-header');
+  const picker = document.querySelector('#cardHost .slot-choices');
+  assert.ok(picker, 'выбор окна не открылся');
+
+  /* Выбор окон стоит раньше структуры тренировки и факта. */
+  const order = [...document.querySelectorAll('#cardHost .card > *')]
+    .map((el) => el.className || el.tagName);
+  const pickerIndex = order.findIndex((c) => String(c).includes('slot-picker'));
+  const structureIndex = order.findIndex((c) => String(c).includes('structure'));
+  assert.ok(pickerIndex >= 0, 'выбор окна не в отдельном блоке');
+  assert.ok(structureIndex >= 0, 'нет блока структуры');
+  assert.ok(pickerIndex < structureIndex,
+    'выбор окна оказался ниже структуры тренировки');
+  assert.ok(header.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING,
+    'выбор окна не после шапки');
 });
 
 test('кнопка привязки открывает выбор окна', async () => {
