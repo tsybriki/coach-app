@@ -203,35 +203,30 @@ test('детали висяка помечены как непривязанны
   assert.match(text, /не привязана/i, `нет пометки: ${text}`);
 });
 
-test('на экране деталей висяка есть кнопка привязки', async () => {
+test('на экране деталей висяка кнопки привязки нет', async () => {
+  /* Кнопка привязки — на карточке тренировки в списке недели, а не
+   * внутри деталей: до неё не надо заходить внутрь тренировки. */
   click(document.querySelector('.unplaced-open'));
   await waitFor(() => document.getElementById('cardHost').textContent.trim());
 
-  const bind = document.querySelector('#cardHost [data-bind-pick]');
-  assert.ok(bind, 'нет кнопки привязки на экране деталей');
-  assert.equal(bind.dataset.bindPick, 'r4-6');
+  assert.ok(!document.querySelector('#cardHost [data-bind-pick]'),
+    'в деталях висяка осталась кнопка привязки');
 });
 
 test('кнопки деталей — иконки в шапке: корзина и привязка', async () => {
-  /* Кирилл: «Это должно получиться две кнопки, одна скорзина и просто
-   * удалить. И вторая привязать». Обе — в шапке карточки, рядом с
-   * названием, а не отдельными карточками внизу. */
+  /* Кирилл: «кнопки деталей — иконки в шапке: корзина и привязка».
+   * Позже уточнил: обе кнопки — на карточке тренировки на странице
+   * недели. Поэтому в деталях их больше нет. */
   click(document.querySelector('.unplaced-open'));
   await waitFor(() => document.getElementById('cardHost').textContent.trim());
 
   const header = document.querySelector('#cardHost .card-header');
   assert.ok(header, 'нет шапки карточки');
 
-  const remove = header.querySelector('[data-remove-workout]');
-  assert.ok(remove, 'в шапке нет кнопки удаления');
-  assert.match(remove.textContent, /🗑/, 'удаление — не иконка корзины');
-  assert.ok(remove.getAttribute('title'), 'у иконки нет подписи');
-  assert.ok(remove.getAttribute('aria-label'), 'у иконки нет aria-label');
-
-  const bind = header.querySelector('[data-bind-pick]');
-  assert.ok(bind, 'в шапке нет кнопки привязки');
-  assert.match(bind.textContent, /🔗/, 'привязка — не иконка');
-  assert.ok(bind.getAttribute('title'), 'у иконки привязки нет подписи');
+  assert.ok(!header.querySelector('[data-remove-workout]'),
+    'удаление осталось внутри деталей тренировки');
+  assert.ok(!header.querySelector('[data-bind-pick]'),
+    'привязка осталась внутри деталей тренировки');
 
   /* Отдельной карточки «Удалить тренировку» больше нет. */
   const cardText = document.getElementById('cardHost').textContent;
@@ -239,64 +234,69 @@ test('кнопки деталей — иконки в шапке: корзина
     'старая карточка удаления осталась');
 });
 
-test('кнопка удаления в шапке шлёт remove_workout', async () => {
-  click(document.querySelector('.unplaced-open'));
-  await waitFor(() => document.getElementById('cardHost').textContent.trim());
+test('у висяка в списке недели есть иконки корзины и скрепки', async () => {
+  /* Висяк — тоже тренировка: действия живут на её карточке в списке
+   * недели, а не внутри деталей. */
+  const card = document.querySelector('#picker .unplaced-row');
+  assert.ok(card, 'нет строки висяка');
 
-  const remove = document.querySelector('#cardHost .card-header [data-remove-workout]');
-  assert.ok(remove, 'в шапке нет кнопки удаления');
-  click(remove);
+  const remove = card.querySelector('[data-remove-workout]');
+  assert.ok(remove, 'у висяка нет кнопки удаления');
+  assert.match(remove.textContent, /🗑/, 'удаление — не иконка корзины');
+  assert.equal(remove.getAttribute('aria-label'), 'Удалить тренировку');
+
+  const bind = card.querySelector('[data-bind-pick]');
+  assert.ok(bind, 'у висяка нет кнопки привязки');
+  assert.match(bind.textContent, /🔗/, 'привязка — не иконка');
+  assert.equal(bind.getAttribute('aria-label'), 'Привязать к окну');
+});
+
+test('кнопка удаления у висяка шлёт remove_workout', async () => {
+  click(document.querySelector('#picker .unplaced-row [data-remove-workout]'));
   await waitFor(() => commands.some((c) => c.type === 'remove_workout'));
 
   const command = commands.find((c) => c.type === 'remove_workout');
   assert.ok(command, 'команда удаления не отправлена');
+  /* У висяка id запроса (r4-6), а удалять надо тренировку (w-composed-1). */
   assert.equal(command.args.workout_id, 'w-composed-1');
 });
 
-test('выбор окна открывается сразу под шапкой карточки', async () => {
+test('выбор окна открывается сразу под строкой висяка', async () => {
   /* Кирилл: «карточка с доступными слотами должна открываться сразу под
-   * тренировкой, а не внизу экрана». То есть выбор окон — первый блок
-   * после шапки, а не в конце длинной карточки. */
-  click(document.querySelector('.unplaced-open'));
-  await waitFor(() => document.getElementById('cardHost').textContent.trim());
-  click(document.querySelector('#cardHost [data-bind-pick]'));
-  await waitFor(() => document.querySelectorAll('#cardHost .slot-choice').length > 0);
+   * тренировкой, а не внизу экрана». Выбор окон — ответ на нажатую
+   * скрепку, и он открывается под строкой тренировки. */
+  click(document.querySelector('#picker .unplaced-row [data-bind-pick]'));
+  await waitFor(() => document.querySelectorAll('#picker .slot-choice').length > 0);
 
-  const header = document.querySelector('#cardHost .card-header');
-  const picker = document.querySelector('#cardHost .slot-choices');
+  const row = document.querySelector('#picker .unplaced-row');
+  const picker = document.querySelector('#picker .slot-picker');
   assert.ok(picker, 'выбор окна не открылся');
 
-  /* Выбор окон стоит раньше структуры тренировки и факта. */
-  const order = [...document.querySelectorAll('#cardHost .card > *')]
-    .map((el) => el.className || el.tagName);
-  const pickerIndex = order.findIndex((c) => String(c).includes('slot-picker'));
-  const structureIndex = order.findIndex((c) => String(c).includes('structure'));
-  assert.ok(pickerIndex >= 0, 'выбор окна не в отдельном блоке');
-  assert.ok(structureIndex >= 0, 'нет блока структуры');
-  assert.ok(pickerIndex < structureIndex,
-    'выбор окна оказался ниже структуры тренировки');
-  assert.ok(header.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING,
-    'выбор окна не после шапки');
+  /* Выбор окон — внутри обёртки строки, то есть сразу под ней. */
+  const wrap = row.closest('.unplaced-row-wrap');
+  assert.ok(wrap, 'нет обёртки строки висяка');
+  assert.ok(wrap.querySelector('.slot-picker'),
+    'выбор окон не под строкой висяка');
+  assert.ok(row.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING,
+    'выбор окон не после строки');
+
+  /* И не в самом низу списка: он внутри обёртки этой строки. */
+  assert.equal(picker.closest('.unplaced-row-wrap'), wrap);
 });
 
 test('кнопка привязки открывает выбор окна', async () => {
-  click(document.querySelector('.unplaced-open'));
-  await waitFor(() => document.getElementById('cardHost').textContent.trim());
+  click(document.querySelector('#picker .unplaced-row [data-bind-pick]'));
+  await waitFor(() => document.querySelectorAll('#picker .slot-choice').length > 0);
 
-  click(document.querySelector('#cardHost [data-bind-pick]'));
-  await waitFor(() => document.querySelectorAll('#cardHost .slot-choice').length > 0);
-
-  const choices = document.querySelectorAll('#cardHost .slot-choice');
+  const choices = document.querySelectorAll('#picker .slot-choice');
   assert.equal(choices.length, SLOTS.length, 'выбор окна не открылся');
 });
 
-test('выбор окна в деталях шлёт place_unplaced', async () => {
-  click(document.querySelector('.unplaced-open'));
-  await waitFor(() => document.getElementById('cardHost').textContent.trim());
-  click(document.querySelector('#cardHost [data-bind-pick]'));
-  await waitFor(() => document.querySelectorAll('#cardHost .slot-choice').length > 0);
+test('выбор окна в списке недели шлёт place_unplaced', async () => {
+  click(document.querySelector('#picker .unplaced-row [data-bind-pick]'));
+  await waitFor(() => document.querySelectorAll('#picker .slot-choice').length > 0);
 
-  click(document.querySelector('#cardHost .slot-choice[data-bind-slot="win-СР-1"]'));
+  click(document.querySelector('#picker .slot-choice[data-bind-slot="win-СР-1"]'));
   await waitFor(() => commands.some((c) => c.type === 'place_unplaced'));
 
   const command = commands.find((c) => c.type === 'place_unplaced');
@@ -306,9 +306,9 @@ test('выбор окна в деталях шлёт place_unplaced', async () =
 });
 
 test('кнопка «привязать» в списке висяков работает как раньше', async () => {
-  /* Поведение кнопки «привязать» в списке не менялось: она открывает
-   * выбор окна. */
-  click(document.querySelector('.unplaced-bind'));
+  /* Поведение кнопки «привязать» в списке прежнее: открывает выбор
+   * окна. */
+  click(document.querySelector('#picker .unplaced-row [data-bind-pick]'));
   await waitFor(() => document.querySelectorAll('#picker .slot-choice').length > 0);
 
   const choices = document.querySelectorAll('#picker .slot-choice');

@@ -347,8 +347,43 @@ const MONTHS_SHORT = [
  * том, длинная это тренировка или нет; «55 мин · 6,2 км» говорит. Чтобы
  * не раздувать плашку, оба числа стоят в одной правой колонке, а
  * километраж — под временем, мельче.
+ *
+ * **Действия — на карточке, а не внутри тренировки.** Кирилл: «Обе
+ * кнопки я хотел видеть на карточке тренировки на странице недели, а
+ * не внутри тренировки». Корзина 🗑 и скрепка 🔗 стоят рядом с плашкой.
+ *
+ * Плашка — `<button>`, а кнопка внутри кнопки невозможна, поэтому карточка
+ * — `<div>`, внутри кнопка плашки и кнопки действий. Порядок в DOM
+ * важен: обработчик клика сначала проверяет действия, иначе тап по
+ * иконке открыл бы детали вместо удаления.
  */
-function slotButton(workout, actual) {
+function slotCard(workout, actual) {
+  const objective = workout.objective || {};
+  const placed = objective.day !== undefined && objective.day !== null
+    && objective.day !== '';
+
+  /* Удаление — только пока неделя не активна: в активной план уже
+   * исполняется, и сервер удаление не примет. */
+  const weekStatus = state.week ? (state.week.status || 'proposed') : 'proposed';
+  const removeBtn = weekStatus === 'proposed'
+    ? `<button class="slot-act" data-remove-workout="${escapeHtml(workout.id)}"
+         title="Удалить тренировку" aria-label="Удалить тренировку">🗑</button>`
+    : '';
+  const bindBtn = placed
+    ? ''
+    : `<button class="slot-act" data-bind-pick="${escapeHtml(workout.request_id || workout.id)}"
+         title="Привязать к окну" aria-label="Привязать к окну">🔗</button>`;
+
+  return `<div class="slot-card">
+      <button class="slot${actual ? ' done' : ''}" data-slot="${escapeHtml(workout.id)}">
+        ${slotButtonBody(workout, actual)}
+      </button>
+      <div class="slot-acts">${bindBtn}${removeBtn}</div>
+    </div>`;
+}
+
+/* Содержимое плашки тренировки: день, длительность, название, фокус. */
+function slotButtonBody(workout, actual) {
   const objective = workout.objective || {};
   const title = workoutTitle(workout);
   const day = dayName(objective.day || workout.day);
@@ -376,16 +411,14 @@ function slotButton(workout, actual) {
     ? `<div class="done-line">${((actual.distance_m || 0) / 1000).toFixed(1)} км · ${formatDuration(actual.duration_min)}${actual.hr_avg ? ` · HR ${actual.hr_avg}` : ''}</div>`
     : '';
 
-  return `<button class="slot${actual ? ' done' : ''}" data-slot="${escapeHtml(workout.id)}">
-      <div class="slot-head">
+  return `<div class="slot-head">
         <span class="ico">${KIND_ICON[workout.sport] || '🎯'}</span>
         <span class="day">${when}</span>
         ${durBlock}
       </div>
       <div class="name">${escapeHtml(title)}</div>
       ${focus ? `<div class="focus">🎯 ${escapeHtml(focus)}</div>` : ''}
-      ${actualLine}
-    </button>`;
+      ${actualLine}`;
 }
 
 /* Километраж тренировки — строкой «14,3 км» или пусто, если дистанции нет.
@@ -534,7 +567,7 @@ function screenWeek() {
 
   const slots = sortedWorkouts(placed).map((w) => {
     const actual = state.actual.find((a) => a.id === w.actual_id);
-    return slotButton(w, actual);
+    return slotCard(w, actual);
   }).join('');
 
   /* Счётчик — по всем тренировкам недели: «9 тренировок», из них
@@ -646,8 +679,6 @@ function unplacedBlock(week) {
   if (!unplaced.length) return '';
 
   const windows = state.slots || [];
-  const picked = unplaced.find((u) => u.id === state.pickUnplaced);
-  const pickedSport = picked ? picked.sport : null;
   const rows = unplaced.map((u) => {
     const icon = KIND_ICON[u.sport] || '🎯';
     const label = u.name || u.focus || u.kind || 'Тренировка';
@@ -657,42 +688,44 @@ function unplacedBlock(week) {
      * открывает тап по размещённой. Иначе про висяк известно только
      * «Лёгкий бег, 46 мин» — и куда его поставить, решаешь вслепую.
      *
-     * Кнопка «привязать» — отдельная: она открывает выбор окна. Так
-     * оба действия не мешают друг другу, и привязка остаётся ровно
-     * такой, какой была.
+     * Иконки действий — рядом со строкой: 🗑 удалить, 🔗 привязать к
+     * окну. Их два, и оба — на карточке тренировки в списке недели,
+     * а не внутри деталей.
      */
     const km = plannedKm(u);
-    return `<div class="unplaced-row">
-        <button class="unplaced-open" data-unplaced="${escapeHtml(u.id)}">
-          <span class="ico">${icon}</span>
-          <span class="body">
-            <span class="name">${escapeHtml(label)}</span>
-            <span class="meta">${escapeHtml(formatDuration(u.duration_min))}${km ? ` · ${escapeHtml(km)}` : ''}</span>
-          </span>
-        </button>
-        <button class="unplaced-bind" data-bind-pick="${escapeHtml(u.id)}">
-          привязать
-        </button>
+    const workoutId = u.workout_id || u.id;
+    const requestId = u.request_id || u.id;
+    const weekStatus = state.week ? (state.week.status || 'proposed') : 'proposed';
+    const removeBtn = weekStatus === 'proposed'
+      ? `<button class="slot-act" data-remove-workout="${escapeHtml(workoutId)}"
+           title="Удалить тренировку" aria-label="Удалить тренировку">🗑</button>`
+      : '';
+    const bindBtn = `<button class="slot-act" data-bind-pick="${escapeHtml(requestId)}"
+         title="Привязать к окну" aria-label="Привязать к окну">🔗</button>`;
+
+    /* Выбор окон — сразу под этой строкой, а не внизу списка: он
+     * отвечает на нажатую скрепку, и искать его внизу неудобно. */
+    const picker = state.pickUnplaced === requestId
+      ? slotPicker(requestId, windows, u.sport)
+      : '';
+
+    return `<div class="unplaced-row-wrap">
+        <div class="unplaced-row">
+          <button class="unplaced-open" data-unplaced="${escapeHtml(u.id)}">
+            <span class="ico">${icon}</span>
+            <span class="body">
+              <span class="name">${escapeHtml(label)}</span>
+              <span class="meta">${escapeHtml(formatDuration(u.duration_min))}${km ? ` · ${escapeHtml(km)}` : ''}</span>
+            </span>
+          </button>
+          <div class="slot-acts">${bindBtn}${removeBtn}</div>
+        </div>
+        ${picker}
       </div>`;
   }).join('');
 
-  const picker = state.pickUnplaced
-    ? slotPicker(state.pickUnplaced, windows, pickedSport)
-    : '';
-
   return `<h2 class="slots-header">Не привязано · ${unplaced.length}</h2>
-    <div class="unplaced-list">${rows}</div>
-    ${picker}`;
-}
-
-/* Выбор окна для висяка — на экране деталей.
- *
- * Тот же выбор окон, что и в списке недели: окна и правило «не
- * подходит» — одни и те же. Отличается только то, где список стоит.
- */
-function slotPickerFor(requestId, sport) {
-  if (state.pickUnplaced !== requestId) return '';
-  return slotPicker(requestId, state.slots || [], sport);
+    <div class="unplaced-list">${rows}</div>`;
 }
 
 /* Выбор окна для висяка.
@@ -1858,25 +1891,17 @@ function showWorkout(workoutId, skipMetrics = false) {
       </div>`
     : '';
 
-  /* Непривязанная тренировка — с кнопкой привязки.
+  /* Непривязанная тренировка — с пометкой.
    *
-   * Кнопка «привязать» на экране деталей ведёт себя ровно как раньше:
-   * открывает выбор окна недели. Здесь она нужна, чтобы можно было
-   * посмотреть детали и сразу решить, куда поставить.
-   *
-   * Выбор окон стоит **сразу под шапкой** карточки, а не внизу: список
-   * окон — это ответ на нажатую кнопку, и искать его внизу длинной
-   * карточки неудобно.
+   * Кнопка «привязать» стоит на карточке тренировки в списке недели,
+   * и выбор окон открывается там же — под строкой висяка. В деталях
+   * действий нет: до них не надо заходить внутрь тренировки.
    */
   const placed = objective.day !== undefined && objective.day !== null
     && objective.day !== '';
-  const requestId = workout.request_id || workout.id;
   const bindHint = placed
     ? ''
     : '<div class="bind-hint">Тренировка не привязана</div>';
-  const slotPickerBlock = placed
-    ? ''
-    : slotPickerFor(requestId, workout.sport);
 
   const linkedActual = workout.actual_id
     ? state.actual.find((a) => a.id === workout.actual_id)
@@ -1908,28 +1933,14 @@ function showWorkout(workoutId, skipMetrics = false) {
       </div>`
       : '';
 
-  /* Действия карточки — иконками в шапке.
+  /* Действия карточки — на плашке тренировки в списке недели.
    *
-   * Кирилл: «кнопку удалить нужно достать из деталей тренировки, положить
-   * рядом с кнопкой привязать… Это должно получиться две кнопки, одна
-   * корзина и просто удалить. И вторая привязать».
-   *
-   * Две кнопки рядом с названием: корзина 🗑 (удалить) и скрепка 🔗
-   * (привязать к окну). Иконки вместо текста: в шапке карточки текстовая
-   * кнопка ломает строку с длинным названием.
-   *
-   * Удаление — только пока неделя не активна: в активной план уже
-   * исполняется, и сервер удаление не примет.
+   * Кирилл: «Обе кнопки я хотел видеть на карточке тренировки на
+   * странице недели, а не внутри тренировки. Перенеси». Поэтому в
+   * деталях действий нет: корзина 🗑 и скрепка 🔗 живут рядом с
+   * плашкой, и до них не надо заходить внутрь тренировки.
    */
   const weekStatus = state.week ? (state.week.status || 'proposed') : 'proposed';
-  const removeBtn = weekStatus === 'proposed'
-    ? `<button class="card-act card-act-danger" data-remove-workout="${escapeHtml(workout.id)}"
-         title="Удалить тренировку" aria-label="Удалить тренировку">🗑</button>`
-    : '';
-  const bindBtn = placed
-    ? ''
-    : `<button class="card-act" data-bind-pick="${escapeHtml(workout.request_id || workout.id)}"
-         title="Привязать к окну" aria-label="Привязать к окну">🔗</button>`;
 
   /* Подзаголовок: день, время, длительность и километраж.
    *
@@ -1948,13 +1959,11 @@ function showWorkout(workoutId, skipMetrics = false) {
         </div>
         <div class="goal-acts">
           <span class="tag kind-${escapeHtml(workout.sport)}">${stepCount} ${plural(stepCount, 'шаг', 'шага', 'шагов')}</span>
-          ${bindBtn}${removeBtn}
         </div>
       </div>
       <div class="subtitle">${subtitle}</div>
       ${meta.length ? `<div class="meta-row">${meta.join('')}</div>` : ''}
       ${bindHint}
-      ${slotPickerBlock}
       ${goalHtml}
       ${rationaleHtml}
       ${invHtml}
@@ -2494,6 +2503,31 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
+  /* Действия карточки — проверяются ДО плашки.
+   *
+   * Иконки лежат рядом с плашкой тренировки, и плашка — предок кнопки
+   * в DOM. Если сначала проверять `[data-slot]`, тап по корзине открыл
+   * бы детали вместо удаления.
+   */
+  const slotRemove = closest('[data-remove-workout]');
+  if (slotRemove) {
+    await removeWorkout(slotRemove.dataset.removeWorkout);
+    return;
+  }
+
+  const slotBind = closest('[data-bind-pick]');
+  if (slotBind) {
+    state.pickUnplaced = slotBind.dataset.bindPick;
+    /* Выбор окон открывается под строкой висяка в списке недели. Если
+     * открыты детали — перерисовываются они, иначе — список недели. */
+    if (state.openWorkoutId) {
+      showWorkout(state.openWorkoutId);
+    } else {
+      render();
+    }
+    return;
+  }
+
   const slot = closest('[data-slot]');
 
   // Тап по плашке тренировки — открыть детали
@@ -2584,20 +2618,9 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
-  /* Кнопка «привязать» — открыть выбор окна. Поведение прежнее.
-   *
-   * На экране деталей выбор окон появляется под кнопкой, поэтому
-   * детали перерисовываются: список окон живёт внутри них. */
-  const bindPick = closest('[data-bind-pick]');
-  if (bindPick) {
-    state.pickUnplaced = bindPick.dataset.bindPick;
-    if (state.openWorkoutId) {
-      showWorkout(state.openWorkoutId);
-    } else {
-      render();
-    }
-    return;
-  }
+  /* Кнопка «привязать» обработана выше — вместе с другими действиями
+   * карточки, до проверки плашки. Иначе тап по иконке открыл бы
+   * детали вместо выбора окна. */
 
   // Выбор окна для висяка: привязать тренировку вручную.
   const bind = closest('[data-bind-slot]');
@@ -2819,31 +2842,13 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
-  /* Удалить тренировку. Кнопка есть только у неактивной недели. */
+  /* Удалить тренировку. Кнопка есть только у неактивной недели.
+   *
+   * Обработка вынесена в `removeWorkout`: кнопка стоит на карточке
+   * тренировки в списке недели, и вызывается из обработчика клика
+   * раньше проверки плашки. */
   if (closest('[data-remove-workout]')) {
-    const workoutId = closest('[data-remove-workout]').dataset.removeWorkout;
-    showMessage('Удаляю тренировку…');
-    state.busy = true;
-    render();
-    await queueCommand({
-      id: `remove-workout-${Date.now()}`,
-      type: 'remove_workout',
-      args: {season_week: state.seasonWeek, workout_id: workoutId},
-      reason: 'удаление тренировки из недели',
-      expected_version: state.version,
-    });
-    await flushOutbox();
-    await load();
-    state.busy = false;
-    if (state.messageKind === 'error' && state.message) {
-      render();
-      return;
-    }
-    // Тренировки больше нет — карточка закрывается, иначе она продолжит
-    // показывать удалённую тренировку. Возврат — к списку недели.
-    showPicker();
-    showMessage('Тренировка удалена');
-    render();
+    await removeWorkout(closest('[data-remove-workout]').dataset.removeWorkout);
     return;
   }
 
@@ -3003,6 +3008,37 @@ async function unlinkActual(workoutId) {
   state.message = null;
   render();
   if (state.week && workoutId) showWorkout(workoutId);
+}
+
+/* Удалить тренировку из недели.
+ *
+ * Кнопка стоит на карточке тренировки в списке недели, и вызывается из
+ * обработчика клика раньше проверки плашки: иначе тап по иконке
+ * открыл бы детали вместо удаления.
+ */
+async function removeWorkout(workoutId) {
+  showMessage('Удаляю тренировку…');
+  state.busy = true;
+  render();
+  await queueCommand({
+    id: `remove-workout-${Date.now()}`,
+    type: 'remove_workout',
+    args: {season_week: state.seasonWeek, workout_id: workoutId},
+    reason: 'удаление тренировки из недели',
+    expected_version: state.version,
+  });
+  await flushOutbox();
+  await load();
+  state.busy = false;
+  if (state.messageKind === 'error' && state.message) {
+    render();
+    return;
+  }
+  // Тренировки больше нет — карточка закрывается, иначе она продолжит
+  // показывать удалённую тренировку. Возврат — к списку недели.
+  showPicker();
+  showMessage('Тренировка удалена');
+  render();
 }
 
 /* Привязать висяка к окну — вручную.

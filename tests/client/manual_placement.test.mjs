@@ -226,14 +226,14 @@ test('висяки идут после размещённых тренирово
 test('кнопка «привязать» открывает выбор окна', async () => {
   /* Тап по строке висяка открывает детали тренировки, а выбор окна —
    * кнопка «привязать». Поведение привязки прежнее. */
-  click(document.querySelector('.unplaced-bind'));
+  click(document.querySelector('.unplaced-row [data-bind-pick]'));
   await waitFor(() => document.querySelectorAll('.slot-choice').length > 0);
   const choices = document.querySelectorAll('.slot-choice');
   assert.equal(choices.length, SLOTS.length, 'выбор окна не открылся');
 });
 
 test('выбор окна шлёт команду place_unplaced', async () => {
-  click(document.querySelector('.unplaced-bind'));
+  click(document.querySelector('.unplaced-row [data-bind-pick]'));
   await waitFor(() => document.querySelectorAll('.slot-choice').length > 0);
 
   const choice = document.querySelector('.slot-choice[data-bind-slot="win-ПН-1"]');
@@ -253,7 +253,7 @@ test('привязка не проверяет занятость окна', asy
   /* Окно win-СР-1 уже занято длинным бегом. Привязка к нему —
    * решение пользователя, и клиент его не отменяет. */
   commands.length = 0;
-  click(document.querySelector('.unplaced-bind'));
+  click(document.querySelector('.unplaced-row [data-bind-pick]'));
   await waitFor(() => document.querySelectorAll('.slot-choice').length > 0);
 
   const busy = document.querySelector('.slot-choice[data-bind-slot="win-СР-1"]');
@@ -268,7 +268,7 @@ test('привязка не проверяет занятость окна', asy
 
 test('окно без велосипеда помечено «не подходит»', async () => {
   /* Базовый висяк — бег, и для бега подходят все окна. */
-  click(document.querySelector('.unplaced-bind'));
+  click(document.querySelector('.unplaced-row [data-bind-pick]'));
   await waitFor(() => document.querySelectorAll('.slot-choice').length > 0);
 
   const bad = [...document.querySelectorAll('.slot-choice.slot-bad')];
@@ -287,7 +287,7 @@ test('окно без велосипеда помечено для велоси�
   };
   await loadApp({week: bike});
 
-  click(document.querySelector('.unplaced-bind'));
+  click(document.querySelector('.unplaced-row [data-bind-pick]'));
   await waitFor(() => document.querySelectorAll('.slot-choice').length > 0);
 
   const bad = [...document.querySelectorAll('.slot-choice.slot-bad')]

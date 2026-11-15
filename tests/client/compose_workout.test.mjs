@@ -421,24 +421,109 @@ test('у неактивной недели тренировку можно уд�
 
 test('корзина удаления стоит в шапке карточки', async () => {
   /* Кирилл: «кнопку удалить нужно достать из деталей тренировки, положить
-   * рядом с кнопкой привязать». То есть действие — в шапке, рядом с
-   * названием, а не отдельной карточкой внизу. */
+   * рядом с кнопкой привязать». Позже уточнил: обе кнопки — на карточке
+   * тренировки на странице недели, а не внутри тренировки. */
   await loadApp();
 
   click(document.querySelector('.slot'));
-  await waitFor(() => document.querySelector('[data-remove-workout]'));
+  await waitFor(() => document.querySelector('#cardHost .name'));
 
   const header = document.querySelector('#cardHost .card-header');
   assert.ok(header, 'нет шапки карточки');
-  const remove = header.querySelector('[data-remove-workout]');
-  assert.ok(remove, 'кнопка удаления не в шапке карточки');
+  assert.ok(!header.querySelector('[data-remove-workout]'),
+    'удаление осталось внутри деталей тренировки');
+});
+
+test('на плашке тренировки в неделе есть корзина и скрепка', async () => {
+  /* Кирилл: «Обе кнопки я хотел видеть на карточке тренировки на странице
+   * недели, а не внутри тренировки. Перенеси».
+   *
+   * У привязанной тренировки скрепки нет — привязывать её некуда. */
+  await loadApp();
+
+  const card = document.querySelector('#picker .slot-card');
+  assert.ok(card, 'нет карточки тренировки в списке недели');
+
+  const remove = card.querySelector('[data-remove-workout]');
+  assert.ok(remove, 'на плашке нет кнопки удаления');
   assert.match(remove.textContent, /🗑/, 'удаление — не иконка корзины');
   assert.equal(remove.getAttribute('aria-label'), 'Удалить тренировку');
+});
 
-  /* Отдельной карточки с удалением больше нет. */
-  const cards = [...document.querySelectorAll('#cardHost .card .chead')];
-  assert.ok(!cards.some((c) => /Удалить тренировку/.test(c.textContent)),
-    'старая карточка удаления осталась');
+test('у непривязанной тренировки на плашке есть скрепка', async () => {
+  await loadApp({
+    week: makeWeek('proposed', {
+      workouts: [],
+      unplaced: [{
+        id: 'r-c1', workout_id: 'w-c1', request_id: 'r-c1',
+        sport: 'run', kind: 'composed', focus: 'Фартлек',
+        duration_min: 54, distance_m: 12000, name: 'Фартлек',
+        objective: {}, steps: [],
+      }],
+    }),
+  });
+
+  const card = document.querySelector('#picker .unplaced-row');
+  assert.ok(card, 'нет строки висяка');
+  const bind = card.querySelector('[data-bind-pick]');
+  assert.ok(bind, 'у непривязанной тренировки нет кнопки привязки');
+  assert.match(bind.textContent, /🔗/, 'привязка — не иконка');
+  assert.equal(bind.getAttribute('aria-label'), 'Привязать к окну');
+});
+
+test('тап по иконке на плашке не открывает детали', async () => {
+  /* Иконки — отдельные кнопки внутри карточки. Тап по корзине удаляет,
+   * а не открывает детали тренировки. */
+  const sent = [];
+  await loadApp({
+    onCommand: (command) => {
+      sent.push(command);
+      return Promise.resolve({version: 43, data: {status: 'applied'}});
+    },
+  });
+
+  const card = document.querySelector('#picker .slot-card');
+  const remove = card.querySelector('[data-remove-workout]');
+  click(remove);
+  await waitFor(() => sent.length > 0);
+
+  assert.equal(sent[0].type, 'remove_workout');
+  assert.equal(sent[0].args.workout_id, 'w1');
+  assert.equal(sent[0].args.season_week, 5);
+  assert.ok(document.getElementById('cardWrap').classList.contains('hidden'),
+    'детали открылись вместо удаления');
+});
+
+test('тап по плашке открывает детали, а иконки лежат рядом', async () => {
+  await loadApp();
+
+  const card = document.querySelector('#picker .slot-card');
+  /* Плашка осталась кнопкой: тап по ней открывает детали. */
+  const slot = card.querySelector('[data-slot]');
+  assert.ok(slot, 'плашка тренировки перестала быть кнопкой');
+  click(slot);
+  await waitFor(() => document.querySelector('#cardHost .name'));
+
+  assert.ok(!document.getElementById('cardWrap').classList.contains('hidden'),
+    'детали не открылись');
+});
+
+test('в активной неделе на плашке нет корзины', async () => {
+  await loadApp({week: makeWeek('active')});
+
+  const card = document.querySelector('#picker .slot-card');
+  assert.ok(card, 'нет карточки тренировки в списке недели');
+  assert.ok(!card.querySelector('[data-remove-workout]'),
+    'в активной неделе удалять нельзя');
+});
+
+test('у привязанной тренировки на плашке нет скрепки', async () => {
+  await loadApp();
+
+  const card = document.querySelector('#picker .slot-card');
+  assert.ok(card, 'нет карточки тренировки в списке недели');
+  assert.ok(!card.querySelector('[data-bind-pick]'),
+    'у привязанной тренировки есть кнопка привязки');
 });
 
 test('в активной неделе кнопки удаления нет', async () => {

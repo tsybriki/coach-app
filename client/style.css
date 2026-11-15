@@ -340,6 +340,60 @@ h3 {
 
 /* ------------------------------------------------------------------ плашка тренировки */
 
+/* Карточка тренировки: плашка и кнопки действий рядом.
+ *
+ * Плашка — `<button>`, а кнопка внутри кнопки невозможна, поэтому
+ * карточка — `<div>`: внутри кнопка плашки и группа действий.
+ */
+.slot-card {
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.slot-card .slot {
+  margin-bottom: 0;
+  padding-right: 72px;
+}
+
+/* Действия карточки — иконки справа от плашки: 🗑 удалить, 🔗 привязать. */
+.slot-acts {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.slot-act {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--muted);
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.slot-act:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.slot-act:active {
+  background: var(--bg);
+}
+
+.slot-act[aria-label="Удалить тренировку"]:hover {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
 /* В списке недели — компактная плашка, по нажатию открываются детали. */
 .slot {
   display: flex;
@@ -526,23 +580,13 @@ h3 {
   background: var(--panel2);
 }
 
-/* Кнопка «привязать» — отдельное действие. */
-.unplaced-bind {
+/* Строка висяка — своя раскладка: кнопки действий стоят в потоке,
+ * а не поверх плашки (строка ниже, чем плашка размещённой тренировки). */
+.unplaced-row .slot-acts {
+  position: static;
+  gap: 4px;
+  margin-right: 10px;
   flex-shrink: 0;
-  align-self: center;
-  margin-right: 12px;
-  padding: 6px 12px;
-  font: inherit;
-  font-size: 12px;
-  color: var(--accent);
-  background: none;
-  border: 1px solid var(--accent);
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.unplaced-bind:active {
-  background: var(--panel2);
 }
 
 .unplaced-row .ico {
@@ -1415,28 +1459,6 @@ p.lead {
   font-size: 16px;
   font-weight: 600;
   line-height: 1.25;
-}
-
-/* Действия карточки — иконками в шапке: корзина и скрепка.
- *
- * Кнопки маленькие: в шапке карточки текстовая кнопка ломает строку
- * с названием. Подпись остаётся в title/aria-label — иконка без
- * подписи не имеет имени.
- */
-.detail .goal-acts {
-  gap: 6px;
-}
-
-.detail .card-act {
-  margin-left: 0;
-  font-size: 14px;
-  padding: 5px 7px;
-  line-height: 1;
-}
-
-.detail .card-act-danger:hover {
-  color: var(--bad);
-  border-color: var(--bad);
 }
 
 .detail .tag {
