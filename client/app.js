@@ -852,12 +852,29 @@ function screenWeekMissing() {
 function weekActions(week) {
   const status = week.status || 'proposed';
 
-  if (status !== 'proposed') {
-    // Активная и закрытая неделя: отдельного блока действий у них нет.
+  if (status === 'closed') {
+    // Закрытая неделя не меняется (I23) — действий нет.
     return '';
   }
 
   const label = WEEK_STATUS[status] || status;
+
+  /* «Отвязать все» — действие для активной недели.
+   *
+   * Нужно, когда хочется поменять дни: тренировки без факта теряют
+   * слот и становятся висяками, их можно привязать к другому окну.
+   * Выполненное (с фактом) не трогается, неделя остаётся активной,
+   * план не пересобирается.
+   *
+   * У proposed-недели кнопки нет: там тренировки и так не привязаны.
+   */
+  const unplaceBtn = status === 'active'
+    ? `<button class="action secondary" id="unplace-all"
+         data-week-command="unplace_all"
+         data-week-pending="Отвязываю тренировки…"
+         data-week-done="Тренировки отвязаны — можно привязать заново"
+         ${state.busy ? ' disabled' : ''}>Отвязать все</button>`
+    : '';
 
   // proposed: неделю можно пересобрать, оживить или дополнить тренировкой.
   //
@@ -880,22 +897,32 @@ function weekActions(week) {
    * неделе план ещё можно переделать — это и есть время предлагать и
    * убирать лишнее.
    */
-  const composeBtn = state.composeAvailable === false
+  const composeBtn = (state.composeAvailable === false || status === 'active')
     ? ''
     : `<button class="action secondary" id="compose-open">Предложить тренировку</button>`;
-  return `<div class="card"><div class="chead">Неделя ${escapeHtml(label)}</div>
-    <p class="lead">${(week.workouts || []).length} тренировок · `
-    + `${state.actual.length} сессий в факте</p>
-    ${blockedNote}
-    ${composeBtn}
-    <div class="action-row">
+
+  /* Кнопки в строке зависят от статуса:
+   *   - proposed: пересобрать план и активировать;
+   *   - active: отвязать тренировки, чтобы поменять дни. Пересборка и
+   *     активация тут не нужны: неделя уже исполняется.
+   */
+  const actions = status === 'active'
+    ? unplaceBtn
+    : `<div class="action-row">
       <button class="action" id="propose"${disabled} data-week-command="propose_week"
         data-week-pending="Предлагаю неделю заново…"
         data-week-done="Неделя предложена заново">Предложить заново</button>
       <button class="action primary" id="activate"${activateAttr}
         data-week-command="activate_week" data-week-pending="Активирую неделю…"
         data-week-done="Неделя активна">Активировать неделю</button>
-    </div></div>`;
+    </div>`;
+
+  return `<div class="card">${status === 'active' ? '' : `<div class="chead">Неделя ${escapeHtml(label)}</div>`}
+    <p class="lead">${(week.workouts || []).length} тренировок · `
+    + `${state.actual.length} сессий в факте</p>
+    ${blockedNote}
+    ${composeBtn}
+    ${actions}</div>`;
 }
 
 /* Факт против плана: «N из M».

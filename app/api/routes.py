@@ -494,6 +494,7 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         remove_workout,
         replan_remainder,
         unlink_actual,
+        unplace_all,
         unplace_request,
     )
     from app.services.week_proposal import (
@@ -665,19 +666,17 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         updated = close_week(week, assessment.summary)
     elif command.type is CommandType.REPLAN_REMAINDER:
         # Перепланировать остаток: сделанное (с фактом) остаётся на
-        # месте, остальное возвращается в план, а неделя — в
+        # месте, остальное отвязывается от слотов, а неделя — в
         # `proposed`, где с ней работает обычный режим propose.
         #
-        # Сначала неделя переводится в proposed (это делает сервис
-        # жизненного цикла), а затем остаток пересобирается по тем же
-        # правилам, что и обычный propose. Выполненные тренировки при
-        # этом сохраняются: их факт не теряется, а план не съедает их.
-        replanned = replan_remainder(week)
-        season = container.season_repo.load()
-        templates = container.methodology_repo.workout_templates()
-        rebuilt = propose_by_rules(season, replanned, container.planner,
-                                   templates)
-        updated = _keep_done_workouts(rebuilt, replanned)
+        # План **не пересобирается**: новые тренировки не создаются.
+        # Пересборка по правилам давала другой план целиком — а
+        # пользователь просил отвязать тренировки, чтобы двигать их.
+        updated = replan_remainder(week)
+    elif command.type is CommandType.UNPLACE_ALL:
+        # Отвязать от слотов все тренировки без факта. Неделя остаётся
+        # активной — меняются только привязки, а не сам план.
+        updated = unplace_all(week)
     elif command.type is CommandType.LINK_ACTUAL:
         actual_id = str(command.args.get("actual_id", ""))
         workout_id = str(command.args.get("workout_id", ""))
@@ -706,51 +705,6 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
     return {"status": "applied", "new_version": version, "diff": diff,
             "consequences": {"scope": "local", "affected": [f"W{season_week}"]},
             "warnings": []}
-
-
-def _keep_done_workouts(rebuilt: Week, replanned: Week) -> Week:
-    """Вернуть выполненные тренировки в пересобранную неделю.
-
-    Пересборка по правилам делает новый план — и в нём нет тренировок,
-    которые уже выполнены: у них есть факт, а не намерение на будущее.
-    Но факт не теряется: выполненное остаётся в неделе, на своём месте
-    и со своей связью.
-
-    Что делаем:
-      - выполненные тренировки, их запросы и размещения — возвращаем;
-      - их факты остаются связанными (факт живёт в хранилище фактов,
-        ссылка на тренировку — в тренировке).
-
-    Без этого неделя после переплана потеряла бы историю: выполненное
-    пропало бы из неё, а факт остался бы в факте.
-    """
-    done_workouts = [w for w in replanned.workouts if w.actual_id]
-    if not done_workouts:
-        return rebuilt
-
-    done_request_ids = {w.request_id for w in done_workouts}
-    done_requests = [r for r in replanned.requests if r.id in done_request_ids]
-    done_assignments = [
-        a for a in replanned.assignments if a.request_id in done_request_ids
-    ]
-
-    # Размещения выполненного — в начало: порядок размещённых тренировок
-    # на экране идёт по времени, и выполненное было раньше остального.
-    assignments = done_assignments + list(rebuilt.assignments)
-    workouts = done_workouts + list(rebuilt.workouts)
-    requests = done_requests + [
-        r for r in rebuilt.requests if r.id not in done_request_ids
-    ]
-
-    merged = rebuilt.copy_with(
-        status=WeekStatus.PROPOSED,
-        requests=requests,
-        assignments=assignments,
-        unplaced=list(rebuilt.unplaced),
-        workouts=workouts,
-    )
-    merged.validate()
-    return merged
 
 
 def _add_composed_workout(

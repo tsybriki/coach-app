@@ -96,6 +96,9 @@ class CommandType(StrEnum):
     REPLAN_REMAINDER = "replan_remainder"
     PLACE_UNPLACED = "place_unplaced"
     UNPLACE_REQUEST = "unplace_request"
+    # Отвязать от слотов все тренировки без факта: неделя остаётся
+    # активной, а тренировки становятся висяками — их можно двигать.
+    UNPLACE_ALL = "unplace_all"
     # Тренировка из текста пожеланий: разбор — это чтение (не команда),
     # а добавление в неделю — уже изменение состояния.
     ADD_COMPOSED_WORKOUT = "add_composed_workout"

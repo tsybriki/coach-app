@@ -148,10 +148,34 @@ def replan_remainder(week: Week) -> Week:
         ещё и в списке размещённых.
 
     Неделя возвращается в `proposed`: дальше работает обычный режим
-    propose — пересборка по правилам и ручная правка, а потом
-    активация.
+    propose — ручная правка и активация.
+
+    **План не пересобирается.** Пересборка по правилам создаёт
+    тренировки заново, а пользователь просил другое: отвязать
+    тренировки, чтобы двигать их. План остаётся прежним — меняются
+    только привязки к слотам.
 
     Закрытая неделя не перепланируется (I23).
+    """
+    unplaced = unplace_all(week)
+    replanned = unplaced.copy_with(status=WeekStatus.PROPOSED)
+    replanned.validate()
+    return replanned
+
+
+def unplace_all(week: Week) -> Week:
+    """Отвязать от слотов все тренировки, у которых нет факта.
+
+    Тренировка с фактом выполнена — её не трогаем. Остальные теряют
+    слот: запрос уходит в `unplaced` (висяк), размещение снимается,
+    день и окно из карточки убираются. Дальше их можно привязать к
+    другому окну — это и нужно, когда хочется поменять дни.
+
+    Статус недели не меняется: отвязка — не перепланирование. Но
+    отвязка разрешена только в незакрытой неделе: закрытая не меняется
+    (I23).
+
+    Повторный вызов ничего не меняет: висяк отвязывать нечего.
     """
     if week.status is WeekStatus.CLOSED:
         raise TransitionError("закрытая неделя не перепланируется")
@@ -174,15 +198,14 @@ def replan_remainder(week: Week) -> Week:
     rest_workouts = [_as_plannable(w) for w in week.workouts
                      if w.request_id not in done_request_ids]
 
-    replanned = week.copy_with(
-        status=WeekStatus.PROPOSED,
+    unplaced = week.copy_with(
         requests=done_requests + rest_requests,
         assignments=done_assignments,
         unplaced=list(rest_requests),
         workouts=done_workouts + rest_workouts,
     )
-    replanned.validate()
-    return replanned
+    unplaced.validate()
+    return unplaced
 
 
 def _as_plannable(workout: Workout) -> Workout:

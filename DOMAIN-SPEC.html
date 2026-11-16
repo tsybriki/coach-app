@@ -353,7 +353,7 @@
 <div class="eh"><span>Command</span><span class="k">command</span></div>
 <div class="role">выбирает пользователь, система ничего за него не решает.</div>
 <ul class="pl">
-<li><code>id</code> · <code>type</code> — <code>propose_week · activate_week · close_week · replan_remainder · link_actual · unlink_actual · place_unplaced · unplace_request · add_composed_workout · remove_workout</code></li>
+<li><code>id</code> · <code>type</code> — <code>propose_week · activate_week · close_week · replan_remainder · unplace_all · link_actual · unlink_actual · place_unplaced · unplace_request · add_composed_workout · remove_workout</code></li>
 <li><code>target{week_id, ...}</code> · <code>args{}</code></li>
 <li><code>reason</code> · <code>issued_at</code> · <code>issued_by{user,brain}</code></li>
 <li><code>status{proposed,applied,rejected}</code> · <code>diff[]</code></li>
@@ -658,10 +658,20 @@
 <ol>
 <li>Неделя возвращается в <code>proposed</code> — дальше работает обычный режим</li>
 </ol>
-<p>propose: пересборка по правилам, ручная правка, активация.</p>
+<p>propose: ручная правка и активация.</p>
+<p><b>План не пересобирается.</b> Пересборка по правилам создаёт тренировки</p>
+<p>заново, а пользователь просил другое: отвязать тренировки, чтобы двигать</p>
+<p>их. План остаётся прежним — меняются только привязки к слотам.</p>
 <p>Деление по дате было бы неправильным: пропущенная по календарю, но не</p>
 <p>выполненная тренировка «зависла» бы в плане, и пользователь не смог бы</p>
 <p>её переделать.</p>
+<h4>unplace_all — отвязать все</h4>
+<p>Отвязать от слотов все тренировки без факта, <b>не меняя статус недели</b>.</p>
+<p>Нужно, когда хочется поменять дни: тренировки теряют слот и становятся</p>
+<p>висяками, их можно привязать к другому окну.</p>
+<p>Отличие от <code>replan_remainder</code> — только в статусе недели: здесь она</p>
+<p>остаётся активной (неделя уже исполняется), а там возвращается в</p>
+<p><code>proposed</code>. Сама отвязка — одна и та же.</p>
 <p><b>Что из этого следует</b></p>
 <ol>
 <li>Черновик не считается: <code>proposed</code> не влияет на расчёт нагрузки до активации.</li>
@@ -678,6 +688,7 @@
 <tr><td>факт загружен</td><td><code>ActualSession[]</code>, кандидаты на связывание, вклад в <code>summary.intensity</code></td><td>итогов</td></tr>
 <tr><td>связывание подтверждено</td><td><code>Workout.actual_id</code>, <code>verdict</code> по каждой сессии</td><td>—</td></tr>
 <tr><td>replan_remainder</td><td>неделя в <code>proposed</code>; выполненное на месте, невыполненное — снова висяки</td><td>изменений в выполненном</td></tr>
+<tr><td>unplace_all</td><td>тренировки без факта — снова висяки; неделя без смены статуса</td><td>изменений в выполненном</td></tr>
 <tr><td>close_week</td><td><code>summary</code> финализирован, <code>deviations[]</code></td><td>—</td></tr>
 </table></div>
 <h4>Порядок внутри close_week</h4>
