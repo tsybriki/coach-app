@@ -420,22 +420,38 @@ def test_i21_propose_not_allowed_on_active_week():
 # ------------------------------------------------------------------ I22, I39
 
 
-def test_i22_replan_changes_only_today_and_later():
-    """I22: replan_remainder меняет только сессии на сегодня и позже."""
+def test_i22_replan_changes_only_workouts_without_fact():
+    """I22: replan_remainder меняет только тренировки без факта.
+
+    Деление — по факту, а не по календарной дате: выполненное (с
+    фактом) остаётся на месте, невыполненное снова планируемое.
+    """
     week = make_week(status=WeekStatus.ACTIVE)
-    past = make_workout("past")
-    past.time = "2026-10-12"
-    future = make_workout("future")
-    future.time = "2026-10-16"
-    week.workouts = [past, future]
+    done = make_workout("done", "r-done")
+    done.actual_id = "a1"
+    done.status = WorkoutStatus.DONE
+    future = make_workout("future", "r-future")
+    week.workouts = [done, future]
+    week.requests = [make_request("r-done"), make_request("r-future")]
+    week.unplaced = []
+    week.assignments = [
+        Assignment(request_id="r-done", slot_id="s1", start="18:45",
+                   duration_min=60),
+        Assignment(request_id="r-future", slot_id="s2", start="18:45",
+                   duration_min=60),
+    ]
 
-    new_workout = make_workout("new")
-    new_workout.time = "2026-10-15"
-
-    replanned = replan_remainder(week, date(2026, 10, 14), [new_workout])
+    replanned = replan_remainder(week)
     ids = {w.id for w in replanned.workouts}
-    assert "past" in ids, "прошедшая сессия не тронута"
-    assert "new" in ids
+    assert "done" in ids, "выполненная тренировка не тронута"
+    # Невыполненная остаётся в неделе, но снова планируемая: без факта
+    # и без дня. Её запрос — висяк, время выбирает пользователь.
+    future = next(w for w in replanned.workouts if w.id == "future")
+    assert future.actual_id is None
+    assert future.status is WorkoutStatus.PLANNED
+    assert "day" not in future.objective
+    assert "r-future" in {r.id for r in replanned.unplaced}
+    assert not any(a.request_id == "r-future" for a in replanned.assignments)
 
 
 def test_i39_today_is_calendar_date():
@@ -451,7 +467,7 @@ def test_i23_closed_week_does_not_change():
     """I23: закрытая неделя не меняется."""
     week = make_week(status=WeekStatus.CLOSED, summary=WeekSummary(week_id="W1"))
     with pytest.raises(TransitionError, match="закрыта"):
-        replan_remainder(week, date(2026, 10, 14), [make_workout()])
+        replan_remainder(week)
 
 
 def test_i24_close_only_by_command():

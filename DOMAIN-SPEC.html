@@ -531,7 +531,7 @@
 <tr class="confirmed"><td class="n">I19</td><td class="st"><span class="no">·</span></td><td>Статус недели меняется только через <code>Command</code></td></tr>
 <tr class="confirmed"><td class="n">I20</td><td class="st"><span class="no">·</span></td><td>Каждый <code>Workout</code> вырос из <code>Request</code> (<code>request_id</code> задан)</td></tr>
 <tr class="confirmed"><td class="n">I21</td><td class="st"><span class="no">·</span></td><td>Повторный <code>propose_week</code> полностью заменяет содержимое <code>proposed</code>-недели</td></tr>
-<tr class="confirmed"><td class="n">I22</td><td class="st"><span class="no">·</span></td><td><code>replan_remainder</code> меняет только сессии на сегодня и позже</td></tr>
+<tr class="confirmed"><td class="n">I22</td><td class="st"><span class="no">·</span></td><td><code>replan_remainder</code> меняет только тренировки без факта; с фактом — не трогает</td></tr>
 <tr class="confirmed"><td class="n">I23</td><td class="st"><span class="no">·</span></td><td>Закрытая неделя не меняется; поздний факт игнорируется</td></tr>
 <tr class="confirmed"><td class="n">I24</td><td class="st"><span class="no">·</span></td><td>Неделя закрывается только по команде; сама не закрывается</td></tr>
 <tr class="confirmed"><td class="n">I25</td><td class="st"><span class="no">·</span></td><td>Переносов между неделями нет: тренировка не переходит из недели в неделю</td></tr>
@@ -548,7 +548,7 @@
 <tr class="confirmed"><td class="n">I36</td><td class="st"><span class="no">·</span></td><td><code>Plan.goal</code> и <code>Phase.objective</code> — разные вещи, не дублируют друг друга</td></tr>
 <tr class="confirmed"><td class="n">I37</td><td class="st"><span class="no">·</span></td><td>У Request и Assignment нет статуса — состояние выводится из наличия Assignment</td></tr>
 <tr class="confirmed"><td class="n">I38</td><td class="st"><span class="no">·</span></td><td>Висящая тренировка без факта ⇒ пропущена</td></tr>
-<tr class="confirmed"><td class="n">I39</td><td class="st"><span class="no">·</span></td><td><code>replan_remainder</code> определяет «сегодня» по календарной дате</td></tr>
+<tr class="confirmed"><td class="n">I39</td><td class="st"><span class="no">·</span></td><td><code>replan_remainder</code> делит неделю по факту, а не по календарной дате</td></tr>
 <tr class="confirmed"><td class="n">I40</td><td class="st"><span class="no">·</span></td><td>Повторный propose переделывает план; привязки факта пользователь ставит заново</td></tr>
 <tr class="confirmed"><td class="n">I41</td><td class="st"><span class="no">·</span></td><td>План готовит propose для одной следующей недели</td></tr>
 <tr class="confirmed"><td class="n">I42</td><td class="st"><span class="no">·</span></td><td><code>external_id</code> уникален (id активности Garmin)</td></tr>
@@ -571,7 +571,7 @@
 <tr><td>Статус Request и Assignment</td><td>статуса нет — состояние выводится: размещён (есть Assignment) или висит (в <code>unplaced[]</code>)</td></tr>
 <tr><td><code>external_id</code></td><td>уникален — id активности Garmin</td></tr>
 <tr><td>Висящая тренировка в итогах</td><td>нет факта — пропущена</td></tr>
-<tr><td>Граница replan_remainder</td><td>«сегодня» — по календарной дате</td></tr>
+<tr><td>Граница replan_remainder</td><td>по факту: с фактом — не трогаем, без факта — снова планируемо</td></tr>
 <tr><td>Wipe при повторном propose</td><td>переделывает план; привязки пользователь может поставить заново</td></tr>
 <tr><td>Сколько недель планировать наперёд</td><td>одну</td></tr>
 <tr><td>Перекрытие планов</td><td>не перекрываются</td></tr>
@@ -642,7 +642,26 @@
 <h4>close_week — явный ритуал</h4>
 <p>Считаем саммари, записываем. После этого неделя закрыта и <b>не меняется</b>: ни новый факт, ни поздняя активность её не трогают. Дальше планируется следующая неделя.</p>
 <h4>replan_remainder — переплан остатка</h4>
-<p>Внутри недели можно запросить перепланирование <b>остатка</b>: сессии на сегодня и позже. Прошедшие сессии не меняются. Запрос инициирует пользователь.</p>
+<p>Внутри недели можно запросить перепланирование <b>остатка</b>. Деление — **по</p>
+<p>факту**, а не по календарной дате: выполненное (к чему привязан факт) не</p>
+<p>трогаем, всё остальное снова планируемо. Запрос инициирует пользователь.</p>
+<p>Что делает команда:</p>
+<ol>
+<li>Тренировка <b>с фактом</b> остаётся на месте: факт, запрос, размещение и</li>
+</ol>
+<p>сама тренировка. Выполненное не переписывается.</p>
+<ol>
+<li>Тренировка <b>без факта</b> снова планируемая: запрос уходит в <code>unplaced[]</code></li>
+</ol>
+<p>(висяк), размещение снимается, день и окно из карточки убираются —</p>
+<p>иначе тренировка осталась бы и в списке размещённых, и среди висяков.</p>
+<ol>
+<li>Неделя возвращается в <code>proposed</code> — дальше работает обычный режим</li>
+</ol>
+<p>propose: пересборка по правилам, ручная правка, активация.</p>
+<p>Деление по дате было бы неправильным: пропущенная по календарю, но не</p>
+<p>выполненная тренировка «зависла» бы в плане, и пользователь не смог бы</p>
+<p>её переделать.</p>
 <p><b>Что из этого следует</b></p>
 <ol>
 <li>Черновик не считается: <code>proposed</code> не влияет на расчёт нагрузки до активации.</li>
@@ -658,7 +677,7 @@
 <tr><td>activate_week</td><td>полный счёт <code>workouts[]</code> со <code>steps[]</code>, <code>inputs_version</code>; висялки остаются</td><td>факта</td></tr>
 <tr><td>факт загружен</td><td><code>ActualSession[]</code>, кандидаты на связывание, вклад в <code>summary.intensity</code></td><td>итогов</td></tr>
 <tr><td>связывание подтверждено</td><td><code>Workout.actual_id</code>, <code>verdict</code> по каждой сессии</td><td>—</td></tr>
-<tr><td>replan_remainder</td><td>новые <code>workouts[]</code> для сессий на сегодня и позже</td><td>изменений в прошедших</td></tr>
+<tr><td>replan_remainder</td><td>неделя в <code>proposed</code>; выполненное на месте, невыполненное — снова висяки</td><td>изменений в выполненном</td></tr>
 <tr><td>close_week</td><td><code>summary</code> финализирован, <code>deviations[]</code></td><td>—</td></tr>
 </table></div>
 <h4>Порядок внутри close_week</h4>
