@@ -3069,6 +3069,12 @@ window.addEventListener('popstate', (event) => {
       history.replaceState({page: 'week'}, '', ' ');
     } catch (error) { /* история недоступна */ }
     if (state.screen === 'compose') state.screen = 'week';
+    /* Открытая тренировка сбрасывается: экран закрыт — состояние тоже
+     * должно говорить, что мы на верхнем уровне. Иначе клик по иконке
+     * привязки уходил бы в showWorkout() и снова открывал детали. */
+    state.openWorkoutId = null;
+    state.detailId = null;
+    state.pickUnplaced = null;
     cardWrap.classList.add('hidden');
     detailWrap.classList.add('hidden');
     picker.classList.remove('hidden');
@@ -3112,8 +3118,17 @@ window.addEventListener('popstate', (event) => {
    * уровень вложенности, и выход из тренировки возвращает в тот же
    * раздел, из которого её открыли. Сбрасывается только compose —
    * он подэкран недели.
+   *
+   * Открытая тренировка сбрасывается: экран закрыт, значит и состояние
+   * не должно считать тренировку открытой. Иначе клик по иконке
+   * привязки уходил бы в showWorkout() и снова открывал детали —
+   * ровно тот дефект, что Кирилл описал: «жмукаю на иконку, а попадаю
+   * в детали тренировки».
    */
   if (state.screen === 'compose') state.screen = 'week';
+  state.openWorkoutId = null;
+  state.detailId = null;
+  state.pickUnplaced = null;
   cardWrap.classList.add('hidden');
   detailWrap.classList.add('hidden');
   picker.classList.remove('hidden');
