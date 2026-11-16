@@ -315,7 +315,6 @@ def test_command_types_cover_all_operations():
         "replan_remainder",
         "place_unplaced",
         "unplace_request",
-        "unplace_all",
         "add_composed_workout",
         "remove_workout",
         "link_actual",
