@@ -601,7 +601,9 @@ function focusCard(week) {
 
   const closeBtn = status === 'active'
     ? `<button class="card-act" id="close" title="Закрыть неделю"
-         aria-label="Закрыть неделю">🔒</button>`
+         aria-label="Закрыть неделю" data-week-command="close_week"
+         data-week-pending="Закрываю неделю…"
+         data-week-done="Неделя закрыта">🔒</button>`
     : '';
 
   /* Перепланировать остаток — действие для недели в процессе.
@@ -613,11 +615,16 @@ function focusCard(week) {
    * У proposed-недели это же действие называется «Предложить
    * заново» — там отдельная кнопка не нужна.
    *
-   * Кнопка — с текстом, не иконкой: «Перепланировать» и «♻️» говорят
-   * разное, а действие необратимо настолько, что сюрприз недопустим.
+   * Иконка — ♻️ (план заново), в шапке рядом с другими действиями.
+   * Кнопка под текстом занимала пол-экрана телефона, а действие
+   * нечастое: его место — среди иконок, а не в отдельной полосе.
    */
   const replanBtn = status === 'active'
-    ? `<button class="action secondary" id="replan"${state.busy ? ' disabled' : ''}>Перепланировать остаток</button>`
+    ? `<button class="card-act" id="replan" title="Перепланировать остаток недели"
+         aria-label="Перепланировать остаток недели"
+         data-week-command="replan_remainder"
+         data-week-pending="Перепланирую остаток…"
+         data-week-done="Остаток перепланирован — неделю можно править">♻️</button>`
     : '';
 
   // Следующая неделя — только если её есть чем предложить или открыть.
@@ -626,11 +633,10 @@ function focusCard(week) {
   return `<div class="card goal">
       <div class="goal-head">
         <h3>Фокус недели</h3>
-        <div class="goal-acts">${nextBtn}${closeBtn}</div>
+        <div class="goal-acts">${nextBtn}${replanBtn}${closeBtn}</div>
       </div>
       ${focus ? `<p class="lead">${escapeHtml(focus)}</p>` : ''}
       ${progressBlock(week.progress)}
-      ${replanBtn}
     </div>`;
 }
 
@@ -825,7 +831,9 @@ function screenWeekMissing() {
       <p class="lead">Объём взят из макро-плана сезона, качественная работа —
       по правилам Дэниэлса, время — по твоим окнам тренировок.</p>
     </div>
-    <button class="action primary" id="plan-week"${disabled}>Спланировать неделю</button>
+    <button class="action primary" id="plan-week"${disabled}
+      data-week-command="propose_week" data-week-pending="Планирую неделю…"
+      data-week-done="Неделя спланирована — проверь и активируй">Спланировать неделю</button>
     ${composeBtn}`;
 }
 
@@ -881,8 +889,12 @@ function weekActions(week) {
     ${blockedNote}
     ${composeBtn}
     <div class="action-row">
-      <button class="action" id="propose"${disabled}>Предложить заново</button>
-      <button class="action primary" id="activate"${activateAttr}>Активировать неделю</button>
+      <button class="action" id="propose"${disabled} data-week-command="propose_week"
+        data-week-pending="Предлагаю неделю заново…"
+        data-week-done="Неделя предложена заново">Предложить заново</button>
+      <button class="action primary" id="activate"${activateAttr}
+        data-week-command="activate_week" data-week-pending="Активирую неделю…"
+        data-week-done="Неделя активна">Активировать неделю</button>
     </div></div>`;
 }
 
@@ -1115,8 +1127,13 @@ function nextWeekButton() {
   const planned = Boolean(macro.status);
   const label = planned ? 'Открыть предложенную неделю' : 'Предложить следующую неделю';
   const hint = `${label} · W${next}`;
+  /* Иконка — ➡️, а не 📅: 📅 у раздела «Неделя» в нижней навигации,
+   * и одна и та же иконка у разных действий читается как одно
+   * действие. 📆 от 📅 на телефоне не отличить — оба рендерятся
+   * календариком с «17». Стрелка «вперёд» говорит прямо: следующая
+   * неделя — впереди. */
   return `<button class="card-act" id="plan-next-week"
-      title="${hint}" aria-label="${hint}">📅</button>`;
+      title="${hint}" aria-label="${hint}">➡️</button>`;
 }
 
 /* Заголовок экрана с иконкой справа — как в карточке фокуса. */
@@ -1230,7 +1247,9 @@ function weekCloseBlock() {
       <p class="lead">Закрытие посчитает итог: что планировали против что сделали. `
       + `Факт подтянется из Garmin автоматически.</p>
     </div>
-    <button class="action primary" id="close"${disabled}>Закрыть неделю</button>`;
+    <button class="action primary" id="close"${disabled}
+      data-week-command="close_week" data-week-pending="Закрываю неделю…"
+      data-week-done="Неделя закрыта">Закрыть неделю</button>`;
 }
 
 /* Метрики формы недели — над тренировками.
@@ -2718,12 +2737,6 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
-  if (closest('#plan-week')) {
-    await runWeekCommand('propose_week', 'Планирую неделю…',
-      'Неделя спланирована — проверь и активируй');
-    return;
-  }
-
   /* Спланировать следующую неделю — до закрытия текущей.
    *
    * Команда уходит на неделю после текущей: туда и возвращаемся. */
@@ -2930,37 +2943,18 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
-  if (closest('#propose')) {
-    await runWeekCommand('propose_week', 'Предлагаю неделю заново…',
-      'Неделя предложена заново');
-    return;
-  }
-
-  if (closest('#activate')) {
-    await runWeekCommand('activate_week', 'Активирую неделю…',
-      'Неделя активна');
-    return;
-  }
-
-  /* Перепланировать остаток недели.
+  /* Команды недели — propose, activate, replan, close.
    *
-   * Команда уходит на текущую неделю и меняет её план: тренировки без
-   * факта возвращаются в план, неделя — в `proposed`. Дальше
-   * пользователь правит её как обычную предложенную неделю и
-   * активирует заново.
-   *
-   * Пока команда в очереди — кнопка не нажимается: вторая команда
-   * пошла бы по устаревшей версии и потеряла бы первую.
+   * Пока команда в полёте — вторая не проходит: она пошла бы по
+   * устаревшей версии и потеряла бы первую. Защита общая для всех
+   * команд недели, а не у одной кнопки: обработчик у них один.
    */
-  if (closest('#replan')) {
+  const weekCommand = closest('[data-week-command]');
+  if (weekCommand) {
     if (state.busy) return;
-    await runWeekCommand('replan_remainder', 'Перепланирую остаток…',
-      'Остаток перепланирован — неделю можно править');
-    return;
-  }
-
-  if (closest('#close')) {
-    await runWeekCommand('close_week', 'Закрываю неделю…', 'Неделя закрыта');
+    await runWeekCommand(weekCommand.dataset.weekCommand,
+      weekCommand.dataset.weekPending,
+      weekCommand.dataset.weekDone);
     return;
   }
 });

@@ -147,12 +147,16 @@ beforeEach(() => {
   globalThis.__fixture = undefined;
 });
 
-test('активная неделя: есть кнопка «Перепланировать остаток»', async () => {
+test('активная неделя: есть иконка «Перепланировать остаток»', async () => {
   await loadApp({week: makeWeek('active')});
 
   const btn = document.querySelector('#replan');
   assert.ok(btn, 'нет кнопки «Перепланировать остаток»');
-  assert.match(btn.textContent, /Перепланировать/i);
+  /* Иконка в шапке, а не широкая кнопка под текстом: действие нечастое,
+   * а кнопка занимает много места на телефоне. */
+  assert.ok(btn.closest('.goal-acts'),
+    'иконка перепланирования не в шапке карточки фокуса');
+  assert.match(btn.getAttribute('aria-label'), /Перепланировать остаток/i);
 });
 
 test('предложенная неделя: кнопки перепланирования нет', async () => {
@@ -201,12 +205,31 @@ test('двойной тап отправляет команду один раз'
   /* Пока команда в полёте, кнопка не нажимается: вторая команда
    * пошла бы по устаревшей версии и потеряла бы первую.
    *
-   * Клики — подряд, без ожидания: между ними команда ещё в очереди. */
+   * Второй клик — по **свежей** кнопке: после первой команды экран
+   * перерисовывается, и человек тапает по тому, что видит сейчас.
+   * Клик по отсоединённому элементу до обработчика не дойдёт и
+   * ничего не проверит. */
   await loadAppWithCommands(makeWeek('active'));
 
-  const btn = document.querySelector('#replan');
-  click(btn);
-  click(btn);
+  click(document.querySelector('#replan'));
+  const fresh = document.querySelector('#replan');
+  if (fresh) click(fresh);
+  await waitFor(() => sentCommands().length > 0);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  assert.equal(sentCommands().length, 1, 'команда отправлена дважды');
+});
+
+test('двойной тап по закрытию отправляет команду один раз', async () => {
+  /* Та же защита у закрытия недели: команды недели делят один
+   * обработчик, и блокировка должна быть общей, а не у одной кнопки.
+   *
+   * Второй клик — по свежей кнопке, как тапает человек. */
+  await loadAppWithCommands(makeWeek('active'));
+
+  click(document.querySelector('#close'));
+  const fresh = document.querySelector('#close');
+  if (fresh) click(fresh);
   await waitFor(() => sentCommands().length > 0);
   await new Promise((resolve) => setTimeout(resolve, 50));
 
