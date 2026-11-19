@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -97,6 +98,9 @@ def _recipe_from_dict(data: dict[str, Any]) -> WorkoutRecipe:
         distance_m=float(data.get("distance_m", 0.0)),
         pace_growth_sec_per_400m=float(data.get("pace_growth_sec_per_400m", 0.0)),
         final_zone=data.get("final_zone", ""),
+        warmup_km=float(data.get("warmup_km", 0.0)),
+        cooldown_km=float(data.get("cooldown_km", 0.0)),
+        reps_by_volume=bool(data.get("reps_by_volume", False)),
     )
 
 
@@ -110,12 +114,23 @@ def load_plan(reference_dir: Path) -> MethodPlan:
     weeks: list[PhaseWeek] = []
     for phase_entries in data.get("phases", {}).values():
         for entry in phase_entries:
-            recipes = tuple(_recipe_from_dict(r) for r in entry.get("sessions", []))
+            # Разминка и заминка — на уровне недели: они одинаковы для
+            # всех качественных работ недели («перед этим разминка, в
+            # конце заминка»), поэтому достаются каждому рецепту.
+            warmup_km = float(entry.get("warmup_km", 0.0))
+            cooldown_km = float(entry.get("cooldown_km", 0.0))
+            recipes = tuple(
+                replace(_recipe_from_dict(r),
+                        warmup_km=warmup_km,
+                        cooldown_km=cooldown_km)
+                for r in entry.get("sessions", [])
+            )
             caps = tuple(
                 ZoneCap(
                     zone=c["zone"],
                     fraction_of_week=float(c["fraction_of_week"]),
                     ceiling_km=c.get("ceiling_km"),
+                    tolerance=float(c.get("tolerance", 1.0)),
                 )
                 for c in entry.get("caps", [])
             )

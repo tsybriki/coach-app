@@ -42,7 +42,8 @@ def steps_distance_km(steps: list[Any]) -> float:
         pace = _pace_sec_from_focus(focus)
         if not pace:
             continue
-        total += float(step.target_value) * pace / 60.0
+        # Минуты → секунды → километры → метры.
+        total += float(step.target_value) * 60.0 / pace * 1000.0
     return total / 1000.0
 
 

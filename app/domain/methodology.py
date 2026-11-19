@@ -199,6 +199,25 @@ class WorkoutRecipe:
     distance_m: float = 0.0
     pace_growth_sec_per_400m: float = 0.0
     final_zone: str = ""
+    # Разминка перед работой и заминка после — километрами, в лёгком
+    # темпе. Правило недели: «перед этом разминка минимум 3 км, в конце
+    # заминка минимум 1 км».
+    #
+    # Они **вне** наборов работы: разминка — это шаг тренировки, а не
+    # кусок серии, и в объём серии не входит.
+    warmup_km: float = 0.0
+    cooldown_km: float = 0.0
+    # Число повторов считается по объёму недели, а не задано в
+    # справочнике.
+    #
+    # Правило (Кирилл, 19.11.2026): «количество серий определяется так,
+    # чтобы общий объём в повторном темпе был примерно 5 % недельного
+    # километража или чуть больше». Серия в справочнике — это **вид**,
+    # а сколько раз её повторить — следствие объёма недели.
+    #
+    # Для таких рецептов `sets[].reps_min` в справочнике — значение по
+    # умолчанию; планировщик пересчитывает его под недельный километраж.
+    reps_by_volume: bool = False
 
     @property
     def is_quality(self) -> bool:
@@ -220,10 +239,25 @@ class ZoneCap:
     zone: str
     fraction_of_week: float
     ceiling_km: float | None = None
+    # Допуск к пределу: во сколько раз предел может быть превышен.
+    #
+    # Правило программы — «не более 5 % недельного километража», а
+    # рабочее правило (Кирилл, 19.11.2026) — «примерно 5 % или чуть
+    # больше»: число серий подбирается под объём, и он может чуть
+    # выйти за долю. Без допуска работа выбрасывалась целиком — а
+    # выкинуть тренировку из-за 300 лишних метров хуже, чем выйти за
+    # долю на 12 %.
+    #
+    # 1.0 — жёсткий предел, как в книге.
+    tolerance: float = 1.0
 
     def limit_km(self, week_km: float) -> float:
-        """Предел километров в зоне для недели заданного объёма."""
-        limit = week_km * self.fraction_of_week
+        """Предел километров в зоне для недели заданного объёма.
+
+        С допуском: `fraction_of_week` — доля, `tolerance` — во сколько
+        раз её можно превысить.
+        """
+        limit = week_km * self.fraction_of_week * self.tolerance
         if self.ceiling_km is not None:
             limit = min(limit, self.ceiling_km)
         return limit
@@ -594,7 +628,8 @@ def segment_distance_m(segment: RecipeSegment,
     pace = pace_by_zone.get(segment.zone)
     if not pace:
         return 0.0
-    return minutes * pace / 60.0
+    # Минуты → секунды → километры (темп в секундах на километр) → метры.
+    return minutes * 60.0 / pace * 1000.0
 
 
 def recipe_zone_volume_m(recipe: WorkoutRecipe,
@@ -831,6 +866,30 @@ def build_steps(recipe: WorkoutRecipe,
     steps: list[Step] = []
     index = 0
 
+    def easy_step(km: float, role: StepRole, step_id: str) -> Step:
+        """Шаг в лёгком темпе на заданное расстояние.
+
+        Разминка и заминка — расстоянием, а не временем: недельный
+        километраж считается в километрах, и время без темпа в километры
+        не переводится.
+        """
+        nonlocal index
+        index += 1
+        pace = EASY_PACE_SEC_PER_KM
+        return Step(
+            id=f"{step_id}-{index}",
+            role=role,
+            sport=Sport.RUN,
+            target_type=TargetType.DISTANCE,
+            target_value=round(km * 1000.0, 1),
+            focus=FocusType.HR,
+            focus_value={
+                "zone": athlete_zone_for(ZONE_EASY, athlete) or "Z2",
+                "pace_min_per_km": format_pace(pace),
+            },
+            duration_min=round(km * pace / 60.0, 2),
+        )
+
     def add_segment(segment: RecipeSegment, group: str | None,
                     round_number: int | None, role: StepRole,
                     reps: int | None = None,
@@ -901,6 +960,11 @@ def build_steps(recipe: WorkoutRecipe,
             duration_min=round(duration, 2),
         ))
 
+    # Разминка — до работы. Она **вне** наборов: это не кусок серии,
+    # и в объём серии не входит.
+    if recipe.warmup_km > 0:
+        steps.append(easy_step(recipe.warmup_km, StepRole.WARMUP, "warmup"))
+
     for recipe_set in recipe.sets:
         # Блок круга: работа и отдых — два блока. Метка нужна клиенту,
         # чтобы показать круг блоками, а не плоским списком шагов.
@@ -916,6 +980,10 @@ def build_steps(recipe: WorkoutRecipe,
     for segment in recipe.flat:
         role = StepRole.REST if segment.zone == ZONE_EASY else StepRole.WORK
         add_segment(segment, None, None, role)
+
+    # Заминка — после работы, тоже вне наборов.
+    if recipe.cooldown_km > 0:
+        steps.append(easy_step(recipe.cooldown_km, StepRole.COOLDOWN, "cooldown"))
 
     return steps
 

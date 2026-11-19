@@ -348,17 +348,42 @@ def parse(text: str) -> dict[str, Any]:
             notes.append({"phase": phase, "week": week, "text": body})
             continue
 
+        if kind in ("warmup", "cooldown"):
+            # Разминка и заминка — расстоянием, в километрах: объём
+            # недели считается в километрах, а время без темпа в
+            # километры не переводится.
+            entry = weeks.setdefault(key, {"phase": phase, "week": week,
+                                           "sessions": [], "caps": []})
+            entry[f"{kind}_km"] = float(body.split()[0])
+            continue
+
         if kind == "cap":
+            # cap <ЗОНА> <доля> [<потолок_км>] [t<допуск>]
+            #
+            # Потолок и допуск — необязательные. Допуск помечен
+            # префиксом «t», чтобы его не спутать с потолком: оба —
+            # числа рядом.
             cap_parts = body.split()
             zone = cap_parts[0]
             fraction = float(cap_parts[1])
-            ceiling_km = float(cap_parts[2]) if len(cap_parts) > 2 else None
+            ceiling_km: float | None = None
+            tolerance = 1.0
+            if len(cap_parts) > 2:
+                token = cap_parts[2]
+                if token.startswith("t"):
+                    # «R 0.05 t1.2» — сразу допуск, потолка нет.
+                    tolerance = float(token[1:])
+                else:
+                    ceiling_km = float(token)
+                    if len(cap_parts) > 3 and cap_parts[3].startswith("t"):
+                        tolerance = float(cap_parts[3][1:])
             entry = weeks.setdefault(key, {"phase": phase, "week": week,
                                            "sessions": [], "caps": []})
             entry["caps"].append({
                 "zone": zone,
                 "fraction_of_week": fraction,
                 "ceiling_km": ceiling_km,
+                "tolerance": tolerance,
             })
             continue
 
@@ -374,6 +399,14 @@ def parse(text: str) -> dict[str, Any]:
             "label": session_label(session_kind, body),
             "body": body,
         }
+        # Число повторов считается по объёму недели: «количество серий
+        # определяется так, чтобы общий объём в повторном темпе был
+        # примерно 5 % недельного километража или чуть больше».
+        # Помечаем директивой `reps_by_volume` в строке недели.
+        if "reps_by_volume" in body:
+            body = body.replace("reps_by_volume", "").strip()
+            session["body"] = body
+            session["reps_by_volume"] = True
         if session_kind == "ACC":
             # Бег с ускорением: дистанция и прирост темпа.
             parts = body.split()
@@ -414,6 +447,11 @@ def parse(text: str) -> dict[str, Any]:
     for key, entry in weeks.items():
         entry["notes"] = [n["text"] for n in notes
                           if f"{n['phase']}:{n['week']}" == key]
+        # Разминка и заминка — на уровне недели: они одинаковы для всех
+        # качественных работ недели («перед этим разминка, в конце
+        # заминка»).
+        entry["warmup_km"] = entry.get("warmup_km", 0.0)
+        entry["cooldown_km"] = entry.get("cooldown_km", 0.0)
 
     phases: dict[str, list[dict[str, Any]]] = {}
     for key, entry in sorted(weeks.items(), key=lambda kv: (kv[1]["phase"], kv[1]["week"])):

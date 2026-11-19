@@ -41,6 +41,7 @@ from app.domain.methodology import (
     DanielsPaces,
     MethodPlan,
     PhaseShape,
+    RecipeSet,
     WorkoutRecipe,
     apply_week_caps,
     athlete_zone_for,
@@ -49,6 +50,7 @@ from app.domain.methodology import (
     build_steps,
     build_stride_steps,
     format_pace,
+    recipe_zone_volume_m,
 )
 from app.domain.session_name import easy_pace_sec_per_km, session_name
 
@@ -181,6 +183,9 @@ def split_runs_km(kilometers: float, runs: int) -> list[float]:
     по 5 км: 9 км — это 5+5, а не 4,5+4,5. Километраж при этом
     округляется вверх: неделя набирает чуть больше, но каждая пробежка
     остаётся пробежкой, а не забегом в зал.
+
+    Число пробежек при этом может оказаться меньше запрошенного: на
+    9,3 км три пробежки по 3,1 км невозможны, а две по 5 км — можно.
     """
     if kilometers <= 0 or runs <= 0:
         return []
@@ -190,8 +195,46 @@ def split_runs_km(kilometers: float, runs: int) -> list[float]:
     if each >= MIN_RUN_KM:
         return [each] * runs
     # На сессию приходится меньше 5 км: собираем блоками по 5 км.
+    #
+    # 9,3 км — это две сессии по 5 км, а не три по 3,1: сессия короче
+    # 5 км не делается. Остаток, который в 5 км не влезает, уходит в
+    # последнюю сессию — поэтому 9 км это 5+5.
     count = max(1, int(-(-kilometers // MIN_RUN_KM)))
-    return [MIN_RUN_KM] * count
+    parts = [MIN_RUN_KM] * (count - 1)
+    last = kilometers - MIN_RUN_KM * (count - 1)
+    parts.append(last if last >= MIN_RUN_KM else MIN_RUN_KM)
+    return parts
+
+
+def _main_zone(recipe_set: RecipeSet,
+               pace_by_zone: dict[str, float]) -> str:
+    """Зона работы набора — та, в которой больше всего объёма."""
+    volumes = recipe_zone_volume_m(
+        WorkoutRecipe(kind="", label="", sets=(recipe_set,)),
+        pace_by_zone,
+    )
+    if not volumes:
+        return ""
+    return max(volumes, key=lambda z: volumes.get(z, 0.0))
+
+
+def _series_zone_volume_m(recipe_set: RecipeSet, zone: str,
+                          pace_by_zone: dict[str, float]) -> float:
+    """Объём в зоне у **одной** серии — в метрах.
+
+    Серия — это один круг набора, а не весь набор: объём набора в
+    справочнике уже умножен на число повторов. Здесь нужен кусок, из
+    которого число повторов и вычисляется: иначе деление даёт долю
+    меньше единицы и остаётся одна серия.
+    """
+    one = WorkoutRecipe(
+        kind="",
+        label="",
+        sets=(RecipeSet(reps_min=1, reps_max=1,
+                        segments=recipe_set.segments,
+                        label=recipe_set.label),),
+    )
+    return recipe_zone_volume_m(one, pace_by_zone).get(zone, 0.0)
 
 
 def _long_run_km(run_km: float, pace_by_zone: dict[str, float]) -> float:
@@ -425,6 +468,66 @@ class WeekPlanner:
             return []
         return list(entry.recipes)
 
+    def _reps_by_volume(self, data: WeekPlanInput) -> list[WorkoutRecipe]:
+        """Число повторов — по объёму недели.
+
+        Правило (Кирилл, 19.11.2026): «количество серий определяется так,
+        чтобы общий объём в повторном темпе был примерно 5 % недельного
+        километража или чуть больше», и то же для интервального — «примерно
+        8 % недельного километража».
+
+        Число серий в справочнике — значение по умолчанию: недельный
+        километраж меняется от недели к неделе, а серии под него
+        подбираются. Здесь рецепты с пометкой `reps_by_volume` получают
+        своё число повторов: столько, чтобы объём зоны дошёл до доли
+        недельного километража.
+
+        Объём одной серии в зоне — по шагам рецепта. Доля берётся из
+        ограничения недели для этой зоны («R — не более 5 %»), и
+        учитывается допуск: «5 % или чуть больше» — это 5 % с запасом,
+        а не жёсткий потолок.
+        """
+        recipes = self._recipes_for(data)
+        if not recipes or data.run_km <= 0:
+            return recipes
+        pace_by_zone = self._paces.pace_by_zone(self._athlete.vdot)
+        entry = self._plan.week(*self._plan_position(data))
+        caps = {cap.zone: cap for cap in (entry.caps if entry else ())}
+
+        result: list[WorkoutRecipe] = []
+        for recipe in recipes:
+            if not recipe.reps_by_volume or not recipe.sets:
+                result.append(recipe)
+                continue
+            recipe_set = recipe.sets[0]
+            # Зона работы рецепта — та, в которой больше всего объёма.
+            zone = _main_zone(recipe_set, pace_by_zone)
+            cap = caps.get(zone)
+            if cap is None:
+                result.append(recipe)
+                continue
+            # Целевой объём зоны — доля недели с допуском: «примерно 5 %
+            # или чуть больше» — это 5 % с запасом.
+            target_m = cap.limit_km(data.run_km) * 1000.0
+            # Объём одной серии в этой зоне.
+            series_m = _series_zone_volume_m(recipe_set, zone, pace_by_zone)
+            if series_m <= 0:
+                result.append(recipe)
+                continue
+            # Число серий — по пределу, вниз: предел с допуском — это
+            # «примерно 5 % или чуть больше», а округление вверх
+            # перескакивало через него (6 серий интервала — это 9,1 % при
+            # недельных 57 км, а не «примерно 8 %»).
+            reps = max(1, int(target_m // series_m))
+            new_sets = (RecipeSet(
+                reps_min=reps,
+                reps_max=reps,
+                segments=recipe_set.segments,
+                label=recipe_set.label,
+            ),) + recipe.sets[1:]
+            result.append(replace(recipe, sets=new_sets))
+        return result
+
     def _scaled_recipes(self, data: WeekPlanInput) -> list[WorkoutRecipe]:
         """Рецепты недели, подчинённые ограничениям по объёму.
 
@@ -435,7 +538,7 @@ class WeekPlanner:
         Ограничения берутся из недели **плана**: у лишней недели план из
         хвоста фазы, значит и пределы её.
         """
-        recipes = self._recipes_for(data)
+        recipes = self._reps_by_volume(data)
         if not recipes or data.run_km <= 0:
             return recipes
 

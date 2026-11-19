@@ -101,6 +101,7 @@
   "1": [
    {
     "caps": [],
+    "cooldown_km": 0.0,
     "notes": [
      "7 дней в неделю Л-темп (достаточный для желательного недельного километража).",
      "3-4 дня дополнительные тренировки (глава 10)."
@@ -115,10 +116,12 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 1
    },
    {
     "caps": [],
+    "cooldown_km": 0.0,
     "notes": [
      "7 дней в неделю Л-темп. 3-4 дня дополнительные тренировки (глава 10)."
     ],
@@ -132,10 +135,12 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 2
    },
    {
     "caps": [],
+    "cooldown_km": 0.0,
     "notes": [
      "7 дней в неделю Л-темп. 3-4 дня дополнительные тренировки (глава 10)."
     ],
@@ -149,10 +154,12 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 3
    },
    {
     "caps": [],
+    "cooldown_km": 0.0,
     "notes": [
      "7 дней в неделю Л-темп. Один Д-забег (25% недельного километража или 1,5 ч).",
      "6-8 коротких быстрых отрезков в неделю, по меньшей мере к четырём Л-забегам."
@@ -174,10 +181,12 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 4
    },
    {
     "caps": [],
+    "cooldown_km": 0.0,
     "notes": [
      "7 дней в неделю Л-темп. Один Д-забег. 6-8 коротких быстрых отрезков в неделю."
     ],
@@ -198,10 +207,12 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 5
    },
    {
     "caps": [],
+    "cooldown_km": 0.0,
     "notes": [
      "7 дней в неделю Л-темп. Один Д-забег. 6-8 коротких быстрых отрезков в неделю."
     ],
@@ -222,6 +233,7 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 6
    }
   ],
@@ -231,35 +243,31 @@
      {
       "ceiling_km": null,
       "fraction_of_week": 0.05,
+      "tolerance": 1.2,
       "zone": "R"
      },
      {
       "ceiling_km": 10.0,
       "fraction_of_week": 0.08,
+      "tolerance": 1.05,
       "zone": "I"
      }
     ],
+    "cooldown_km": 1.0,
     "notes": [],
     "phase": 2,
     "sessions": [
      {
-      "body": "5-6x(2x200m@R + 200m@E) + 1x400m@R + 400m@E",
-      "flat": [
-       {
-        "alternatives": [],
-        "distance_m": 400.0,
-        "minutes": null,
-        "seconds": null,
-        "zone": "E"
-       }
-      ],
+      "body": "4x(200m@R + 200m@E + 200m@R + 200m@E + 400m@R + 400m@E)",
+      "flat": [],
       "kind": "R",
       "label": "Работа в повторном темпе",
+      "reps_by_volume": true,
       "sets": [
        {
-        "label": "5-6×(200м Пв + 200м Пв + 200м Л)",
-        "reps_max": 6,
-        "reps_min": 5,
+        "label": "4×(200м Пв + 200м Л + 200м Пв + 200м Л + 400м Пв + 400м Л)",
+        "reps_max": 4,
+        "reps_min": 4,
         "segments": [
          {
           "alternatives": [],
@@ -267,6 +275,13 @@
           "minutes": null,
           "seconds": null,
           "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 200.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
          },
          {
           "alternatives": [],
@@ -281,34 +296,34 @@
           "minutes": null,
           "seconds": null,
           "zone": "E"
-         }
-        ]
-       },
-       {
-        "label": "1×(400м Пв)",
-        "reps_max": 1,
-        "reps_min": 1,
-        "segments": [
+         },
          {
           "alternatives": [],
           "distance_m": 400.0,
           "minutes": null,
           "seconds": null,
           "zone": "R"
+         },
+         {
+          "alternatives": [],
+          "distance_m": 400.0,
+          "minutes": null,
+          "seconds": null,
+          "zone": "E"
          }
         ]
        }
       ]
      },
      {
-      "body": "5-6x(1600m@T + 1min@E + 400m@E)",
+      "body": "5x(1600m@T + 1min@E)",
       "flat": [],
       "kind": "T",
       "label": "Работа в пороговом темпе",
       "sets": [
        {
-        "label": "5-6×(1600м П + 1мин Л + 400м Л)",
-        "reps_max": 6,
+        "label": "5×(1600м П + 1мин Л)",
+        "reps_max": 5,
         "reps_min": 5,
         "segments": [
          {
@@ -324,69 +339,71 @@
           "minutes": 1.0,
           "seconds": null,
           "zone": "E"
-         },
-         {
-          "alternatives": [],
-          "distance_m": 400.0,
-          "minutes": null,
-          "seconds": null,
-          "zone": "E"
          }
         ]
        }
       ]
      },
      {
-      "body": "2min@I + 1min@E + 1min@I + 30s@E + 30s@I + 30s@E",
-      "flat": [
-       {
-        "alternatives": [],
-        "distance_m": null,
-        "minutes": 2.0,
-        "seconds": null,
-        "zone": "I"
-       },
-       {
-        "alternatives": [],
-        "distance_m": null,
-        "minutes": 1.0,
-        "seconds": null,
-        "zone": "E"
-       },
-       {
-        "alternatives": [],
-        "distance_m": null,
-        "minutes": 1.0,
-        "seconds": null,
-        "zone": "I"
-       },
-       {
-        "alternatives": [],
-        "distance_m": null,
-        "minutes": null,
-        "seconds": 30.0,
-        "zone": "E"
-       },
-       {
-        "alternatives": [],
-        "distance_m": null,
-        "minutes": null,
-        "seconds": 30.0,
-        "zone": "I"
-       },
-       {
-        "alternatives": [],
-        "distance_m": null,
-        "minutes": null,
-        "seconds": 30.0,
-        "zone": "E"
-       }
-      ],
+      "body": "5x(2min@I + 1min@E + 1min@I + 30s@E + 30s@I + 30s@E)",
+      "flat": [],
       "kind": "I",
       "label": "Работа в интервальном темпе",
-      "sets": []
+      "reps_by_volume": true,
+      "sets": [
+       {
+        "label": "5×(2мин И + 1мин Л + 1мин И + 30с Л + 30с И + 30с Л)",
+        "reps_max": 5,
+        "reps_min": 5,
+        "segments": [
+         {
+          "alternatives": [],
+          "distance_m": null,
+          "minutes": 2.0,
+          "seconds": null,
+          "zone": "I"
+         },
+         {
+          "alternatives": [],
+          "distance_m": null,
+          "minutes": 1.0,
+          "seconds": null,
+          "zone": "E"
+         },
+         {
+          "alternatives": [],
+          "distance_m": null,
+          "minutes": 1.0,
+          "seconds": null,
+          "zone": "I"
+         },
+         {
+          "alternatives": [],
+          "distance_m": null,
+          "minutes": null,
+          "seconds": 30.0,
+          "zone": "E"
+         },
+         {
+          "alternatives": [],
+          "distance_m": null,
+          "minutes": null,
+          "seconds": 30.0,
+          "zone": "I"
+         },
+         {
+          "alternatives": [],
+          "distance_m": null,
+          "minutes": null,
+          "seconds": 30.0,
+          "zone": "E"
+         }
+        ]
+       }
+      ]
      }
     ],
+    "warmup_km": 3.0,
     "week": 7
    },
    {
@@ -394,9 +411,11 @@
      {
       "ceiling_km": null,
       "fraction_of_week": 0.05,
+      "tolerance": 1.0,
       "zone": "R"
      }
     ],
+    "cooldown_km": 0.0,
     "notes": [],
     "phase": 2,
     "sessions": [
@@ -559,6 +578,7 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 8
    },
    {
@@ -566,9 +586,11 @@
      {
       "ceiling_km": null,
       "fraction_of_week": 0.08,
+      "tolerance": 1.0,
       "zone": "I"
      }
     ],
+    "cooldown_km": 0.0,
     "notes": [],
     "phase": 2,
     "sessions": [
@@ -659,6 +681,7 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 9
    },
    {
@@ -666,9 +689,11 @@
      {
       "ceiling_km": null,
       "fraction_of_week": 0.05,
+      "tolerance": 1.0,
       "zone": "R"
      }
     ],
+    "cooldown_km": 0.0,
     "notes": [],
     "phase": 2,
     "sessions": [
@@ -752,6 +777,7 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 10
    },
    {
@@ -759,14 +785,17 @@
      {
       "ceiling_km": null,
       "fraction_of_week": 0.05,
+      "tolerance": 1.0,
       "zone": "R"
      },
      {
       "ceiling_km": 10.0,
       "fraction_of_week": 0.08,
+      "tolerance": 1.0,
       "zone": "I"
      }
     ],
+    "cooldown_km": 0.0,
     "notes": [],
     "phase": 2,
     "sessions": [
@@ -893,10 +922,12 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 11
    },
    {
     "caps": [],
+    "cooldown_km": 0.0,
     "notes": [],
     "phase": 2,
     "sessions": [
@@ -1037,6 +1068,7 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 12
    }
   ],
@@ -1046,9 +1078,11 @@
      {
       "ceiling_km": 10.0,
       "fraction_of_week": 0.08,
+      "tolerance": 1.0,
       "zone": "I"
      }
     ],
+    "cooldown_km": 0.0,
     "notes": [],
     "phase": 3,
     "sessions": [
@@ -1176,6 +1210,7 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 13
    },
    {
@@ -1183,9 +1218,11 @@
      {
       "ceiling_km": 10.0,
       "fraction_of_week": 0.08,
+      "tolerance": 1.0,
       "zone": "I"
      }
     ],
+    "cooldown_km": 0.0,
     "notes": [],
     "phase": 3,
     "sessions": [
@@ -1255,6 +1292,7 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 14
    },
    {
@@ -1262,9 +1300,11 @@
      {
       "ceiling_km": 10.0,
       "fraction_of_week": 0.08,
+      "tolerance": 1.0,
       "zone": "I"
      }
     ],
+    "cooldown_km": 0.0,
     "notes": [],
     "phase": 3,
     "sessions": [
@@ -1427,6 +1467,7 @@
       ]
      }
     ],
+    "warmup_km": 0.0,
     "week": 15
    },
    {
@@ -1434,9 +1475,11 @@
      {
       "ceiling_km": null,
       "fraction_of_week": 0.05,
+      "tolerance": 1.0,
       "zone": "R"
      }
     ],
+    "cooldown_km": 0.0,
     "notes": [],
     "phase": 3,
     "sessions": [
@@ -1670,6 +1713,7 @@
       ]
      }
     ],
+    "warmup_km": 0.0,
     "week": 16
    },
    {
@@ -1677,9 +1721,11 @@
      {
       "ceiling_km": 10.0,
       "fraction_of_week": 0.08,
+      "tolerance": 1.0,
       "zone": "I"
      }
     ],
+    "cooldown_km": 0.0,
     "notes": [],
     "phase": 3,
     "sessions": [
@@ -1764,6 +1810,7 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 17
    },
    {
@@ -1771,14 +1818,17 @@
      {
       "ceiling_km": 10.0,
       "fraction_of_week": 0.08,
+      "tolerance": 1.0,
       "zone": "I"
      },
      {
       "ceiling_km": null,
       "fraction_of_week": 0.05,
+      "tolerance": 1.0,
       "zone": "R"
      }
     ],
+    "cooldown_km": 0.0,
     "notes": [],
     "phase": 3,
     "sessions": [
@@ -1919,6 +1969,7 @@
       ]
      }
     ],
+    "warmup_km": 0.0,
     "week": 18
    }
   ],
@@ -1928,9 +1979,11 @@
      {
       "ceiling_km": 10.0,
       "fraction_of_week": 0.08,
+      "tolerance": 1.0,
       "zone": "I"
      }
     ],
+    "cooldown_km": 0.0,
     "notes": [],
     "phase": 4,
     "sessions": [
@@ -2109,6 +2162,7 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 19
    },
    {
@@ -2116,9 +2170,11 @@
      {
       "ceiling_km": 10.0,
       "fraction_of_week": 0.08,
+      "tolerance": 1.0,
       "zone": "I"
      }
     ],
+    "cooldown_km": 0.0,
     "notes": [],
     "phase": 4,
     "sessions": [
@@ -2250,6 +2306,7 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 20
    },
    {
@@ -2257,9 +2314,11 @@
      {
       "ceiling_km": 10.0,
       "fraction_of_week": 0.08,
+      "tolerance": 1.0,
       "zone": "I"
      }
     ],
+    "cooldown_km": 0.0,
     "notes": [],
     "phase": 4,
     "sessions": [
@@ -2380,6 +2439,7 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 21
    },
    {
@@ -2387,9 +2447,11 @@
      {
       "ceiling_km": 10.0,
       "fraction_of_week": 0.08,
+      "tolerance": 1.0,
       "zone": "I"
      }
     ],
+    "cooldown_km": 0.0,
     "notes": [],
     "phase": 4,
     "sessions": [
@@ -2545,10 +2607,12 @@
       ]
      }
     ],
+    "warmup_km": 0.0,
     "week": 22
    },
    {
     "caps": [],
+    "cooldown_km": 0.0,
     "notes": [
      "Соревнования — пятницы и субботы."
     ],
@@ -2657,10 +2721,12 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 23
    },
    {
     "caps": [],
+    "cooldown_km": 0.0,
     "notes": [],
     "phase": 4,
     "sessions": [
@@ -2738,6 +2804,7 @@
       "sets": []
      }
     ],
+    "warmup_km": 0.0,
     "week": 24
    }
   ]

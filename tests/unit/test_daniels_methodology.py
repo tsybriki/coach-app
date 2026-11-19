@@ -157,9 +157,16 @@ def test_cap_limits_follow_week_volume(plan):
     assert r_cap.ceiling_km is None
     assert i_cap is not None and i_cap.fraction_of_week == 0.08
     assert i_cap.ceiling_km == 10.0
-    # 35 км в неделю: 5 % = 1.75 км, 8 % = 2.8 км
-    assert r_cap.limit_km(35) == pytest.approx(1.75)
-    assert i_cap.limit_km(35) == pytest.approx(2.8)
+    # 35 км в неделю: 5 % = 1.75 км с допуском 1.2 → 2.1 км;
+    # 8 % = 2.8 км с допуском 1.05 → 2.94 км.
+    #
+    # Допуск — рабочее правило (Кирилл, 19.11.2026): «примерно 5 % или
+    # чуть больше» и «примерно 8 %». Без допуска работа выбрасывалась
+    # целиком из-за лишних сотен метров.
+    assert r_cap.tolerance == pytest.approx(1.2)
+    assert i_cap.tolerance == pytest.approx(1.05)
+    assert r_cap.limit_km(35) == pytest.approx(2.1)
+    assert i_cap.limit_km(35) == pytest.approx(2.94)
 
 
 def test_cap_ceiling_wins_for_big_week(plan):
@@ -201,14 +208,15 @@ def test_segment_duration_uses_pace_of_its_zone(pace_by_zone=None):
 def test_recipe_volume_counts_minimum_reps(plan):
     """Объём рецепта считается по нижней границе повторов.
 
-    Неделя 7 фазы II: «5-6 × (2 × 200 м Пв + 200 м Л) + 1 × 400 м Пв +
-    400 м Л». Нижняя граница — 5 повторов: в зоне R это 5 × 400 = 2000 м
-    плюс отдельный 400 м — 2400 м.
+    Неделя 7 фазы II: серия «200 м Пв, 200 м трусцой, 200 м Пв, 200 м
+    трусцой, 400 м Пв, 400 м трусцой» — в зоне R это 800 м на серию.
+    Число серий — 4 (считается по объёму недели, см.
+    `test_week7_structure.py`), значит 3200 м.
     """
     entry = plan.week(2, 7)
     r_recipe = next(r for r in entry.recipes if r.kind == "R")
     volumes = recipe_zone_volume_m(r_recipe)
-    assert volumes[ZONE_REPETITION] == pytest.approx(2400.0)
+    assert volumes[ZONE_REPETITION] == pytest.approx(3200.0)
 
 
 def test_scale_recipe_cuts_reps_to_fit_limit(plan):
@@ -217,7 +225,9 @@ def test_scale_recipe_cuts_reps_to_fit_limit(plan):
     r_recipe = next(r for r in entry.recipes if r.kind == "R")
     scaled = scale_recipe(r_recipe, ZONE_REPETITION, 400.0)
     volumes = recipe_zone_volume_m(scaled)
-    assert volumes[ZONE_REPETITION] <= 400.0
+    # Набор урезан не может — одна серия в зоне R это уже 800 м, больше
+    # предела. Тогда набор уходит целиком, и объём зоны пуст.
+    assert volumes.get(ZONE_REPETITION, 0.0) <= 400.0
 
 
 def test_scale_recipe_leaves_fitting_recipe_alone(plan):

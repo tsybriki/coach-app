@@ -28,7 +28,7 @@ from typing import Any
 
 import pytest
 
-from app.adapters.daniels import load_plan
+from app.adapters.daniels import load_paces, load_plan
 from app.domain.methodology import MethodPlan, recipe_zone_volume_m
 
 REPO = Path(__file__).resolve().parent.parent.parent
@@ -78,6 +78,16 @@ def _race(season_plan: dict[str, Any]) -> tuple[date, str]:
     )
     assert race is not None, "у основной цели нет гонки"
     return date.fromisoformat(race["date"]), primary["id"]
+
+
+def _current_vdot() -> float:
+    """Текущий VDOT атлета — из профиля по таблице Дэниэлса."""
+    profile = PIPELINE_STATE / "daniels_profile.json"
+    try:
+        data = json.loads(profile.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 48.0
+    return float(data.get("vdot") or 48.0)
 
 
 def _horizon(season_plan: dict[str, Any]) -> int:
@@ -298,6 +308,9 @@ def test_macro_work_matches_program_week(
     """
     horizon = _horizon(season_plan)
     macro = {w["season_week"]: w for w in season_plan.get("weekly_macro") or []}
+    # Объём зоны считается с темпами: куски, заданные временем (2 мин в
+    # интервальном темпе), без темпов в метры не переводятся.
+    pace_by_zone = load_paces(REFERENCE).pace_by_zone(_current_vdot())
 
     for season_week in range(1, horizon + 1):
         entry = macro[season_week]
@@ -315,7 +328,7 @@ def test_macro_work_matches_program_week(
         for recipe in program_entry.recipes:
             if recipe.kind == "RACE":
                 continue
-            for zone, value in recipe_zone_volume_m(recipe).items():
+            for zone, value in recipe_zone_volume_m(recipe, pace_by_zone).items():
                 expected[zone] = expected.get(zone, 0.0) + value
 
         for zone, value in expected.items():
