@@ -1279,6 +1279,8 @@ def _athlete_dict(container: AppContainer) -> dict[str, Any]:
         "form_code": profile.form or "",
         # FTP — пороговая мощность. Без неё нагрузка (TSS) не считается.
         "ftp_w": profile.ftp_w,
+        # Сколько беговых сессий в неделю — форма спортсмена.
+        "runs_per_week": profile.runs_per_week,
     }
 
 

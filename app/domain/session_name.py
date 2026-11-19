@@ -96,6 +96,19 @@ BASE_BY_KIND = {
     "strength": "Силовая",
 }
 
+# Виды работы из программы Дэниэлса — по-русски.
+#
+# Коды зон программы (R — повторный темп, T — пороговый, I —
+# интервальный) не читаются в карточке: «Тренировка + отрезки» не
+# говорит, какая это работа. Здесь она называется своей.
+DANIELS_KIND_NAMES = {
+    "r": "Работа в повторном темпе",
+    "t": "Работа в пороговом темпе",
+    "i": "Работа в интервальном темпе",
+    "m": "Работа в марафонском темпе",
+    "acc": "Бег с ускорением",
+}
+
 # Названия по виду спорта — когда вид работы изнутри не читается.
 BASE_BY_SPORT = {
     Sport.BIKE: "Велосипед",
@@ -109,15 +122,17 @@ BASE_BY_SPORT = {
 def _has_strides(steps: list[Step]) -> bool:
     """Есть ли в сессии отрезки.
 
-    Отрезок — шаг с зоной Дэниэлса `R` (интенсивный) или `I`: обычный
-    лёгкий шаг помечен `E`.
+    Отрезок — шаг с явной меткой `strides`: он идёт **добавкой** к
+    основной работе, и название должно сказать об этом.
+
+    Серия в повторном или интервальном темпе — это **сама работа**, а не
+    добавка: «Работа в повторном темпе + отрезки» называет одно и то же
+    дважды. Поэтому по `set_reps` отрезки не определяются — этот признак
+    есть и у самой работы.
     """
     for step in steps:
         fv = step.focus_value or {}
-        zone = fv.get("daniels_zone")
-        if zone in ("R", "I"):
-            return True
-        if fv.get("set_reps") and fv.get("pace_min_per_km"):
+        if fv.get("strides"):
             return True
     return False
 
@@ -133,6 +148,10 @@ def _base_name(kind: str | None, sport: Sport | None,
     name = BASE_BY_KIND.get((kind or "").lower())
     if name:
         return name
+    # Код зоны программы Дэниэлса (R/T/I) — работа известного вида.
+    daniels_name = DANIELS_KIND_NAMES.get((kind or "").lower())
+    if daniels_name:
+        return daniels_name
     if sport is not None:
         name = BASE_BY_SPORT.get(sport)
         if name:

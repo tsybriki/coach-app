@@ -281,6 +281,10 @@ def plan_from_macro(season: Season,
         reserved_km=cp_workout_km,
         reserved_runs=1 if cp_workout is not None else 0,
         reserved_slots=(cp_slot.id,) if cp_slot is not None else (),
+        # Тест сам является качественной работой недели: программа
+        # Дэниэлса на этой неделе отступает, иначе неделя называет два
+        # разных темпа — темп теста и темп программы.
+        control_point_owns_quality=cp_workout is not None,
     ))
 
     # Вел, плавание и ОФП — в окна, оставшиеся от пробежек.
@@ -288,7 +292,6 @@ def plan_from_macro(season: Season,
         volume, season,
         reserved={cp_slot.id} if cp_slot is not None else set(),
         occupied=_occupied_minutes(planned.assignments),
-        skip_ofp=_ofp_inside_runs(planner, season, season_week, race_week),
     )
 
     planned = _merge_others(planned, others, season)
@@ -502,21 +505,6 @@ def _pace_seconds(pace: str | None) -> float | None:
         return None
 
 
-def _ofp_inside_runs(planner: WeekPlanner, season: Season,
-                     season_week: int, race_week: bool) -> bool:
-    """ОФП этой недели — внутри пробежек, а не отдельными тренировками.
-
-    Форма фазы добавляет ОФП в конец пробежки («к трём из семи
-    тренировок — ОФП в конце»). Если поставить ещё и отдельные тренировки
-    ОФП из макро, неделя покажет ОФП дважды.
-    """
-    if race_week:
-        return False
-    horizon = weeks_to_race(season, season.horizon_start)
-    shape = planner.phase_shape_for(season_week, horizon)
-    return bool(shape and shape.ofp_minutes > 0 and shape.ofp_runs > 0)
-
-
 def _occupied_minutes(assignments: list[Assignment]) -> dict[str, int]:
     """Сколько минут занято в каждом окне.
 
@@ -536,7 +524,6 @@ def _plan_other_sports(volume: MacroVolume, season: Season,
                        taken: set[str] | None = None,
                        reserved: set[str] | None = None,
                        occupied: dict[str, int] | None = None,
-                       skip_ofp: bool = False,
                        ) -> tuple[list[Workout], set[str]]:
     """Вел, плавание и ОФП — по объёму макро, раскладка — по слотам среды.
 
@@ -552,10 +539,6 @@ def _plan_other_sports(volume: MacroVolume, season: Season,
     for sport in (Sport.BIKE, Sport.SWIM, Sport.OFP):
         minutes = int(volume.minutes.get(sport, 0))
         if minutes <= 0:
-            continue
-        # ОФП внутри пробежек — отдельными тренировками не делаем: иначе
-        # неделя покажет ОФП дважды.
-        if sport is Sport.OFP and skip_ofp:
             continue
         # Разбивка из макро: «2×25м» — две тренировки по 25 минут, а не
         # одна на 50. Без разбивки число сессий не сходится с планом.
@@ -770,6 +753,7 @@ def propose_week(season: Season,
         reserved_km=_workout_km(cp_workout) if cp_workout else 0.0,
         reserved_runs=1 if cp_workout is not None else 0,
         reserved_slots=(cp_slot.id,) if cp_slot is not None else (),
+        control_point_owns_quality=cp_workout is not None,
     ))
 
     # Вел, плавание и ОФП — в окна, оставшиеся от пробежек.
@@ -777,8 +761,6 @@ def propose_week(season: Season,
         macro, season,
         reserved={cp_slot.id} if cp_slot is not None else set(),
         occupied=_occupied_minutes(planned.assignments),
-        skip_ofp=_ofp_inside_runs(
-            planner, season, current.season_week, race_week),
     )
 
     planned = _merge_others(planned, others, season)

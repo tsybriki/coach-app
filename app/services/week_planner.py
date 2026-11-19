@@ -21,7 +21,7 @@ from dataclasses import dataclass, replace
 from datetime import date
 from typing import Any
 
-from app.domain.derivations import merged_slots
+from app.domain.derivations import merged_slots, steps_distance_km
 from app.domain.entities import (
     Assignment,
     Athlete,
@@ -56,6 +56,18 @@ from app.domain.session_name import easy_pace_sec_per_km, session_name
 # меньше» (правило Дэниэлса). Без потолка длинный пробежек растёт с
 # километражом недели и перестаёт быть длинным пробежком.
 LONG_MAX_MIN = 90
+
+# Минимальная длина беговой сессии — 5 км.
+#
+# Пробежка короче 5 км не делается: за 15 минут в зале кардиограмма не
+# даёт ничего, а день занимается. Остаток, который в 5 км не влезает,
+# идёт в следующую пробежку — поэтому 9 км на две сессии — это 5+5,
+# а не 4,5+4,5.
+MIN_RUN_KM = 5.0
+
+# Доля недельного километража в длинном беге — правило Дэниэлса:
+# «25 % недельного километража или 1,5 ч — что меньше».
+LONG_FRACTION = 0.25
 
 
 @dataclass
@@ -119,6 +131,10 @@ class WeekPlanInput:
     reserved_runs: int = 0
     # Окна, занятые контрольной точкой: их нельзя отдавать под бег.
     reserved_slots: tuple[str, ...] = ()
+    # Контрольная точка сама является качественной работой недели: в её
+    # неделю программа Дэниэлса отступает, иначе неделя называет два
+    # разных темпа — темп теста и темп программы.
+    control_point_owns_quality: bool = False
 
 
 @dataclass
@@ -150,6 +166,49 @@ def shift_time(start: str, offset_minutes: int) -> str:
         return f"{total // 60:02d}:{total % 60:02d}"
     except ValueError:
         return start
+
+
+def split_runs_km(kilometers: float, runs: int) -> list[float]:
+    """Лёгкий километраж недели — на `runs` пробежек.
+
+    Правила (Кирилл, 18.11.2026):
+
+    - сессия короче 5 км не делается;
+    - 9 км на две сессии — 5+5: остаток, который не влезает в 5 км,
+      не растаскивается по двум сессиям по 4,5 км, а идёт в следующую.
+
+    Если ровное деление даёт части короче 5 км, объём собирается блоками
+    по 5 км: 9 км — это 5+5, а не 4,5+4,5. Километраж при этом
+    округляется вверх: неделя набирает чуть больше, но каждая пробежка
+    остаётся пробежкой, а не забегом в зал.
+    """
+    if kilometers <= 0 or runs <= 0:
+        return []
+    if runs == 1:
+        return [kilometers]
+    each = kilometers / runs
+    if each >= MIN_RUN_KM:
+        return [each] * runs
+    # На сессию приходится меньше 5 км: собираем блоками по 5 км.
+    count = max(1, int(-(-kilometers // MIN_RUN_KM)))
+    return [MIN_RUN_KM] * count
+
+
+def _long_run_km(run_km: float, pace_by_zone: dict[str, float]) -> float:
+    """Длинный бег недели — километрами.
+
+    Правило Дэниэлса: 25 % недельного километража или 1,5 часа, что
+    меньше. Часы — это потолок: без него длинный пробежек растёт с
+    недельным километражом и перестаёт быть длинным пробежком.
+    """
+    if run_km <= 0:
+        return 0.0
+    by_share = run_km * LONG_FRACTION
+    pace = easy_pace_sec_per_km(pace_by_zone)
+    if not pace:
+        return round(by_share, 2)
+    by_time = LONG_MAX_MIN * 60.0 / pace
+    return round(min(by_share, by_time), 2)
 
 
 def _split_easy_km(kilometers: float, runs: int) -> list[float]:
@@ -383,7 +442,8 @@ class WeekPlanner:
         entry = self._plan.week(*self._plan_position(data))
         if entry is None or not entry.caps:
             return recipes
-        return apply_week_caps(recipes, entry.caps, data.run_km)
+        pace_by_zone = self._paces.pace_by_zone(self._athlete.vdot)
+        return apply_week_caps(recipes, entry.caps, data.run_km, pace_by_zone)
 
     def _program_position(self, data: WeekPlanInput) -> tuple[int, int]:
         """Неделя программы для недели сезона."""
@@ -407,118 +467,236 @@ class WeekPlanner:
 
     def _plan_sessions(self, data: WeekPlanInput,
                        slots: list[Slot] | None = None) -> list[_PlannedSession]:
-        """Тренировки недели: качество из правил, остальное — из макро.
+        """Тренировки недели.
 
-        Порядок: сначала качественная работа (её кладут в лучшие слоты),
-        потом длинный бег, потом лёгкий остаток.
+        Порядок сборки (Кирилл, 18.11.2026):
+
+        1. недельный километраж — из макро;
+        2. скелеты качественных тренировок и ограничения — из программы
+           Дэниэлса;
+        3. объём качественных сессий — с учётом ограничений;
+        4. остаток недели — лёгкий бег;
+        5. число беговых сессий — из профиля атлета.
+
+        Качественная работа идёт **первой**: её объём известен, и остаток
+        недели считается от того, что осталось.
+
+        В неделю контрольной точки качественная работа — это тест:
+        программа Дэниэлса на этой неделе отступает, иначе неделя называет
+        два разных темпа.
         """
         recipes = self._scaled_recipes(data)
         pace_by_zone = self._paces.pace_by_zone(self._athlete.vdot)
-        available = slots if slots is not None else list(data.slots)
 
-        run_targets = [t for t in data.targets if t.sport is Sport.RUN]
         other_targets = [t for t in data.targets if t.sport is not Sport.RUN]
-        run_minutes = sum(t.duration_min for t in run_targets)
 
         sessions: list[_PlannedSession] = []
 
-        used_minutes = 0.0
-        for recipe in recipes:
-            if recipe.kind == "RACE":
-                # Гонка — событие недели, а не тренировка: её дистанция и
-                # время зависят от конкретной гонки, а правила их не задают.
-                # В план недели она не входит: план — это тренировки, а гонка
-                # живёт в сезоне (календарь гонок).
-                continue
-            if not recipe.is_quality:
-                continue
-            # Длительность — по фактическим шагам, а не по рецепту: шаги
-            # округлены, и разница иначе уходит в лёгкую часть недели.
-            steps = self._recipe_steps(recipe, pace_by_zone)
-            duration = sum(step.duration_min for step in steps)
-            if duration <= 0:
-                continue
-            # Запрос — в целых минутах (длительность запроса — целое число).
-            # Округляем здесь, чтобы остаток недели считался от того же
-            # числа: иначе сумма целей разойдётся с объёмом недели.
-            request_minutes = int(round(duration))
-            used_minutes += request_minutes
-            sessions.append(_PlannedSession(
-                target=WeeklyTarget(
-                    sport=Sport.RUN,
-                    duration_min=request_minutes,
-                    focus=recipe.label,
-                    kind=recipe.kind.lower(),
-                    quality={"recipe": recipe.label},
-                ),
-                recipe=recipe,
-            ))
+        # ── 1. Качественная работа: скелеты из программы Дэниэлса,
+        #    объём урезан по ограничениям недели.
+        quality_sessions: list[_PlannedSession] = []
+        quality_km = 0.0
+        if not data.control_point_owns_quality:
+            for recipe in recipes:
+                if recipe.kind == "RACE":
+                    # Гонка — событие недели, а не тренировка: её дистанция
+                    # и время зависят от конкретной гонки, а правила их не
+                    # задают. В план недели она не входит: план — это
+                    # тренировки, а гонка живёт в сезоне.
+                    continue
+                if not recipe.is_quality:
+                    continue
+                # Длительность — по фактическим шагам, а не по рецепту: шаги
+                # округлены, и разница иначе уходит в лёгкую часть недели.
+                steps = self._recipe_steps(recipe, pace_by_zone)
+                duration = sum(step.duration_min for step in steps)
+                if duration <= 0:
+                    continue
+                # Запрос — в целых минутах (длительность запроса — целое
+                # число). Округляем здесь, чтобы остаток недели считался
+                # от того же числа: иначе сумма целей разойдётся с объёмом
+                # недели.
+                request_minutes = int(round(duration))
+                quality_km += steps_distance_km(steps)
+                quality_sessions.append(_PlannedSession(
+                    target=WeeklyTarget(
+                        sport=Sport.RUN,
+                        duration_min=request_minutes,
+                        focus=recipe.label,
+                        kind=recipe.kind.lower(),
+                        quality={"recipe": recipe.label},
+                    ),
+                    recipe=recipe,
+                ))
+        sessions.extend(quality_sessions)
 
-        for target in run_targets:
-            if not target.long_min:
-                continue
-            # При форме фазы длинный бег собирает сама форма: иначе в
-            # неделе окажется две длинные пробежки — длинная из макро и
-            # длинная из правила Дэниэлса.
-            if self._phase_shape(data)[0] is not None:
-                continue
-            used_minutes += target.long_min
-            sessions.append(_PlannedSession(
-                target=WeeklyTarget(
-                    sport=target.sport,
-                    duration_min=target.long_min,
-                    focus=target.focus or "Длинный бег",
-                    kind="long",
-                ),
-            ))
+        # ── 2. Длинный бег: 25 % недельного километража или 1,5 ч.
+        #
+        # Длинный бег — расстоянием, а не временем: недельный километраж
+        # должен сойтись с макро, а время без темпа в километры не
+        # переводится.
+        #
+        # При форме фазы длинный бег собирает сама форма: иначе в неделе
+        # окажется две длинные пробежки — длинная из макро и длинная из
+        # правила Дэниэлса.
+        shape, _program_week = self._phase_shape(data)
+        shape_sessions = self._shape_runs(data)
+        long_km = 0.0
+        if not shape_sessions:
+            long_km = _long_run_km(data.run_km, pace_by_zone)
+            if long_km > 0:
+                long_session = self._distance_run_session(
+                    long_km, "long", "Длинный бег", pace_by_zone)
+                if long_session is not None:
+                    sessions.append(long_session)
 
         for target in other_targets:
             sessions.append(_PlannedSession(target=target))
 
-        # Форма фазы — правило Дэниэлса о числе пробежек и их структуре.
-        # Если форма есть, она главнее: «7 дней в неделю Л-темп» — это
-        # семь пробежек, а не «сколько останется после деления».
+        # ── 3. Форма фазы — если она есть, она главнее.
         #
-        # Форма задаёт и длинный бег: отдельный «длинный» из макро при
-        # форме был бы второй длинной пробежкой в неделе.
-        shape, _program_week = self._phase_shape(data)
-        shape_sessions = self._shape_runs(data)
+        # Форма задаёт число пробежек и их структуру: «7 дней в неделю
+        # Л-темп» — это семь пробежек, а не «сколько останется после
+        # деления». Но форма — это правило для фазы I; в фазах, где её
+        # нет, число пробежек определяет профиль атлета.
         if shape_sessions:
             sessions.extend(shape_sessions)
-            used_minutes += sum(
-                s.target.duration_min for s in shape_sessions)
-
-        # Лёгкий остаток — на столько пробежек, сколько задаёт макро.
-        #
-        # Пробежки раскладываются **последними**: окно занимает одна
-        # тренировка, и качественная работа с длинным бегом и прочие виды
-        # спорта берут свои окна первыми. Число пробежек — из макро
-        # (`easy_runs`): иначе макро и собранная неделя называют разное
-        # число тренировок.
-        #
-        # Если форма фазы собрала пробежки сама — остаток не делится
-        # ещё раз: иначе неделя получает восьмую, девятую пробежку.
-        remaining = max(run_minutes - used_minutes, 0)
-        if remaining > 0 and not shape_sessions:
-            runs = data.easy_runs
-            if runs <= 0:
-                runs = _easy_runs_by_slots(remaining, available, set())
-            # Описание лёгкой пробежки — её собственное («Лёгкий бег»),
-            # а не цель недели: карточка пробежки не должна говорить,
-            # что она проверяет форму на контрольной точке.
-            focus = data.targets[0].focus if data.targets else ""
-            focus = focus or "Лёгкий бег"
-            for minutes in _split_easy(remaining, runs):
-                sessions.append(_PlannedSession(
-                    target=WeeklyTarget(
-                        sport=Sport.RUN,
-                        duration_min=int(minutes),
-                        focus=focus,
-                        kind="easy",
-                    ),
-                ))
-
+        else:
+            sessions.extend(self._easy_runs_for_profile(
+                data, quality_km, long_km, len(quality_sessions),
+                pace_by_zone))
         return sessions
+
+    def _easy_runs_for_profile(self, data: WeekPlanInput,
+                               quality_km: float,
+                               long_km: float,
+                               quality_runs: int,
+                               pace_by_zone: dict[str, float],
+                               ) -> list[_PlannedSession]:
+        """Лёгкие пробежки недели — по форме профиля атлета.
+
+        Число беговых сессий недели — из профиля: это его форма, а не
+        следствие деления объёма. Профиль задаёт **все** беговые сессии
+        недели, поэтому длинная, качественные и контрольная точка входят
+        в это число.
+
+        Остаток недели — лёгкий бег. Километраж недели известен (макро),
+        качественная работа, длинный бег и тест из него вычтены — остаётся
+        лёгкий остаток, который делится на число сессий.
+
+        Сессия короче 5 км не делается: пробежка разбивается на части
+        по 5 км, а остаток уходит в следующую.
+
+        Профиль не задан (нет числа беговых сессий) — запасной путь:
+        число пробежек берётся из макро, а объём делится минутами.
+        """
+        runs_total = self._athlete.runs_per_week
+        easy_km = max(
+            data.run_km - quality_km - long_km - data.reserved_km, 0.0)
+        if runs_total <= 0:
+            return self._easy_runs_from_macro(data, easy_km)
+        # Контрольная точка занимает одну пробежку недели.
+        runs_total = max(runs_total - data.reserved_runs, 1)
+        # Длинная и качественные — уже заняли свои сессии.
+        easy_runs = runs_total - (1 if long_km > 0 else 0) - quality_runs
+        if easy_runs <= 0:
+            return []
+        parts = split_runs_km(easy_km, easy_runs)
+        sessions: list[_PlannedSession] = []
+        for km in parts:
+            session = self._distance_run_session(
+                km, "easy", "Лёгкий бег", pace_by_zone)
+            if session is not None:
+                sessions.append(session)
+        return sessions
+
+    def _easy_runs_from_macro(self, data: WeekPlanInput,
+                              easy_km: float) -> list[_PlannedSession]:
+        """Запасной путь: профиль не задан — число пробежек из макро.
+
+        Километраж при этом тот же, что и в основном пути: недельный
+        объём задан макро, и без профиля он не перестаёт быть объёмом.
+        Число пробежек — из макро (`easy_runs`), а если его там нет —
+        по объёму: одна пробежка на 8 км.
+        """
+        if easy_km <= 0:
+            return self._easy_runs_by_minutes(data)
+        runs = data.easy_runs
+        if runs <= 0:
+            runs = max(1, round(easy_km / 8.0))
+        parts = split_runs_km(easy_km, runs)
+        sessions: list[_PlannedSession] = []
+        pace_by_zone = self._paces.pace_by_zone(self._athlete.vdot)
+        for km in parts:
+            session = self._distance_run_session(
+                km, "easy", "Лёгкий бег", pace_by_zone)
+            if session is not None:
+                sessions.append(session)
+        return sessions
+
+    def _easy_runs_by_minutes(self, data: WeekPlanInput) -> list[_PlannedSession]:
+        """Километраж не задан — делим минуты беговых целей.
+
+        Единственный случай, где объём известен только временем: план
+        собран без макро. Тогда пробежек столько, сколько помещается в
+        свободные окна, а объём делится поровну.
+        """
+        run_targets = [t for t in data.targets if t.sport is Sport.RUN]
+        run_minutes = sum(t.duration_min for t in run_targets)
+        if run_minutes <= 0:
+            return []
+        runs = data.easy_runs
+        if runs <= 0:
+            runs = _easy_runs_by_slots(run_minutes, data.slots, set())
+        sessions: list[_PlannedSession] = []
+        for minutes in _split_easy(run_minutes, runs):
+            sessions.append(_PlannedSession(
+                target=WeeklyTarget(
+                    sport=Sport.RUN,
+                    duration_min=int(minutes),
+                    focus="Лёгкий бег",
+                    kind="easy",
+                ),
+            ))
+        return sessions
+
+    def _distance_run_session(self, km: float, kind: str, name: str,
+                              pace_by_zone: dict[str, float],
+                              ) -> _PlannedSession | None:
+        """Пробежка заданной длины: шаг с дистанцией и темпом зоны.
+
+        Лёгкий бег — по 5:40 на километр (правило приложения). Длинный
+        бег — по тому же темпу: он и есть лёгкий бег, только длинный.
+        """
+        if km <= 0:
+            return None
+        pace = easy_pace_sec_per_km(pace_by_zone)
+        if not pace:
+            return None
+        minutes = km * pace / 60.0
+        steps = [Step(
+            id=f"run-{kind}",
+            role=StepRole.WORK,
+            sport=Sport.RUN,
+            target_type=TargetType.DISTANCE,
+            target_value=round(km * 1000.0, 1),
+            focus=FocusType.HR,
+            focus_value={
+                "zone": athlete_zone_for(ZONE_EASY, self._athlete) or "Z2",
+                "pace_min_per_km": format_pace(pace),
+            },
+            duration_min=round(minutes, 2),
+        )]
+        return _PlannedSession(
+            target=WeeklyTarget(
+                sport=Sport.RUN,
+                duration_min=int(round(minutes)),
+                focus=name,
+                kind=kind,
+            ),
+            steps=steps,
+            base_name=name,
+        )
 
     def _recipe_steps(self, recipe: WorkoutRecipe,
                      pace_by_zone: dict[str, float]) -> list[Step]:
@@ -1046,10 +1224,8 @@ class WeekPlanner:
         minutes = float(sum(w.duration_min for w in week.workouts))
         sessions = float(len(week.workouts))
         distance_m = sum(
-            float(step.target_value)
+            steps_distance_km(workout.steps) * 1000.0
             for workout in week.workouts
-            for step in workout.steps
-            if step.target_type == TargetType.DISTANCE
         )
         return {
             "hours": minutes / 60.0,

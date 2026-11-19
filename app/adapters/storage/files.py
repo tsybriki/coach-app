@@ -319,6 +319,7 @@ class FileStorage:
             injuries=data.get("injuries", []),
             form=data.get("form"),
             ftp_w=float(ftp) if ftp else None,
+            runs_per_week=int(data.get("runs_per_week", 0) or 0),
         )
 
     def update_athlete(self, athlete: Athlete) -> None:
@@ -332,6 +333,7 @@ class FileStorage:
             "injuries": athlete.injuries,
             "form": athlete.form,
             "ftp_w": athlete.ftp_w,
+            "runs_per_week": athlete.runs_per_week,
         })
 
     # ---------------------------------------------------------- низкий уровень: правила

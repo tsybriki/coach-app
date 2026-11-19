@@ -23,6 +23,52 @@ from app.domain.entities import (
 from app.domain.enums import FactSource, Sport, TargetType
 
 
+def steps_distance_km(steps: list[Any]) -> float:
+    """Километраж по шагам тренировки — в километрах.
+
+    Шаг с расстоянием даёт километры прямо. Шаг со временем (2 мин в
+    интервальном темпе) переводится в километры по темпу своей зоны —
+    иначе недельный объём считается неполно, а неделя выглядит короче,
+    чем она есть.
+    """
+    total = 0.0
+    for step in steps:
+        if step.target_type == TargetType.DISTANCE:
+            total += float(step.target_value)
+            continue
+        if step.target_type != TargetType.TIME:
+            continue
+        focus = step.focus_value or {}
+        pace = _pace_sec_from_focus(focus)
+        if not pace:
+            continue
+        total += float(step.target_value) * pace / 60.0
+    return total / 1000.0
+
+
+def workout_distance_km(workout: Workout | None) -> float:
+    """Километраж тренировки — по шагам, в километрах.
+
+    Километраж нужен, чтобы сравнивать план с фактом и с макро: «55 мин»
+    ничего не говорит о том, длинная это тренировка или нет.
+    """
+    if workout is None:
+        return 0.0
+    return steps_distance_km(workout.steps)
+
+
+def _pace_sec_from_focus(focus: dict[str, Any]) -> float | None:
+    """Темп шага из его focus_value — «4:24» → 264 секунды на км."""
+    raw = focus.get("pace_min_per_km")
+    if not raw or ":" not in str(raw):
+        return None
+    minutes, _, seconds = str(raw).partition(":")
+    try:
+        return float(minutes) * 60.0 + float(seconds)
+    except ValueError:
+        return None
+
+
 def workout_distance_m(workout: Workout | None) -> float:
     """Километраж тренировки — по шагам с дистанцией, в метрах.
 

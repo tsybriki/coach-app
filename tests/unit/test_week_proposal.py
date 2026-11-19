@@ -403,15 +403,19 @@ def test_plan_from_macro_uses_macro_volume(season, planner):
     уже собрано, и неделя сжималась с каждым нажатием.
     """
     week = plan_from_macro(season, 7, planner)
-    run_minutes = sum(
-        w.duration_min for w in week.workouts if w.sport is Sport.RUN
-    )
     macro = season.plans[0].macro_week(7)
     assert macro is not None
-    # Разбивка макро: длинная + качественная + лёгкая.
-    expected = macro.long_min + macro.quality_min + macro.easy_min
-    assert run_minutes == pytest.approx(expected, abs=2.0), (
-        f"бег {run_minutes} мин, разбивка макро {expected} мин"
+    # Недельный километраж — из макро: объём недели задан расстоянием,
+    # а не минутами. Раньше проверялась разбивка макро на минуты, но
+    # собранная неделя считается по километражу (Кирилл, 18.11.2026).
+    run_km = sum(
+        float(step.target_value)
+        for workout in week.workouts if workout.sport is Sport.RUN
+        for step in workout.steps
+        if step.target_type is TargetType.DISTANCE
+    ) / 1000.0
+    assert run_km == pytest.approx(macro.run_km, abs=0.5), (
+        f"бег {run_km:.2f} км, макро {macro.run_km} км"
     )
 
 

@@ -512,6 +512,8 @@ def build_athlete(athlete_data: dict[str, Any]) -> Athlete:
         injuries=[i for i in injuries if i],
         form=athlete_data.get("form_trend_4w"),
         ftp_w=float(ftp) if ftp else None,
+        # Число беговых сессий в неделю — форма спортсмена из профиля.
+        runs_per_week=int(athlete_data.get("runs_per_week", 0) or 0),
     )
 
 

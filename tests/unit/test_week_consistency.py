@@ -146,7 +146,7 @@ def test_distance_step_agrees_with_its_pace(season, planner):
     """Шаг с дистанцией согласован со своим темпом.
 
     Длина шага в шагах считается по темпу зоны. Если шаг говорит
-    «7.3 км @ 5:30», то он должен занимать 44 минуты — иначе внутри
+    «7.3 км @ 5:40», то он должен занимать 44 минуты — иначе внутри
     тренировки время не сходится с расстоянием.
     """
     week = plan_from_macro(season, 4, planner, {})
@@ -169,8 +169,8 @@ def test_distance_step_agrees_with_its_pace(season, planner):
     assert checked, "в неделе не нашлось шага с дистанцией и темпом"
 
 
-def test_easy_pace_is_530_in_steps(season, planner):
-    """Лёгкий бег идёт в темпе 5:30."""
+def test_easy_pace_is_540_in_steps(season, planner):
+    """Лёгкий бег идёт в темпе 5:40."""
     week = plan_from_macro(season, 4, planner, {})
     paces = set()
     for workout in week.workouts:
@@ -180,7 +180,7 @@ def test_easy_pace_is_530_in_steps(season, planner):
             zone = fv.get("zone")
             if pace and zone == "Z2":
                 paces.add(pace)
-    assert paces == {"5:30"}, f"темп лёгкого бега: {paces}"
+    assert paces == {"5:40"}, f"темп лёгкого бега: {paces}"
 
 
 def test_workout_names_describe_composition(season, planner):

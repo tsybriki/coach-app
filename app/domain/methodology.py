@@ -32,18 +32,18 @@ ZONE_THRESHOLD = "T"
 ZONE_INTERVAL = "I"
 ZONE_REPETITION = "R"
 
-# Темп лёгкого бега — 5:30 на километр (330 секунд).
+# Темп лёгкого бега — 5:40 на километр (340 секунд).
 #
 # Не «E» из таблицы Дэниэлса: для этого спортсмена «E» — 5:13, то есть
 # верх лёгкой зоны. Бег в нём на длинной дистанции держит HR у верхней
 # границы Z2 и перестаёт быть лёгким, а «лёгкий бег» в этой зоне и
-# есть основа недели. Середина лёгкой зоны — 5:30.
+# есть основа недели. Середина лёгкой зоны — 5:40.
 #
 # Правило одно на все места, где встречается лёгкий бег: восстановление
 # между отрезками, основная часть пробежки, длинный бег. Темпы для
 # отрезков и тестов не трогаем: там темп и есть содержание работы.
-EASY_PACE_SEC_PER_KM = 330.0
-EASY_PACE_MIN_PER_KM = "5:30"
+EASY_PACE_SEC_PER_KM = 340.0
+EASY_PACE_MIN_PER_KM = "5:40"
 
 ZONE_NAMES = {
     ZONE_EASY: "Л",
@@ -572,17 +572,55 @@ def segment_duration_min(segment: RecipeSegment,
     return (distance_m / 1000.0) * pace / 60.0
 
 
-def recipe_zone_volume_m(recipe: WorkoutRecipe) -> dict[str, float]:
+def segment_distance_m(segment: RecipeSegment,
+                       pace_by_zone: dict[str, float]) -> float:
+    """Сколько метров даёт кусок работы.
+
+    Куски бывают двух видов: заданные расстоянием (200 м) и заданные
+    временем (2 мин в интервальном темпе). Вторые переводятся в метры
+    по темпу своей зоны — иначе объём зоны считается неполным, а
+    ограничение «интервального — не больше 8 % недели» остаётся
+    декорацией: смотреть не на что.
+    """
+    if segment.distance_m:
+        return float(segment.distance_m)
+    minutes = 0.0
+    if segment.minutes:
+        minutes = float(segment.minutes)
+    elif segment.seconds:
+        minutes = float(segment.seconds) / 60.0
+    if minutes <= 0:
+        return 0.0
+    pace = pace_by_zone.get(segment.zone)
+    if not pace:
+        return 0.0
+    return minutes * pace / 60.0
+
+
+def recipe_zone_volume_m(recipe: WorkoutRecipe,
+                         pace_by_zone: dict[str, float] | None = None,
+                         ) -> dict[str, float]:
     """Сколько метров рецепт даёт в каждой зоне.
 
     Считается по минимальному числу повторов: объём недели планируется по
     нижней границе, а не по верхней.
+
+    `pace_by_zone` нужен для кусков, заданных временем: без темпов их
+    объём не переводится в метры и зона выпадает из подсчёта.
     """
     volumes: dict[str, float] = {}
 
     def add(segment: RecipeSegment, reps: int) -> None:
         if segment.distance_m:
-            volumes[segment.zone] = volumes.get(segment.zone, 0.0) + segment.distance_m * reps
+            volumes[segment.zone] = volumes.get(segment.zone, 0.0) \
+                + segment.distance_m * reps
+            return
+        if not pace_by_zone:
+            return
+        meters = segment_distance_m(segment, pace_by_zone)
+        if meters:
+            volumes[segment.zone] = volumes.get(segment.zone, 0.0) \
+                + meters * reps
 
     for recipe_set in recipe.sets:
         for segment in recipe_set.segments:
@@ -594,13 +632,19 @@ def recipe_zone_volume_m(recipe: WorkoutRecipe) -> dict[str, float]:
 
 def apply_week_caps(recipes: list[WorkoutRecipe],
                     caps: tuple[ZoneCap, ...],
-                    week_km: float) -> list[WorkoutRecipe]:
+                    week_km: float,
+                    pace_by_zone: dict[str, float] | None = None,
+                    ) -> list[WorkoutRecipe]:
     """Подчинить тренировки недели ограничениям по объёму.
 
     Предел задан на **неделю**, а не на тренировку: «R-темп — не более 5 %
     недельного километража» считает всё, что пробежано в этой зоне за
     неделю. Поэтому сначала считается сумма по зоне, и если она выше
     предела, лишнее снимается с самой объёмной работы.
+
+    `pace_by_zone` нужен, чтобы объём зоны считался полностью: куски,
+    заданные временем (2 мин в интервальном темпе), без темпов в метры
+    не переводятся.
 
     Если работу урезать нельзя (весь набор уходит), она уходит из недели
     совсем: пустая тренировка в плане хуже, чем её отсутствие.
@@ -615,39 +659,42 @@ def apply_week_caps(recipes: list[WorkoutRecipe],
             continue
         # Страховка от зацикливания: каждый проход обязан уменьшить объём.
         for _ in range(len(result) * 4 + 4):
-            current = _zone_volume(result, cap.zone)
+            current = _zone_volume(result, cap.zone, pace_by_zone)
             if current <= limit_m:
                 break
             excess = current - limit_m
-            index = _largest_in_zone(result, cap.zone)
+            index = _largest_in_zone(result, cap.zone, pace_by_zone)
             if index is None:
                 break
-            reduced = _shrink_recipe(result[index], cap.zone, excess)
+            reduced = _shrink_recipe(result[index], cap.zone, excess,
+                                     pace_by_zone)
             if reduced is None:
                 result.pop(index)
                 continue
-            if _zone_volume([reduced], cap.zone) >= \
-                    _zone_volume([result[index]], cap.zone):
+            if _zone_volume([reduced], cap.zone, pace_by_zone) >= \
+                    _zone_volume([result[index]], cap.zone, pace_by_zone):
                 # Урезание ничего не дало — дальше крутить бессмысленно.
                 break
             result[index] = reduced
     return result
 
 
-def _zone_volume(recipes: list[WorkoutRecipe], zone: str) -> float:
+def _zone_volume(recipes: list[WorkoutRecipe], zone: str,
+                 pace_by_zone: dict[str, float] | None = None) -> float:
     """Суммарный объём в зоне по списку рецептов."""
     total = 0.0
     for recipe in recipes:
-        total += recipe_zone_volume_m(recipe).get(zone, 0.0)
+        total += recipe_zone_volume_m(recipe, pace_by_zone).get(zone, 0.0)
     return total
 
 
-def _largest_in_zone(recipes: list[WorkoutRecipe], zone: str) -> int | None:
+def _largest_in_zone(recipes: list[WorkoutRecipe], zone: str,
+                     pace_by_zone: dict[str, float] | None = None) -> int | None:
     """Индекс самого объёмного рецепта в зоне."""
     best: int | None = None
     best_volume = 0.0
     for index, recipe in enumerate(recipes):
-        volume = recipe_zone_volume_m(recipe).get(zone, 0.0)
+        volume = recipe_zone_volume_m(recipe, pace_by_zone).get(zone, 0.0)
         if volume > best_volume:
             best = index
             best_volume = volume
@@ -655,7 +702,8 @@ def _largest_in_zone(recipes: list[WorkoutRecipe], zone: str) -> int | None:
 
 
 def _shrink_recipe(recipe: WorkoutRecipe, zone: str,
-                   excess_m: float) -> WorkoutRecipe | None:
+                   excess_m: float,
+                   pace_by_zone: dict[str, float] | None = None) -> WorkoutRecipe | None:
     """Снять с рецепта до `excess_m` метров работы в зоне.
 
     None — из рецепта в этой зоне ничего не осталось.
@@ -664,7 +712,7 @@ def _shrink_recipe(recipe: WorkoutRecipe, zone: str,
     (один повтор — это весь объём), он уходит целиком. Иначе цикл урезания
     не сходится: объём не меняется, а предел не достигается.
     """
-    current = recipe_zone_volume_m(recipe).get(zone, 0.0)
+    current = recipe_zone_volume_m(recipe, pace_by_zone).get(zone, 0.0)
     if current <= 0:
         return None
     excess = min(excess_m, current)
@@ -672,7 +720,8 @@ def _shrink_recipe(recipe: WorkoutRecipe, zone: str,
     new_sets = list(recipe.sets)
     for recipe_set in list(recipe.sets):
         set_volume = sum(
-            (s.distance_m or 0.0) for s in recipe_set.segments if s.zone == zone
+            segment_distance_m(s, pace_by_zone or {})
+            for s in recipe_set.segments if s.zone == zone
         ) * recipe_set.reps_min
         if set_volume <= 0:
             continue
@@ -706,10 +755,12 @@ def _shrink_recipe(recipe: WorkoutRecipe, zone: str,
     # Плоский список не урезается: если объём в зоне остался в нём —
     # рецепт целиком не годится.
     flat_volume = sum(
-        (s.distance_m or 0.0) for s in recipe.flat if s.zone == zone
+        segment_distance_m(s, pace_by_zone or {})
+        for s in recipe.flat if s.zone == zone
     )
     sets_volume = sum(
-        sum((s.distance_m or 0.0) for s in recipe_set.segments if s.zone == zone)
+        sum(segment_distance_m(s, pace_by_zone or {})
+            for s in recipe_set.segments if s.zone == zone)
         * recipe_set.reps_min
         for recipe_set in new_sets
     )
@@ -970,7 +1021,15 @@ def build_stride_steps(
         sets=(RecipeSet(reps_min=reps, reps_max=reps,
                         segments=(stride, recovery), label=label),),
     )
-    return build_steps(recipe, pace_by_zone, athlete)
+    steps = build_steps(recipe, pace_by_zone, athlete)
+    # Отрезки помечены явно: они **добавка** к основной работе, а сама
+    # работа (серия в повторном или интервальном темпе) — нет. По
+    # `set_reps` их не отличить: он есть и там, и там.
+    for step in steps:
+        focus = dict(step.focus_value or {})
+        focus["strides"] = True
+        object.__setattr__(step, "focus_value", focus)
+    return steps
 
 
 def build_progression_steps(recipe: WorkoutRecipe,

@@ -40,18 +40,31 @@ def step(**kw: Any) -> Step:
 
 
 def easy_step(minutes: float = 40.0) -> Step:
-    return step(focus_value={"zone": "Z2", "pace_min_per_km": "5:30"},
+    return step(focus_value={"zone": "Z2", "pace_min_per_km": "5:40"},
                 duration_min=minutes)
 
 
 def stride_step() -> Step:
+    """Отрезок фазы I: добавка к основной работе, помечена явно."""
     return step(
         id="s2",
         target_type=TargetType.DISTANCE,
         target_value=100.0,
         focus_value={"pace_min_per_km": "3:35", "set_reps": 8,
-                     "daniels_zone": "R"},
+                     "daniels_zone": "R", "strides": True},
         duration_min=0.36,
+    )
+
+
+def quality_series_step() -> Step:
+    """Серия в повторном темпе: это сама работа, а не добавка."""
+    return step(
+        id="s3",
+        target_type=TargetType.DISTANCE,
+        target_value=200.0,
+        focus_value={"pace_min_per_km": "3:35", "set_reps": 5,
+                     "daniels_zone": "R"},
+        duration_min=0.72,
     )
 
 
@@ -140,22 +153,22 @@ def test_base_name_wins_over_kind():
     assert name == "Длинный бег"
 
 
-def test_easy_pace_is_530_not_daniels_top_of_zone():
-    """Лёгкий темп — 5:30, а не 5:13.
+def test_easy_pace_is_540_not_daniels_top_of_zone():
+    """Лёгкий темп — 5:40, а не 5:13.
 
     «E» по таблице Дэниэлса для VDOT 51 — это верх лёгкой зоны: на
     длинной дистанции в нём HR упирается в верх Z2, и «лёгкий бег»
-    перестаёт быть лёгким. Середина зоны — 5:30.
+    перестаёт быть лёгким. Середина зоны — 5:40.
     """
-    assert EASY_PACE_MIN_PER_KM == "5:30"
-    assert EASY_PACE_SEC_PER_KM == 330.0
+    assert EASY_PACE_MIN_PER_KM == "5:40"
+    assert EASY_PACE_SEC_PER_KM == 340.0
 
 
 def test_easy_pace_ignores_daniels_table():
     """Таблица Дэниэлса не переопределяет решение по лёгкому темпу."""
     # Таблица даёт 313 секунд на км (5:13) для зоны E.
     table = {"E": 313.0, "R": 215.0}
-    assert easy_pace_sec_per_km(table) == 330.0
+    assert easy_pace_sec_per_km(table) == 340.0
 
 
 def test_easy_pace_is_none_without_table():
@@ -167,10 +180,10 @@ def test_step_description_of_distance_step():
     """Описание шага с дистанцией — расстояние."""
     s = step(target_type=TargetType.DISTANCE, target_value=7348.0,
              duration_min=38.33,
-             focus_value={"zone": "Z2", "pace_min_per_km": "5:30"})
+             focus_value={"zone": "Z2", "pace_min_per_km": "5:40"})
     text = step_description(s)
     assert "7.3 км" in text, text
-    assert "5:30" in text, text
+    assert "5:40" in text, text
 
 
 def test_step_description_of_time_step():
@@ -185,3 +198,26 @@ def test_step_description_of_ofp_step():
     s = ofp_step()
     assert "ОФП" in step_description(s)
     assert "3×45с" in step_description(s)
+
+
+def test_quality_series_is_not_called_strides():
+    """Серия в повторном темпе — это работа, а не отрезки.
+
+    «Работа в повторном темпе + отрезки» называет одно и то же дважды.
+    """
+    name = session_name("r", Sport.RUN, [easy_step(), quality_series_step()])
+    assert name == "Работа в повторном темпе", name
+
+
+def test_daniels_kind_has_russian_name():
+    """Вид работы программы Дэниэлса назван по-русски.
+
+    Код зоны («r», «t», «i») в карточке не читается.
+    """
+    for kind, expected in (
+        ("r", "Работа в повторном темпе"),
+        ("t", "Работа в пороговом темпе"),
+        ("i", "Работа в интервальном темпе"),
+    ):
+        name = session_name(kind, Sport.RUN, [easy_step()])
+        assert name == expected, name
