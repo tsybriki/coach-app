@@ -645,8 +645,13 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
             week, str(command.args.get("request_id", "")))
     elif command.type is CommandType.REMOVE_WORKOUT:
         # Удалить тренировку — пока неделя не активна. Правило в сервисе.
+        # Факты недели передаются: связь хранится с обеих сторон (I44),
+        # и удалять тренировку, которую помнит факт, нельзя.
         updated = remove_workout(
-            week, str(command.args.get("workout_id", "")))
+            week,
+            str(command.args.get("workout_id", "")),
+            actuals=container.fact_repo.list_for_week(season_week),
+        )
     elif command.type is CommandType.ADD_COMPOSED_WORKOUT:
         # Тренировка из разбора текста. Разбор уже сделан (маршрут
         # `/compose`), здесь — только создание и добавление в неделю.

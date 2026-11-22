@@ -395,3 +395,58 @@ def test_replan_on_closed_week_is_rejected(
     response = _replan(client, version, "replan-2")
     assert response.status_code == 400
     assert "закрыт" in response.json()["error"]["message"]
+
+
+def test_removing_workout_remembered_by_fact_is_rejected(
+    client: TestClient, data_root: Path
+):
+    """Тренировку, которую помнит факт, удалить нельзя.
+
+    Связь хранится с обеих сторон (I44), и они могут разъехаться: факт
+    помнит тренировку, а у неё `actual_id` пуст. Проверка только по
+    `actual_id` такую тренировку пропускала — а удаление роняло связь
+    окончательно, и факт оставался висеть со ссылкой в пустоту.
+    """
+    version = _seed(data_root)
+
+    response = client.post("/api/v1/commands", json={
+        "id": "rm-broken", "type": "remove_workout",
+        "args": {"season_week": 7, "workout_id": "w-r7-4"},
+        "reason": "удаление дубликата",
+        "expected_version": version,
+    })
+    assert response.status_code == 400, response.text
+    assert "факт" in response.json()["error"]["message"]
+
+    week = client.get("/api/v1/week/7").json()["data"]
+    done = [w for w in week["workouts"] if w["id"] == "w-r7-4"]
+    assert len(done) == 1, "тренировку, которую помнит факт, удалили"
+
+
+def test_removing_workout_with_fact_is_rejected_even_if_link_is_broken(
+    client: TestClient, data_root: Path
+):
+    """Запрет работает и когда связь разъехалась.
+
+    В боевых данных неделя 7 была именно в таком состоянии: факт помнил
+    `w-r7-4`, а у тренировки `actual_id` был пуст.
+    """
+    version = _seed(data_root)
+    # Рвём связь с одной стороны — как в боевых данных: факт помнит
+    # тренировку, а у тренировки `actual_id` пуст.
+    storage = FileStorage(data_root)
+    week = storage.week(7)
+    for workout in week.workouts:
+        if workout.id == "w-ofp-1":
+            workout.actual_id = None
+            workout.status = WorkoutStatus.PLANNED
+    storage.put_week(week, expected_version=storage.version())
+
+    response = client.post("/api/v1/commands", json={
+        "id": "rm-ofp", "type": "remove_workout",
+        "args": {"season_week": 7, "workout_id": "w-ofp-1"},
+        "reason": "удаление дубликата",
+        "expected_version": version,
+    })
+    assert response.status_code == 400, response.text
+    assert "факт" in response.json()["error"]["message"]

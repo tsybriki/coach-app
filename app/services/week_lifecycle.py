@@ -421,7 +421,8 @@ def unplace_request(week: Week, request_id: str) -> Week:
     return updated
 
 
-def remove_workout(week: Week, workout_id: str) -> Week:
+def remove_workout(week: Week, workout_id: str,
+                   actuals: list[ActualSession] | None = None) -> Week:
     """Удалить тренировку из недели.
 
     **Только пока неделя не активна.** Активная неделя — это то, что уже
@@ -455,7 +456,16 @@ def remove_workout(week: Week, workout_id: str) -> Week:
     # удаление дубликата сносило и выполненную (Кирилл, 22.11.2026).
     # Теперь дубликатов нет, но запрет остаётся: страховка от
     # рассинхрона связи.
-    if workout.actual_id:
+    # Факт проверяется с обеих сторон связи (I44): и по `actual_id`
+    # тренировки, и по обратной ссылке факта. Стороны могут разъехаться
+    # — так было в боевой неделе 7: факт помнил тренировку, а у неё
+    # `actual_id` был пуст. Проверка только по `actual_id` такую
+    # тренировку пропускала, и удаление роняло связь окончательно.
+    has_fact = bool(workout.actual_id) or any(
+        session.linked_workout_id == workout_id
+        for session in (actuals or [])
+    )
+    if has_fact:
         raise TransitionError(
             f"тренировку {workout_id} нельзя удалить: к ней привязан факт"
         )
