@@ -364,9 +364,15 @@ function slotCard(workout, actual) {
     && objective.day !== '';
 
   /* Удаление — только пока неделя не активна: в активной план уже
-   * исполняется, и сервер удаление не примет. */
+   * исполняется, и сервер удаление не примет.
+   *
+   * И никогда — у тренировки с фактом: это сделанная работа, и её
+   * нажатием на корзину сносили вместе с фактом (Кирилл, 22.11.2026).
+   * Удаление идёт по запросу, а у выполненной тренировки и у
+   * дубликата запрос был один — и «удалить дубликат» означало
+   * «удалить выполненную». */
   const weekStatus = state.week ? (state.week.status || 'proposed') : 'proposed';
-  const removeBtn = weekStatus === 'proposed'
+  const removeBtn = (weekStatus === 'proposed' && !workout.actual_id)
     ? `<button class="slot-act" data-remove-workout="${escapeHtml(workout.id)}"
          title="Удалить тренировку" aria-label="Удалить тренировку">🗑</button>`
     : '';
@@ -720,7 +726,11 @@ function unplacedBlock(week) {
     const workoutId = u.workout_id || u.id;
     const requestId = u.request_id || u.id;
     const weekStatus = state.week ? (state.week.status || 'proposed') : 'proposed';
-    const removeBtn = weekStatus === 'proposed'
+    /* Корзина — только у висяка без факта. Висяк с фактом — это
+     * выполненная тренировка, потерявшая размещение; удалять её нельзя
+     * (Кирилл, 22.11.2026). Факт ищем и по самому висяку, и по его
+     * тренировке — на сервере он лежит в обоих местах. */
+    const removeBtn = (weekStatus === 'proposed' && !u.actual_id)
       ? `<button class="slot-act" data-remove-workout="${escapeHtml(workoutId)}"
            title="Удалить тренировку" aria-label="Удалить тренировку">🗑</button>`
       : '';

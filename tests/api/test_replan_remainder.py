@@ -149,22 +149,21 @@ def test_replan_remainder_keeps_workout_with_fact(
 def test_replan_remainder_moves_workout_without_fact_to_unplaced(
     client: TestClient, data_root: Path
 ):
-    """Невыполненная тренировка заменяется новым планом — она снова планируемая.
+    """Невыполненная тренировка отвязывается от окна — она снова планируемая.
 
-    После переплана неделя собирается заново по правилам, поэтому
-    невыполненного в ней нет: вместо него — новые тренировки, все
-    висяки (время выбирает пользователь).
+    План не пересобирается: тренировка остаётся той же, но её размещение
+    снимается, а запрос уходит в `unplaced` — время выбирает пользователь.
     """
     version = _seed(data_root)
     _command(client, "replan-1", "replan_remainder", version)
 
     week = client.get("/api/v1/week/1").json()["data"]
-    assert "r-planned" not in {u["id"] for u in week["unplaced"]}
-    # Новое собрано по правилам: без выполненного, сплошные висяки.
+    assert "r-planned" in {u["id"] for u in week["unplaced"]}
     assert week["unplaced"], "после переплана неделя пустая"
+    # Отвязанная тренировка не размещена — время выбирает пользователь.
     assert not any(w["actual_id"] is None and w["day"]
                    for w in week["workouts"]), \
-        "новые тренировки не должны быть размещены — время выбирает пользователь"
+        "отвязанные тренировки не должны быть размещены — время выбирает пользователь"
     # Размещение выполненного осталось.
     assert {a["request_id"] for a in week["assignments"]} == {"r-done"}
 

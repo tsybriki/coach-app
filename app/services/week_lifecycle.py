@@ -130,7 +130,8 @@ def close_week(week: Week, summary: WeekSummary) -> Week:
     return closed
 
 
-def replan_remainder(week: Week) -> Week:
+def replan_remainder(week: Week,
+                     actuals: list[ActualSession] | None = None) -> Week:
     """Перепланировать остаток недели: сделанное оставить, остальное — наново.
 
     Что делает команда (Кирилл): «все тренировки, которым не привязан
@@ -148,22 +149,61 @@ def replan_remainder(week: Week) -> Week:
         ещё и в списке размещённых.
 
     Неделя возвращается в `proposed`: дальше работает обычный режим
-    propose — пересборка по правилам и ручная правка, а потом
-    активация.
+    propose — ручная правка и активация.
+
+    **План не пересобирается.** Пересборка по правилам создаёт
+    тренировки заново, а это ровно то, чего пользователь не просил:
+    отвязать тренировки, чтобы двигать их. Побочный эффект пересборки
+    был разрушительным — новые тренировки получали те же id, что у
+    выполненных (`r7-1…r7-6`, `r7-other-*`), и в неделе оказывалось
+    10 тренировок вместо 8, с задвоенными id. А удаление дубликата
+    идёт по запросу — и сносило выполненную тренировку вместе с её
+    фактом (Кирилл, 22.11.2026).
 
     Закрытая неделя не перепланируется (I23).
     """
     if week.status is WeekStatus.CLOSED:
         raise TransitionError("закрытая неделя не перепланируется")
 
+    # Выполненное — это тренировка, у которой есть факт. Факт известен
+    # с двух сторон: `Workout.actual_id` и обратная ссылка
+    # `ActualSession.linked_workout_id` (I44). Стороны могут разъехаться:
+    # после удаления дубликата факт помнил тренировку, а тренировка —
+    # нет. Делить по одной стороне тогда нельзя: выполненное
+    # выглядело невыполненным и отвязывалось вместе со своим фактом
+    # (Кирилл, 22.11.2026).
+    #
+    # Факт — источник истины: он переживает пересборку плана, а
+    # `actual_id` у тренировки — нет. Расхождение чинится здесь же:
+    # выполненной тренировке возвращается её факт.
+    done_by_id = {w.id for w in week.workouts if w.actual_id}
+    done_by_fact = {
+        session.linked_workout_id
+        for session in (actuals or [])
+        if session.linked_workout_id
+    }
+    done_workout_ids = done_by_id | done_by_fact
+
+    # Факт каждой выполненной тренировки — по обеим сторонам связи.
+    actual_by_workout: dict[str, str] = {
+        w.id: w.actual_id for w in week.workouts if w.actual_id
+    }
+    for session in (actuals or []):
+        if session.linked_workout_id and session.id not in actual_by_workout.values():
+            actual_by_workout[session.linked_workout_id] = session.id
+
     done_request_ids = {
         workout.request_id
         for workout in week.workouts
-        if workout.actual_id
+        if workout.id in done_workout_ids
     }
 
     # Выполненное — на месте: тренировка, запрос и размещение.
-    done_workouts = [w for w in week.workouts if w.request_id in done_request_ids]
+    done_workouts = [
+        _as_done(w, actual_by_workout.get(w.id))
+        for w in week.workouts
+        if w.request_id in done_request_ids
+    ]
     done_requests = [r for r in week.requests if r.id in done_request_ids]
     done_assignments = [
         a for a in week.assignments if a.request_id in done_request_ids
@@ -183,6 +223,31 @@ def replan_remainder(week: Week) -> Week:
     )
     replanned.validate()
     return replanned
+
+
+def _as_done(workout: Workout, actual_id: str | None = None) -> Workout:
+    """Выполненная тренировка — с фактом и статусом «выполнена».
+
+    Факт возвращается, даже если у тренировки он потерялся: связь
+    хранится с обеих сторон (I44), и переплан её чинит.
+    """
+    return Workout(
+        id=workout.id,
+        request_id=workout.request_id,
+        sport=workout.sport,
+        kind=workout.kind,
+        focus=workout.focus,
+        objective=workout.objective,
+        equipment_ids=workout.equipment_ids,
+        location=workout.location,
+        time=workout.time,
+        steps=workout.steps,
+        duration_min=workout.duration_min,
+        priority=workout.priority,
+        status=WorkoutStatus.DONE,
+        rationale=workout.rationale,
+        actual_id=actual_id or workout.actual_id,
+    )
 
 
 def _as_plannable(workout: Workout) -> Workout:
@@ -374,6 +439,27 @@ def remove_workout(week: Week, workout_id: str) -> Week:
     Иначе остался бы запрос без тренировки, и неделю нельзя было бы
     собрать заново.
     """
+    workout = next((w for w in week.workouts if w.id == workout_id), None)
+    if workout is None:
+        raise TransitionError(
+            f"в неделе {week.id} нет тренировки {workout_id}"
+        )
+
+    # Тренировку с фактом удалить нельзя: факт — это сделанная работа,
+    # и он не должен теряться вместе с тренировкой.
+    #
+    # Проверка идёт **до** проверки статуса недели: «к ней привязан
+    # факт» — ответ по существу, а «нельзя в активной неделе» — про
+    # второстепенное. Раньше удаление шло по `request_id`, и у
+    # выполненной тренировки и у дубликата он был один и тот же —
+    # удаление дубликата сносило и выполненную (Кирилл, 22.11.2026).
+    # Теперь дубликатов нет, но запрет остаётся: страховка от
+    # рассинхрона связи.
+    if workout.actual_id:
+        raise TransitionError(
+            f"тренировку {workout_id} нельзя удалить: к ней привязан факт"
+        )
+
     if week.status is not WeekStatus.PROPOSED:
         # Статусы — внутренние (active, closed), пользователю это
         # ничего не говорит. Поэтому по-русски и словами.
@@ -386,18 +472,32 @@ def remove_workout(week: Week, workout_id: str) -> Week:
             f"а не в {labels.get(week.status, week.status.value)}"
         )
 
-    workout = next((w for w in week.workouts if w.id == workout_id), None)
-    if workout is None:
-        raise TransitionError(
-            f"в неделе {week.id} нет тренировки {workout_id}"
-        )
-
     request_id = workout.request_id
+
+    # Запрос удаляется, только если он больше никому не нужен.
+    #
+    # Удаление идёт по запросу, а запрос могут делить несколько
+    # тренировок — так получалось после пересборки плана, и удаление
+    # одной тренировки роняло запрос у другой: инвариант I20
+    # («у каждой тренировки есть запрос») оказывался нарушен.
+    others_use_request = any(
+        w.request_id == request_id
+        for w in week.workouts
+        if w.id != workout_id
+    )
+
+    requests = week.requests
+    unplaced = week.unplaced
+    assignments = week.assignments
+    if not others_use_request:
+        requests = [r for r in requests if r.id != request_id]
+        unplaced = [r for r in unplaced if r.id != request_id]
+        assignments = [a for a in assignments if a.request_id != request_id]
+
     updated = week.copy_with(
-        requests=[r for r in week.requests if r.id != request_id],
-        unplaced=[r for r in week.unplaced if r.id != request_id],
-        assignments=[a for a in week.assignments
-                     if a.request_id != request_id],
+        requests=requests,
+        unplaced=unplaced,
+        assignments=assignments,
         workouts=[w for w in week.workouts if w.id != workout_id],
     )
     updated.validate()
