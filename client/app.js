@@ -1546,7 +1546,60 @@ function screenAthlete() {
       </ul>
     </div>
     ${ftpBlock}
+    ${hrZonesCard()}
+    ${formPacesCard()}
     ${slotsBlock()}`;
+}
+
+/* Карточка «Пульсовые зоны»: границы и названия зон атлета.
+ *
+ * Названия приходят с сервера: клиент не знает, что Z2 — это «лёгкая»,
+ * а Z5 — «пороговая». Коды зон на экран не выводятся — они нужны
+ * только внутри данных.
+ */
+function hrZonesCard() {
+  const athlete = state.athlete;
+  const zones = athlete && athlete.hr_zones;
+  if (!zones) return '';
+  const names = athlete.hr_zone_names || {};
+  const rows = Object.entries(zones)
+    .map(([code, bounds]) => {
+      const name = names[code];
+      const label = name ? escapeHtml(name) : escapeHtml(code);
+      const range = `${bounds.low}–${bounds.high}`;
+      return `<li><div class="row zone-row">
+          <span class="zone-name">${label}</span>
+          <span class="zone-range">${escapeHtml(range)}</span>
+        </div></li>`;
+    })
+    .join('');
+  if (!rows) return '';
+  return `<div class="card">
+      <div class="chead">Пульсовые зоны</div>
+      <ul class="plain zone-list">${rows}</ul>
+    </div>`;
+}
+
+/* Карточка «Темпы на текущей форме»: темпы по зонам методики.
+ *
+ * Темпы считает сервер по VDOT атлета (справочник Дэниэлса) — клиент
+ * только рисует. Карточка видна всегда: темпы на текущей форме нужны
+ * перед каждой пробежкой, а искать их в плане неудобно.
+ */
+function formPacesCard() {
+  const athlete = state.athlete;
+  const rows = (athlete && athlete.pace_zones) || [];
+  if (!rows.length) return '';
+  const body = rows
+    .map((row) => `<li><div class="row zone-row">
+        <span class="zone-name">${escapeHtml(row.name)}</span>
+        <span class="zone-range">${escapeHtml(row.pace)}<span class="zone-unit">/км</span></span>
+      </div></li>`)
+    .join('');
+  return `<div class="card">
+      <div class="chead">Темпы на текущей форме</div>
+      <ul class="plain zone-list">${body}</ul>
+    </div>`;
 }
 
 /* FTP: текущее значение или оценка по тренировкам.

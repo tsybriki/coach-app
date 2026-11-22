@@ -1156,6 +1156,77 @@ def build_progression_steps(recipe: WorkoutRecipe,
     return steps
 
 
+def form_paces(athlete: Athlete,
+               paces: DanielsPaces | None) -> dict[str, str]:
+    """Темпы зон методики на текущей форме атлета.
+
+    Ключ — зона методики (`E`, `M`, `T`, `I`, `R`), значение — темп
+    «мм:сс» на километр.
+
+    Лёгкий бег — **5:40**, а не «E» из таблицы: «E» для этого спортсмена
+    — верх лёгкой зоны, и план бежит лёгкий именно в 5:40. Карточка
+    профиля обязана показывать тот же темп, что и план, иначе экран
+    врал бы относительно плана.
+
+    Нет формы или нет справочника — темпов нет. Это «не задано», а не
+    ноль: выдуманный темп хуже пустоты.
+    """
+    if paces is None or not paces.rows or athlete.vdot <= 0:
+        return {}
+
+    result: dict[str, str] = {}
+    for zone in (ZONE_EASY, ZONE_MARATHON, ZONE_THRESHOLD,
+                 ZONE_INTERVAL, ZONE_REPETITION):
+        value = paces.pace_sec_per_km(zone, athlete.vdot)
+        if value is None:
+            continue
+        if zone == ZONE_EASY:
+            value = EASY_PACE_SEC_PER_KM
+        result[zone] = format_pace(value)
+    return result
+
+
+# Названия зон методики для карточки профиля — по-русски.
+#
+# Коды «E», «T», «I» — внутренний язык методики: на экране они ничего
+# не значат. Свои названия нужны и отличаются от коротких `ZONE_NAMES`:
+# там «Л», «М», «П» — это коды шага в тренировке, здесь — человеческое
+# название зоны в карточке.
+ZONE_DISPLAY_NAMES = {
+    ZONE_EASY: "Лёгкий бег",
+    ZONE_MARATHON: "Марафонский темп",
+    ZONE_THRESHOLD: "Пороговый темп",
+    ZONE_INTERVAL: "Интервальный темп",
+    ZONE_REPETITION: "Повторный темп",
+}
+
+
+def pace_zone_rows(athlete: Athlete,
+                   paces: DanielsPaces | None) -> list[dict[str, str]]:
+    """Строки карточки «Темпы на текущей форме».
+
+    Каждая строка: `zone` (код зоны методики), `name` (по-русски),
+    `pace` («мм:сс» на километр). Порядок — от лёгкой зоны к самой
+    быстрой: так его читают сверху вниз.
+
+    Пусто без темпов: карточка не рисует список зон, для которых
+    нет ни одной величины.
+    """
+    paces_by_zone = form_paces(athlete, paces)
+    rows: list[dict[str, str]] = []
+    for zone in (ZONE_EASY, ZONE_MARATHON, ZONE_THRESHOLD,
+                 ZONE_INTERVAL, ZONE_REPETITION):
+        pace = paces_by_zone.get(zone)
+        if pace is None:
+            continue
+        rows.append({
+            "zone": zone,
+            "name": ZONE_DISPLAY_NAMES[zone],
+            "pace": pace,
+        })
+    return rows
+
+
 __all__ = [
     "DanielsPaces",
     "MethodPlan",
@@ -1169,6 +1240,8 @@ __all__ = [
     "athlete_zone_for",
     "build_steps",
     "format_pace",
+    "form_paces",
+    "pace_zone_rows",
     "recipe_zone_volume_m",
     "scale_recipe",
     "segment_duration_min",

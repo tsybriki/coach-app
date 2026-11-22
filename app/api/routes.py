@@ -33,6 +33,7 @@ from app.domain.entities import (
     WorkoutDetail,
 )
 from app.domain.enums import CommandType, PlanStatus, WeekStatus
+from app.domain.methodology import pace_zone_rows
 from app.domain.metrics import estimate_ftp
 from app.ports.storage import (
     DuplicateExternalIdError,
@@ -1262,14 +1263,53 @@ def _workout_dict(
     }
 
 
+# Названия зон пульса атлета — по-русски.
+#
+# Профиль задаёт семь зон без названий: «Z1 100–118» на экране читается
+# как код, а не как зона. Названия живут здесь, а не в профиле: профиль —
+# это нормативы атлета, а «восстановление» и «выносливость» — слова
+# про его зоны, а не про его пульс.
+HR_ZONE_NAMES = {
+    "Z1": "Восстановление",
+    "Z2": "Лёгкая",
+    "Z3": "Выносливость",
+    "Z4": "Темповая",
+    "Z5": "Пороговая",
+    "Z6": "Суперпороговая",
+    "Z7": "VO2max",
+}
+
+
+def _hr_zone_names(zones: dict[str, tuple[int, int]]) -> dict[str, str]:
+    """Названия зон пульса — по коду зоны.
+
+    Зона, которой нет в словаре, остаётся без названия: придумывать
+    имя для неизвестной зоны нельзя.
+    """
+    return {
+        name: HR_ZONE_NAMES[name]
+        for name in zones
+        if name in HR_ZONE_NAMES
+    }
+
+
 def _athlete_dict(container: AppContainer) -> dict[str, Any]:
     profile = container.athlete_repo.get()
+    paces = container.methodology_repo.training_paces()
     return {
         "vdot": profile.vdot,
         "hr_zones": {
             name: {"low": low, "high": high}
             for name, (low, high) in profile.hr_zones.items()
         },
+        # Названия зон пульса — по-русски. Коды «Z1…Z7» на экране
+        # ничего не значат, а карточка профиля ими и раньше не
+        # пользовалась: зоны показывались только на графике разбора.
+        "hr_zone_names": _hr_zone_names(profile.hr_zones),
+        # Темпы на текущей форме — по VDOT, из справочника Дэниэлса.
+        # Считает домен: клиент таблицу не знает и дублировать её не
+        # должен.
+        "pace_zones": pace_zone_rows(profile, paces),
         "hr_max": profile.hr_max,
         "rhr": profile.rhr,
         "lth": profile.lth,

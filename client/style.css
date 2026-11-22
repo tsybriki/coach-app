@@ -1221,6 +1221,42 @@ button.macro-week:active {
   color: var(--muted);
 }
 
+/* Зоны пульса и темпы в карточке профиля.
+ *
+ * Название зоны — приглушённым, слева; границы или темп — моноширинным,
+ * справа: величину видно глазом, а читать её — не обязательно.
+ */
+.zone-list {
+  margin-top: 4px;
+}
+
+.zone-row {
+  align-items: baseline;
+}
+
+.zone-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.zone-range {
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  color: var(--accent2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Единица темпа — приглушённая: «5:40» читается, «/км» — нет. */
+.zone-unit {
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: 2px;
+}
+
 /* Строки метрик по тренировкам — под плитками. */
 .zone-rows {
   margin-top: 10px;

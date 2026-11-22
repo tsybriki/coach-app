@@ -128,7 +128,26 @@ const SNAPSHOT = {
   },
   athlete: {
     vdot: 51,
-    hr_zones: {Z1: {low: 100, high: 118}, Z2: {low: 118, high: 135}},
+    hr_zones: {
+      Z1: {low: 100, high: 118},
+      Z2: {low: 118, high: 135},
+      Z3: {low: 136, high: 150},
+      Z4: {low: 150, high: 160},
+      Z5: {low: 160, high: 168},
+      Z6: {low: 169, high: 172},
+      Z7: {low: 173, high: 182},
+    },
+    hr_zone_names: {
+      Z1: 'Восстановление', Z2: 'Лёгкая', Z3: 'Выносливость',
+      Z4: 'Темповая', Z5: 'Пороговая', Z6: 'Суперпороговая', Z7: 'VO2max',
+    },
+    pace_zones: [
+      {zone: 'E', name: 'Лёгкий бег', pace: '5:40'},
+      {zone: 'M', name: 'Марафонский темп', pace: '4:31'},
+      {zone: 'T', name: 'Пороговый темп', pace: '4:11'},
+      {zone: 'I', name: 'Интервальный темп', pace: '3:51'},
+      {zone: 'R', name: 'Повторный темп', pace: '3:35'},
+    ],
     hr_max: 182, rhr: 54, lth: 164, weight_kg: 101.7, injuries: [], form: '—',
   },
 };
@@ -289,6 +308,37 @@ test('карточка атлета: окна тренировок видны', 
   assert.match(text, /ВС/, 'нет дня недели окна');
   assert.match(text, /11:00/, 'нет времени окна');
   assert.match(text, /120\s+мин/, 'нет вместимости окна');
+});
+
+test('карточка атлета: пульсовые зоны видны с названиями и границами', () => {
+  click(document.querySelector('#nav [data-screen="athlete"]'));
+  const picker = document.getElementById('picker');
+  const card = [...picker.querySelectorAll('.card')]
+    .find((node) => node.textContent.includes('Пульсовые зоны'));
+  assert.ok(card, 'нет карточки пульсовых зон');
+  const text = card.textContent;
+  // Название зоны — по-русски, не код «Z1».
+  assert.match(text, /Восстановление/, 'нет названия зоны');
+  assert.match(text, /Пороговая/, 'нет названия пороговой зоны');
+  // Границы пульса — из профиля.
+  assert.match(text, /100\s*[–-]\s*118/, 'нет границ первой зоны');
+  assert.match(text, /173\s*[–-]\s*182/, 'нет границ последней зоны');
+  // Код зоны — как код, а не как название.
+  assert.doesNotMatch(text, /\bZ1\b/, 'на экране остался код зоны');
+});
+
+test('карточка атлета: темпы на текущей форме видны всегда', () => {
+  click(document.querySelector('#nav [data-screen="athlete"]'));
+  const picker = document.getElementById('picker');
+  const card = [...picker.querySelectorAll('.card')]
+    .find((node) => node.textContent.includes('Темпы на текущей форме'));
+  assert.ok(card, 'нет карточки темпов');
+  const text = card.textContent;
+  assert.match(text, /Пороговый темп/, 'нет названия зоны темпа');
+  assert.match(text, /4:11/, 'нет темпа порога');
+  assert.match(text, /5:40/, 'нет темпа лёгкого бега');
+  // Темп — на километр, единица одна.
+  assert.match(text, /\/км/, 'нет единицы «на километр»');
 });
 
 test('окна тренировок идут по порядку дней недели', () => {

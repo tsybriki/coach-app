@@ -274,6 +274,59 @@ def test_athlete_form_is_translated(client: TestClient, data_root: Path):
     assert athlete["form_code"] == "recovering_after_back_injury"
 
 
+def test_athlete_response_carries_hr_zone_names_and_form_paces(
+    client: TestClient, data_root: Path,
+):
+    """Профиль отдаёт названия зон пульса и темпы на текущей форме.
+
+    Карточка атлета рисует и то, и другое. Клиент не знает ни словаря
+    названий, ни таблицы темпов — всё приходит с сервера, иначе карточка
+    нарисовала бы пустоту или выдумала значения.
+    """
+    storage = FileStorage(data_root)
+    storage.update_athlete(Athlete(
+        vdot=48.0,
+        hr_zones={"Z1": (100, 118), "Z2": (118, 135), "Z5": (160, 168)},
+        hr_max=182, rhr=54, lth=164,
+    ))
+
+    response = client.get("/api/v1/athlete")
+    assert response.status_code == 200
+    athlete = response.json()["data"]
+
+    # Названия зон — по-русски, ключ — код зоны.
+    assert athlete["hr_zone_names"]["Z1"] == "Восстановление"
+    assert athlete["hr_zone_names"]["Z2"] == "Лёгкая"
+    assert athlete["hr_zone_names"]["Z5"] == "Пороговая"
+
+    # Темпы — по текущей форме (VDOT 48).
+    paces = {row["zone"]: row["pace"] for row in athlete["pace_zones"]}
+    assert paces["T"] == "4:24"
+    assert paces["I"] == "4:03"
+    assert paces["R"] == "3:45"
+    # Лёгкий — 5:40: решение по спортсмену, а не «E» из таблицы.
+    assert paces["E"] == "5:40"
+    # Название зоны — человеческое, без кодов.
+    names = {row["zone"]: row["name"] for row in athlete["pace_zones"]}
+    assert names["T"] == "Пороговый темп"
+
+
+def test_athlete_without_vdot_has_no_paces(client: TestClient, data_root: Path):
+    """Без формы темпов нет — это «не задано», а не ноль.
+
+    Карточка не должна показывать нулевые темпы: нулевой темп читается
+    как «измерили — ноль».
+    """
+    storage = FileStorage(data_root)
+    storage.update_athlete(Athlete(
+        vdot=0.0, hr_zones={"Z1": (100, 118)}, hr_max=182, rhr=54, lth=164,
+    ))
+
+    athlete = client.get("/api/v1/athlete").json()["data"]
+
+    assert athlete["pace_zones"] == []
+
+
 def test_etag_present(client: TestClient):
     """Ответ несёт ETag по версии."""
     response = client.get("/api/v1/snapshot")
