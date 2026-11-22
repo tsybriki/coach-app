@@ -39,13 +39,21 @@ from datetime import date
 import pytest
 
 from app.domain.entities import (
+    ActualSession,
     Assignment,
     Request,
     Step,
     Week,
     Workout,
 )
-from app.domain.enums import Sport, StepRole, TargetType, WeekStatus, WorkoutStatus
+from app.domain.enums import (
+    FactSource,
+    Sport,
+    StepRole,
+    TargetType,
+    WeekStatus,
+    WorkoutStatus,
+)
 from app.services.week_lifecycle import TransitionError, replan_remainder
 
 
@@ -503,3 +511,67 @@ def test_i44_replan_without_facts_keeps_actual_id_rule():
     kept = next(w for w in replanned.workouts if w.id == "w-r7-4")
     assert kept.actual_id == "a1"
     assert kept.status is WorkoutStatus.DONE
+
+
+# ------------- выполненный запрос без размещения (I7)
+
+
+def test_i22_replan_keeps_done_request_without_assignment_in_unplaced():
+    """Выполненный запрос без размещения остаётся в unplaced.
+
+    I7: запрос либо размещён, либо висит. Третий вариант — ни там, ни
+    там — нарушение инварианта, и любая следующая команда на неделе
+    падает: «запрос r7-other-3 без размещения не в unplaced».
+
+    Случай реальный: после «Предложить заново» размещения сбрасываются,
+    а факты помнят свои тренировки. Дальше переплан делит неделю по
+    факту: выполненный запрос попадает в «выполненное» (ему не
+    полагается размещение) и одновременно выпадает из `unplaced`,
+    потому что unplaced собирался из невыполненных.
+
+    Правило: `unplaced` — это **все запросы без размещения**, а не
+    «невыполненные». Иначе выполненный без размещения исчезает из
+    обеих корзин.
+    """
+    week = active_week()
+    week.status = WeekStatus.PROPOSED
+    # Выполненный запрос без размещения — после propose размещения
+    # сброшены, а факт помнит тренировку.
+    week.assignments = [a for a in week.assignments
+                         if a.request_id != "r7-other-3"]
+    week.unplaced = [r for r in week.unplaced
+                     if r.id != "r7-other-3"]
+
+    replanned = replan_remainder(week, actuals=[
+        ActualSession(id="a2", date=date(2026, 11, 22), sport=Sport.OFP,
+                      source=FactSource.GARMIN, duration_min=15,
+                      distance_m=0.0, external_id="ext-2",
+                      linked_workout_id="w-ofp-1"),
+    ])
+
+    placed = {a.request_id for a in replanned.assignments}
+    unplaced = {r.id for r in replanned.unplaced}
+    requests = {r.id for r in replanned.requests}
+    assert not (requests - placed - unplaced), (
+        f"запросы без размещения и не в unplaced: "
+        f"{requests - placed - unplaced}"
+    )
+    assert "r7-other-3" in unplaced, (
+        "выполненный запрос без размещения выпал из unplaced — "
+        "инвариант I7 нарушен"
+    )
+
+
+def test_i22_replan_unplaced_is_every_request_without_assignment():
+    """unplaced — это все запросы без размещения, а не «невыполненные»."""
+    week = active_week()
+    week.status = WeekStatus.PROPOSED
+
+    replanned = replan_remainder(week)
+
+    placed = {a.request_id for a in replanned.assignments}
+    unplaced = {r.id for r in replanned.unplaced}
+    requests = {r.id for r in replanned.requests}
+    assert unplaced == requests - placed, (
+        "unplaced — не все запросы без размещения"
+    )

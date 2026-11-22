@@ -214,11 +214,21 @@ def replan_remainder(week: Week,
     rest_workouts = [_as_plannable(w) for w in week.workouts
                      if w.request_id not in done_request_ids]
 
+    # `unplaced` — это **все запросы без размещения**, а не
+    # «невыполненные». Иначе выполненный запрос без размещения
+    # выпадает из обеих корзин: его нет ни среди размещённых, ни среди
+    # висяков — и инвариант I7 падает («запрос r7-other-3 без
+    # размещения не в unplaced»). Такое состояние — после «Предложить
+    # заново»: размещения сброшены, а факты помнят свои тренировки
+    # (Кирилл, 22.11.2026).
+    placed_ids = {a.request_id for a in done_assignments}
+    unplaced_requests = [r for r in week.requests if r.id not in placed_ids]
+
     replanned = week.copy_with(
         status=WeekStatus.PROPOSED,
         requests=done_requests + rest_requests,
         assignments=done_assignments,
-        unplaced=list(rest_requests),
+        unplaced=unplaced_requests,
         workouts=done_workouts + rest_workouts,
     )
     replanned.validate()

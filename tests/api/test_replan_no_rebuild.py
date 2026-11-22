@@ -450,3 +450,189 @@ def test_removing_workout_with_fact_is_rejected_even_if_link_is_broken(
     })
     assert response.status_code == 400, response.text
     assert "факт" in response.json()["error"]["message"]
+
+
+# --------------- последовательность действий: replan → привязка → propose (I7)
+
+
+def test_replan_after_propose_and_relink_does_not_break_invariants(
+    client: TestClient, data_root: Path
+):
+    """Переплан после «Предложить заново» не ломает инварианты.
+
+    Сценарий Кирилла (22.11.2026): неделя активна, две тренировки
+    выполнены. Дальше: перепланировать остаток → привязать висяков к
+    окнам → «Предложить заново» → активировать → привязать оставшихся
+    → перепланировать снова. Последний шаг падал:
+
+        I7: неделя W7: запрос r7-other-3 без размещения не в unplaced
+
+    Причина — не в переплане, а в том, что было до него.
+
+    «Предложить заново» пересобирает неделю и **сбрасывает привязки
+    факта**: тренировки становятся невыполненными. Но факты помнят
+    свои тренировки — обратная ссылка остаётся. Дальше пользователь
+    привязывает висяков к окнам, и выполненный запрос оказывается
+    без размещения и без unplaced: инвариант I7 нарушен, и переплан
+    на нём падает.
+
+    Правильное поведение: «Предложить заново» не должен терять связь
+    с фактом. Факт — это сделанная работа, и перепредложение плана её
+    не отменяет.
+    """
+    version = _seed(data_root)
+
+    # 1. Перепланировать остаток.
+    _replan(client, version)
+    version = client.get("/api/v1/snapshot").json()["version"]
+
+    # 2. Привязать висяков к окнам (часть).
+    for request_id, slot_id in (("r7-1", "win-ПН-1"), ("r7-2", "win-ЧТ-1")):
+        response = client.post("/api/v1/commands", json={
+            "id": f"place-{request_id}", "type": "place_unplaced",
+            "args": {"season_week": 7, "request_id": request_id,
+                     "slot_id": slot_id},
+            "reason": "ручная привязка тренировки к окну",
+            "expected_version": version,
+        })
+        assert response.status_code == 200, response.text
+        version = client.get("/api/v1/snapshot").json()["version"]
+
+    # 3. «Предложить заново».
+    response = client.post("/api/v1/commands", json={
+        "id": "propose-1", "type": "propose_week",
+        "args": {"season_week": 7}, "reason": "предложить заново",
+        "expected_version": version,
+    })
+    assert response.status_code == 200, response.text
+    version = client.get("/api/v1/snapshot").json()["version"]
+
+    # 4. Активировать.
+    response = client.post("/api/v1/commands", json={
+        "id": "act-1", "type": "activate_week",
+        "args": {"season_week": 7}, "reason": "активировать",
+        "expected_version": version,
+    })
+    assert response.status_code == 200, response.text
+    version = client.get("/api/v1/snapshot").json()["version"]
+
+    # 5. Привязать оставшихся. Выполненные (`r7-4`, `r7-other-3`)
+    # после propose остаются размещёнными — их привязывать заново не
+    # нужно и нельзя.
+    for request_id, slot_id in (("r7-other-2", "win-ПТ-1"),):
+        response = client.post("/api/v1/commands", json={
+            "id": f"place2-{request_id}", "type": "place_unplaced",
+            "args": {"season_week": 7, "request_id": request_id,
+                     "slot_id": slot_id},
+            "reason": "ручная привязка тренировки к окну",
+            "expected_version": version,
+        })
+        assert response.status_code == 200, response.text
+        version = client.get("/api/v1/snapshot").json()["version"]
+
+    # 6. Перепланировать снова — вот тут и падало.
+    response = _replan(client, version, "replan-2")
+    assert response.status_code == 200, (
+        f"переплан после «Предложить заново» упал: {response.text}"
+    )
+
+    week = client.get("/api/v1/week/7").json()["data"]
+    # Инвариант I7: каждый запрос либо размещён, либо висит.
+    placed = {a["request_id"] for a in week["assignments"]}
+    unplaced = {u["id"] for u in week["unplaced"]}
+    requests = {r["id"] for r in week["requests"]}
+    assert not (requests - placed - unplaced), (
+        f"запросы без размещения и не в unplaced: {requests - placed - unplaced}"
+    )
+
+
+def test_propose_keeps_fact_link_of_done_workout(
+    client: TestClient, data_root: Path
+):
+    """«Предложить заново» не теряет связь с фактом.
+
+    Факт — это сделанная работа. Перепредложение плана её не
+    отменяет: выполненная тренировка остаётся выполненной, а её
+    факт — связанным.
+
+    Раньше propose сбрасывал `actual_id` у всех тренировок, и
+    выполненное начинало выглядеть невыполненным — а факты при этом
+    продолжали помнить свои тренировки. Связь разъезжалась (I44), и
+    следующий переплан падал на инварианте I7.
+    """
+    version = _seed(data_root)
+
+    # «Предложить заново» — только у proposed-недели (I23). Поэтому
+    # сначала переплан возвращает неделю в proposed.
+    _replan(client, version)
+    version = client.get("/api/v1/snapshot").json()["version"]
+
+    response = client.post("/api/v1/commands", json={
+        "id": "propose-1", "type": "propose_week",
+        "args": {"season_week": 7}, "reason": "предложить заново",
+        "expected_version": version,
+    })
+    assert response.status_code == 200, response.text
+
+    week = client.get("/api/v1/week/7").json()["data"]
+    done = {w["actual_id"]: w["id"] for w in week["workouts"] if w["actual_id"]}
+    assert "a1" in done, "факт бега потерялся при «Предложить заново»"
+    assert "a2" in done, "факт ОФП потерялся при «Предложить заново»"
+
+
+def test_propose_leaves_no_duplicate_workout_ids(
+    client: TestClient, data_root: Path
+):
+    """После «Предложить заново» нет двух тренировок с одним id.
+
+    Выполненные тренировки возвращаются в пересобранную неделю — а
+    пересборка даёт свои тренировки с теми же id (`w-r7-1…`,
+    `w-ofp-1`). Если их не развести, в неделе снова окажутся
+    дубликаты — ровно то, из-за чего неделя выглядела «10 тренировок
+    вместо 8».
+    """
+    version = _seed(data_root)
+    _replan(client, version)
+    version = client.get("/api/v1/snapshot").json()["version"]
+
+    response = client.post("/api/v1/commands", json={
+        "id": "propose-1", "type": "propose_week",
+        "args": {"season_week": 7}, "reason": "предложить заново",
+        "expected_version": version,
+    })
+    assert response.status_code == 200, response.text
+
+    week = client.get("/api/v1/week/7").json()["data"]
+    ids = [w["id"] for w in week["workouts"]]
+    assert len(ids) == len(set(ids)), f"дубликаты id тренировок: {ids}"
+    request_ids = [w["request_id"] for w in week["workouts"]]
+    assert len(request_ids) == len(set(request_ids)), (
+        f"дубликаты request_id: {request_ids}"
+    )
+
+
+def test_propose_keeps_invariants(
+    client: TestClient, data_root: Path
+):
+    """После «Предложить заново» инварианты недели целы.
+
+    I7: каждый запрос либо размещён, либо висит.
+    """
+    version = _seed(data_root)
+    _replan(client, version)
+    version = client.get("/api/v1/snapshot").json()["version"]
+
+    response = client.post("/api/v1/commands", json={
+        "id": "propose-1", "type": "propose_week",
+        "args": {"season_week": 7}, "reason": "предложить заново",
+        "expected_version": version,
+    })
+    assert response.status_code == 200, response.text
+
+    week = client.get("/api/v1/week/7").json()["data"]
+    placed = {a["request_id"] for a in week["assignments"]}
+    unplaced = {u["id"] for u in week["unplaced"]}
+    requests = {r["id"] for r in week["requests"]}
+    assert not (requests - placed - unplaced), (
+        f"запросы без размещения и не в unplaced: {requests - placed - unplaced}"
+    )

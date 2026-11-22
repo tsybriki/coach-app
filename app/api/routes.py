@@ -41,7 +41,10 @@ from app.ports.storage import (
     StorageBusyError,
     VersionConflictError,
 )
-from app.services.week_lifecycle import activation_blocker
+from app.services.week_lifecycle import (
+    _as_done,
+    activation_blocker,
+)
 
 router = APIRouter(prefix="/api/v1")
 
@@ -613,8 +616,19 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         # Проверка статуса — в сервисе: закрытую и активную неделю
         # предлагать заново нельзя (I23: закрытая неделя не меняется).
         season = container.season_repo.load()
-        updated = propose_by_rules(season, week, container.planner,
+        rebuilt = propose_by_rules(season, week, container.planner,
                                    container.methodology_repo.workout_templates())
+        # Выполненное возвращается на место: факт — это сделанная
+        # работа, и перепредложение плана её не отменяет.
+        #
+        # Раньше propose собирал неделю с нуля и терял выполненное:
+        # тренировки становились невыполненными, а факты продолжали
+        # помнить свои тренировки. Связь разъезжалась (I44), и следующий
+        # переплан падал на инварианте I7 — «запрос r7-other-3 без
+        # размещения не в unplaced» (Кирилл, 22.11.2026).
+        updated = _keep_done_workouts(rebuilt, week,
+                                      container.fact_repo.list_for_week(
+                                          season_week))
     elif command.type is CommandType.ACTIVATE_WEEK:
         # Активация — только после закрытия предыдущей недели (I45).
         # Правило живёт в сервисе, а не в маршруте: маршрут переводит.
@@ -718,6 +732,96 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
     return {"status": "applied", "new_version": version, "diff": diff,
             "consequences": {"scope": "local", "affected": [f"W{season_week}"]},
             "warnings": []}
+
+
+def _keep_done_workouts(rebuilt: Week, original: Week,
+                         actuals: list[Any]) -> Week:
+    """Вернуть выполненные тренировки в пересобранную неделю.
+
+    Пересборка по правилам делает новый план — и в нём нет тренировок,
+    которые уже выполнены: у них есть факт, а не намерение на будущее.
+    Но факт не теряется: выполненное остаётся в неделе, на своём месте
+    и со своей связью.
+
+    Что делаем:
+      - выполненные тренировки, их запросы и размещения — возвращаем;
+      - их факты остаются связанными (факт живёт в хранилище фактов,
+        ссылка на тренировку — в тренировке).
+
+    Выполненной считается тренировка, которую помнит факт, — по обеим
+    сторонам связи (I44). Разъезд сторон и был причиной падения: после
+    propose факт помнил тренировку, а у тренировки `actual_id` был
+    пуст, и следующий переплан считал её невыполненной.
+
+    `unplaced` собирается как **все запросы без размещения**: иначе
+    выполненный запрос без размещения выпадает из обеих корзин, и
+    инвариант I7 падает (Кирилл, 22.11.2026).
+    """
+    done_by_id = {w.id for w in original.workouts if w.actual_id}
+    done_by_fact = {
+        session.linked_workout_id
+        for session in actuals
+        if session.linked_workout_id
+    }
+    done_ids = done_by_id | done_by_fact
+
+    actual_by_workout: dict[str, str] = {
+        w.id: w.actual_id for w in original.workouts if w.actual_id
+    }
+    for session in actuals:
+        if (session.linked_workout_id
+                and session.id not in actual_by_workout.values()):
+            actual_by_workout[session.linked_workout_id] = session.id
+
+    done_workouts = [
+        _as_done(w, actual_by_workout.get(w.id))
+        for w in original.workouts
+        if w.id in done_ids
+    ]
+    if not done_workouts:
+        return rebuilt
+
+    done_request_ids = {w.request_id for w in done_workouts}
+    done_requests = [r for r in original.requests
+                     if r.id in done_request_ids]
+    done_assignments = [
+        a for a in original.assignments if a.request_id in done_request_ids
+    ]
+
+    # Размещения выполненного — в начало: порядок размещённых тренировок
+    # на экране идёт по времени, и выполненное было раньше остального.
+    #
+    # Выполненные **заменяют** одноимённые из пересборки, а не
+    # добавляются к ним: пересборка даёт свои тренировки с теми же id
+    # (`w-r7-1…`, `w-ofp-1`), и без замены в неделе снова окажутся
+    # дубликаты — ровно то, из-за чего неделя выглядела «10 тренировок
+    # вместо 8».
+    done_workout_ids = {w.id for w in done_workouts}
+    done_request_id_set = {r.id for r in done_requests}
+
+    assignments = done_assignments + [
+        a for a in rebuilt.assignments if a.request_id not in done_request_id_set
+    ]
+    workouts = done_workouts + [
+        w for w in rebuilt.workouts if w.id not in done_workout_ids
+    ]
+    requests = done_requests + [
+        r for r in rebuilt.requests if r.id not in done_request_id_set
+    ]
+
+    # unplaced — все запросы без размещения.
+    placed_ids = {a.request_id for a in assignments}
+    unplaced = [r for r in requests if r.id not in placed_ids]
+
+    merged = rebuilt.copy_with(
+        status=WeekStatus.PROPOSED,
+        requests=requests,
+        assignments=assignments,
+        unplaced=unplaced,
+        workouts=workouts,
+    )
+    merged.validate()
+    return merged
 
 
 def _add_composed_workout(
