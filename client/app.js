@@ -1051,7 +1051,98 @@ function screenSeason() {
       ${plan.macro_weeks.length} недель в плане ·
       ${plan.horizon.season_week_count} недель в сезоне</div>
     ${race}
+    ${loadCard(plan.load)}
     ${phaseBlocks}`;
+}
+
+/* Карточка «Нагрузка»: что сделано по сезону.
+ *
+ * На вкладке «Сезон» был только план — задуманное. Здесь — сделанное:
+ * сколько нагрузки набрано, сколько в среднем в неделю и какая форма.
+ * Это и есть ответ на «набираю ли я форму»: сумма сама по себе ничего
+ * не говорит, говорит средняя и динамика по неделям.
+ *
+ * Строки, а не плитки: аналитика — это несколько величин с пояснением,
+ * и десяток плиток читается как суета.
+ */
+function loadCard(load) {
+  if (!load || !load.weeks_counted) return '';
+  const rows = [];
+
+  /* Суммарная нагрузка — с числом недель, из которых она сложилась.
+   * Без этого «1691 TSS» — число без масштаба. */
+  rows.push(['Нагрузка за сезон',
+    `${Math.round(load.tss_total)} TSS`,
+    `${load.weeks_counted} ${plural(load.weeks_counted, 'неделя', 'недели', 'недель')}`]);
+
+  /* Средняя в неделю — по неделям с нагрузкой, а не по всем неделям
+   * сезона: план на 49 недель, а факт за месяц. */
+  if (load.tss_avg_week !== null && load.tss_avg_week !== undefined) {
+    rows.push(['Средняя в неделю',
+      `${Math.round(load.tss_avg_week)} TSS`,
+      `за ${load.weeks_counted} ${plural(load.weeks_counted, 'неделю', 'недели', 'недель')} с фактом`]);
+  }
+
+  /* Средняя за последние недели — видно, растёт форма или падает. */
+  if (load.tss_avg_recent !== null && load.tss_avg_recent !== undefined) {
+    rows.push(['Последние недели',
+      `${Math.round(load.tss_avg_recent)} TSS`,
+      `в среднем за ${load.recent_weeks} ${plural(load.recent_weeks, 'неделю', 'недели', 'недель')}`]);
+  }
+
+  /* Объём рядом с нагрузкой: 400 TSS — это 40 км лёгкого или 200 км
+   * с интервалами. Без объёма нагрузка не читается. */
+  if (load.distance_km) {
+    rows.push(['Объём', `${Math.round(load.distance_km)} км`, 'всего за сезон']);
+  }
+
+  /* Форма — последнее измерение VO₂max от Garmin. */
+  if (load.vo2max) {
+    rows.push(['VO₂max', String(load.vo2max), 'форма по Garmin']);
+  }
+
+  const body = rows.map(([name, value, note]) => `<div class="mrow">
+      <span class="mname">${escapeHtml(name)}</span>
+      <span class="mval">${escapeHtml(value)}</span>
+      ${note ? `<span class="mnote">${escapeHtml(note)}</span>` : ''}
+    </div>`).join('');
+
+  /* Недели с нагрузкой — по порядку недель. График показывает
+   * нагрузку, а не пустоты: недели без разбора в ряд не попадают. */
+  const weekly = load.weekly || [];
+  const series = weekly.length > 1 ? loadSeries(weekly) : '';
+
+  return `<div class="card">
+      <div class="chead">Нагрузка</div>
+      <div class="metrics-list">${body}</div>
+      ${series}
+    </div>`;
+}
+
+/* Ряд нагрузки по неделям — полосами.
+ *
+ * Не линия: недели на горизонте — не время, а соседние отрезки, и
+ * линия между ними читалась бы как непрерывность, которой нет.
+ */
+function loadSeries(weekly) {
+  const share = Math.max(...weekly.map((w) => w.tss));
+  const rows = weekly.map((item) => {
+    const week = item.season_week;
+    const tss = Math.round(item.tss);
+    const width = share > 0 ? (item.tss / share) * 100 : 0;
+    /* Неделя в процессе: её нагрузка ещё не вся. Без пометки 96 TSS
+     * рядом с 400 читаются как «нагрузка рухнула». */
+    const open = item.complete === false;
+    return `<div class="load-row${open ? ' open' : ''}">
+        <span class="load-week">W${week}</span>
+        <span class="load-bar"><i style="width:${width.toFixed(1)}%"></i></span>
+        <span class="load-value">${tss}</span>
+        ${open ? '<span class="load-open">не закончена</span>' : ''}
+      </div>`;
+  }).join('');
+
+  return `<div class="chead sub">Нагрузка по неделям</div>
+    <div class="load-list">${rows}</div>`;
 }
 
 /* Неделя макро-плана: фокус, объём, состояние.

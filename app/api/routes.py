@@ -20,6 +20,7 @@ from app.adapters.fit import parse_fit
 from app.api.dependencies import AppContainer, get_container
 from app.domain.derivations import (
     preserve_fact_links,
+    season_load_summary,
     week_progress,
     workout_distance_m,
 )
@@ -402,8 +403,30 @@ def season(container: AppContainer = Depends(get_container)) -> JSONResponse:
                                  if phase.volume_range else None),
             })
 
+    # Нагрузка сезона — по факту и разборам FIT.
+    #
+    # Считается здесь, а не берётся из саммари: у недели, закрытой до
+    # появления метрик, в саммари нагрузки нет, а разборы FIT лежат в
+    # хранилище — и TSS пересчитывается. Так нагрузка не зависит от
+    # того, когда неделю закрыли.
+    weeks_with_load: dict[int, list[dict[str, Any]]] = {}
+    closed_weeks: set[int] = set()
+    for stored_week in container.season_repo.weeks():
+        sessions = container.fact_repo.list_for_week(stored_week.season_week)
+        if not sessions:
+            continue
+        metrics = container.metrics.week(stored_week, sessions)
+        if not metrics.per_workout:
+            continue
+        weeks_with_load[stored_week.season_week] = metrics.per_workout
+        if stored_week.status is WeekStatus.CLOSED:
+            closed_weeks.add(stored_week.season_week)
+
+    load = season_load_summary(weeks_with_load, closed_weeks=closed_weeks)
+
     return ok(container, {
         "id": loaded.id,
+        "load": load,
         "horizon": {
             "start": loaded.horizon_start.isoformat(),
             "end": loaded.horizon_end.isoformat(),

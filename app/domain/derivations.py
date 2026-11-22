@@ -371,6 +371,107 @@ def week_progress(week: Week, sessions: list[ActualSession]) -> dict[str, Any]:
         },
     }
 
+def season_load_summary(
+    weeks: dict[int, list[dict[str, Any]]],
+    recent_weeks: int = 4,
+    closed_weeks: set[int] | None = None,
+) -> dict[str, Any]:
+    """Нагрузка сезона: сумма TSS, средняя, динамика по неделям.
+
+    `weeks` — метрики тренировок по номеру недели сезона. Каждая
+    метрика — словарь из `WeekMetrics.as_dict()`: `tss`, `vo2max`,
+    `distance_m`.
+
+    Что это отвечает на вопрос «как я набираю форму»: суммарная
+    нагрузка за сезон, средняя в неделю и средняя за последние недели.
+    Без средней за месяц сумма сама по себе ничего не говорит — рост
+    или спад видно только по динамике.
+
+    Правила:
+
+    - **неделя без нагрузки не считается неделей с нулевой
+      нагрузкой.** Нет FTP или нет мощности — нагрузки не из чего
+      считать. Такая неделя не входит в среднюю и не портит её;
+    - средняя делится на число недель **с нагрузкой**, а не на все
+      недели сезона: план на 49 недель, а факт — за месяц, и деление
+      на все недели показало бы несуществующую цифру;
+    - форма — последний известный VO₂max;
+    - **незакрытая неделя не тянет средние вниз.** В ней нагрузка ещё
+      не вся: 96 TSS вместо ~400. Рядом с закрытыми неделями это
+      читается как «нагрузка рухнула», хотя ничего не рухнуло. Сумма
+      при этом включает всё сделанное — сделанное не обнуляется тем,
+      что неделя ещё не закрыта.
+
+    `closed_weeks` — номера закрытых недель. Если он не передан, закрытыми
+    считаются все: статус недели может быть неизвестен, и выдумывать
+    его нельзя.
+
+    Пустой вход — пустой результат: `tss_total` 0, а средних нет.
+    Ноль средней означал бы «посчитали — ноль», а нагрузки просто не
+    было.
+    """
+    weekly: list[dict[str, Any]] = []
+    # Форма — последнее измерение VO₂max, а не первое попавшееся.
+    # Дат нет — порядок как есть: измерение без даты просто есть.
+    vo2max_samples: list[tuple[str, float]] = []
+    distance_m = 0.0
+
+    for season_week in sorted(weeks):
+        metrics = weeks[season_week]
+        week_tss = 0.0
+        week_counted = 0
+        for item in metrics:
+            tss = item.get("tss")
+            if tss is not None:
+                week_tss += float(tss)
+                week_counted += 1
+            value = item.get("vo2max")
+            if value is not None:
+                vo2max_samples.append(
+                    (str(item.get("date") or ""), float(value)))
+            km = item.get("distance_m")
+            if km is not None:
+                distance_m += float(km)
+        if not week_counted:
+            continue
+        complete = closed_weeks is None or season_week in closed_weeks
+        weekly.append({
+            "season_week": season_week,
+            "tss": week_tss,
+            "complete": complete,
+        })
+
+    vo2max = max(vo2max_samples, key=lambda pair: pair[0])[1] \
+        if vo2max_samples else None
+
+    total = sum(row["tss"] for row in weekly)
+
+    # Средние — по закрытым неделям. Незакрытая неделя в процессе и
+    # тянула бы среднее вниз; если закрытых нет, берём все.
+    closed_rows = [row for row in weekly if row["complete"]]
+    basis = closed_rows if closed_rows else weekly
+    counted = len(basis)
+
+    recent = basis[-recent_weeks:] if recent_weeks > 0 else []
+    recent_avg = (
+        sum(row["tss"] for row in recent) / len(recent) if recent else None
+    )
+
+    return {
+        "tss_total": total,
+        "tss_avg_week": (
+            sum(row["tss"] for row in basis) / counted if counted else None
+        ),
+        "tss_avg_recent": recent_avg,
+        "recent_weeks": len(recent),
+        "weeks_counted": counted,
+        "weeks_closed": len(closed_rows),
+        "vo2max": vo2max,
+        "distance_km": distance_m / 1000.0,
+        "weekly": weekly,
+    }
+
+
 def race_week_of(plan_id: str, goal_race_date: date, plan_period: tuple[date, date]) -> int | None:
     """I33: неделя гонки принадлежит плану.
 

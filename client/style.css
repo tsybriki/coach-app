@@ -2249,3 +2249,110 @@ p.lead {
   font-family: ui-monospace, SFMono-Regular, monospace;
   font-size: 12px;
 }
+
+/* Карточка нагрузки на вкладке «Сезон».
+ *
+ * Строки величин: имя — значение — пояснение. Аналитика читается
+ * списком, а не плитками: десяток плиток — суета.
+ */
+.metrics-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.mrow {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, .08));
+}
+
+.mrow:last-child {
+  border-bottom: none;
+}
+
+.mname {
+  flex: 0 0 auto;
+  color: var(--muted, #9aa0a6);
+}
+
+.mval {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* Пояснение — под строкой, слева: значение прижато вправо, а
+ * пояснение читается как продолжение названия, а не как отдельная
+ * подпись, повисшая в центре. */
+.mnote {
+  flex: 0 0 100%;
+  order: 3;
+  color: var(--muted, #9aa0a6);
+  font-size: .85em;
+  text-align: left;
+}
+
+/* Ряд нагрузки по неделям: полоса от максимума недели. */
+.load-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.load-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.load-week {
+  flex: 0 0 34px;
+  color: var(--muted, #9aa0a6);
+  font-variant-numeric: tabular-nums;
+}
+
+.load-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .07);
+  overflow: hidden;
+}
+
+.load-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent, #4f8cff);
+}
+
+.load-value {
+  flex: 0 0 auto;
+  min-width: 40px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Неделя в процессе: нагрузка ещё не вся — помечаем и приглушаем,
+ * чтобы полоса не читалась как провал. */
+.load-row.open .load-bar > i {
+  background: var(--accent, #4f8cff);
+  opacity: .45;
+}
+
+.load-row.open .load-week,
+.load-row.open .load-value {
+  color: var(--muted, #9aa0a6);
+}
+
+.load-open {
+  flex: 0 0 auto;
+  color: var(--muted, #9aa0a6);
+  font-size: .8em;
+  white-space: nowrap;
+}

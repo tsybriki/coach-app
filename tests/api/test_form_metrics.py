@@ -14,6 +14,7 @@ from app.adapters.storage.files import FileStorage
 from app.domain.entities import (
     ActualSession,
     Assignment,
+    Athlete,
     Request,
     Season,
     Slot,
@@ -318,3 +319,48 @@ def test_close_week_stores_metrics_in_summary(
     summary = client.get("/api/v1/week/1").json()["data"]["summary"]
     assert summary["metrics"]["z2_min"] == 30.0
     assert summary["metrics"]["workouts_counted"] == 1
+
+
+# ------------------------------------------------------------------ нагрузка сезона
+
+
+def test_season_carries_load_summary(client: TestClient, data_root: Path):
+    """Вкладка «Сезон» отдаёт нагрузку сезона.
+
+    Нагрузка — по факту и разборам FIT: она уже посчитана для недели,
+    сезон её собирает.
+    """
+    seed_week(data_root)
+    seed_fact_with_detail(data_root)
+    # Нагрузка считается от мощности — без порога её не из чего считать.
+    FileStorage(data_root).update_athlete(Athlete(
+        vdot=48.0, hr_zones={"Z2": (118, 135)}, hr_max=182, rhr=54,
+        lth=164, ftp_w=400.0))
+
+    response = client.get("/api/v1/season")
+    assert response.status_code == 200
+    data = response.json()["data"]
+
+    load = data["load"]
+    assert load is not None, "в сезоне нет блока нагрузки"
+    assert load["tss_total"] > 0, "нагрузка сезона не посчитана"
+    assert load["weeks_counted"] == 1
+    assert load["weekly"], "нет динамики по неделям"
+    assert load["weekly"][0]["season_week"] == 1
+
+
+def test_season_without_fact_has_empty_load(client: TestClient, data_root: Path):
+    """Без факта нагрузки нет — это «не задано», а не ноль.
+
+    Средних быть не должно: делить на пустоту нельзя.
+    """
+    seed_week(data_root)
+
+    data = client.get("/api/v1/season").json()["data"]
+
+    load = data["load"]
+    assert load is not None
+    assert load["tss_total"] == 0.0
+    assert load["tss_avg_week"] is None
+    assert load["tss_avg_recent"] is None
+    assert load["weekly"] == []
