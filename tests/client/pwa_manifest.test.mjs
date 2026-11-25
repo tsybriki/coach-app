@@ -81,7 +81,7 @@ test('иконка: фон maskable-версии совпадает с фоно�
   const hex = match[1];
   const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   const expected = `rgb(${rgb.join(',')})`;
-  const svg = readFileSync(`${ROOT}client/icons/icon.svg`, 'utf-8');
+  const svg = readFileSync(`${ROOT}client/icons/icon-v2.svg`, 'utf-8');
   assert.ok(svg.includes(expected),
     `фон иконки ${expected} не совпадает с --bg ${hex}`);
 });
@@ -90,4 +90,34 @@ test('service worker: иконки в SHELL, а версия кэша подня
   const match = SW.match(/shell-v(\d+)/);
   assert.ok(match, 'в worker нет версии кэша');
   assert.ok(Number(match[1]) >= 18, `версия кэша ${match[1]} — старее v18`);
+});
+
+test('иконки версионированы в URL — иначе Chrome не обновит иконку', () => {
+  // Chrome обновляет иконку установленного PWA, только если изменился
+  // URL иконки. Новый файл под старым URL он не подхватит: иконка
+  // останется прежней, пока приложение не удалят и не поставят заново.
+  //
+  // Поэтому в пути иконки есть версия: icon-v2.png, а не icon.png.
+  for (const icon of MANIFEST.icons) {
+    assert.match(icon.src, /-v\d+\./,
+      `${icon.src} — без версии в URL, Chrome не обновит иконку`);
+  }
+});
+
+test('index.html: иконки ссылаются на те же версионированные файлы', () => {
+  // Ссылка в разметке и манифест должны совпадать: иначе вкладка
+  // покажет одну иконку, а установленное приложение — другую.
+  const icon192 = MANIFEST.icons.find((i) => i.sizes === '192x192');
+  assert.ok(icon192, 'нет иконки 192 в манифесте');
+  assert.ok(HTML.includes(icon192.src),
+    `index.html ссылается не на ${icon192.src}`);
+});
+
+test('версионированные файлы иконок физически существуют', () => {
+  for (const icon of MANIFEST.icons) {
+    if (!icon.src.endsWith('.png')) continue;
+    const path = `${ROOT}client${icon.src}`;
+    const size = statSync(path).size;
+    assert.ok(size > 1000, `${icon.src} — пустой или слишком мал (${size} B)`);
+  }
 });

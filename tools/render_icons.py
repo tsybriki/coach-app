@@ -12,11 +12,12 @@ Chrome просит иконки в манифесте: 192×192 и 512×512 д�
 Запуск:
     python3 tools/render_icons.py
 
-Результат:
-    client/icons/icon-192.png
-    client/icons/icon-512.png
-    client/icons/icon-maskable-512.png
-    client/icons/icon.svg
+Результат (с версией в имени — Chrome по URL обновляет иконку
+установленного приложения, а по содержимому файла — нет):
+    client/icons/icon-192-v2.png
+    client/icons/icon-512-v2.png
+    client/icons/icon-maskable-512-v2.png
+    client/icons/icon-v2.svg
 
 **Maskable-версия — с запасом.** Android обрезает иконку по своей маске
 (круг, скруглённый квадрат): рисунок в полный размер срезался бы по
@@ -41,6 +42,17 @@ SOURCE = OUT / "icon-source.png"
 # Фон иконки — цвет темы приложения (`--bg` в `client/style.css`).
 # Тёмный: иначе маска Android показала бы серый прямоугольник.
 BG = (15, 17, 21)
+
+# Версия иконки — в имени файла.
+#
+# Chrome обновляет иконку установленного PWA, только если изменился URL
+# иконки: новый файл под старым URL он не подхватит, и значок останется
+# прежним, пока приложение не удалят и не поставят заново. Поэтому при
+# смене картинки версия поднимается: icon-v2.png вместо icon-v1.png.
+#
+# Меняешь знак — поднимай версию здесь.
+VERSION = 2
+SUFFIX = f"-v{VERSION}"
 
 # Мастер — 1140×1150. Держим его в PNG с альфа-каналом.
 MASTER_SIZE = 1024
@@ -87,7 +99,7 @@ def render(size: int, master: Image.Image, *, maskable: bool = False) -> Image.I
     return canvas
 
 
-def write_svg(master: Image.Image) -> None:
+def write_svg(master: Image.Image, path: Path) -> None:
     """SVG-версия — обёртка с растра.
 
     Браузеры, просящие SVG-иконку, получают тот же знак. Свой SVG
@@ -98,7 +110,6 @@ def write_svg(master: Image.Image) -> None:
   <image width="{MASTER_SIZE}" height="{MASTER_SIZE}" xlink:href="icon-source.png"/>
 </svg>
 """
-    path = OUT / "icon.svg"
     path.write_text(svg, encoding="utf-8")
     print(f"written: {path.relative_to(ROOT)} ({path.stat().st_size} B)")
 
@@ -108,15 +119,16 @@ def main() -> int:
     master = load_master()
 
     for size, name in ((192, "icon-192.png"), (512, "icon-512.png")):
-        path = OUT / name
+        path = OUT / f"icon-{size}{SUFFIX}.png"
         render(size, master).save(path, "PNG", optimize=True)
         print(f"written: {path.relative_to(ROOT)} ({path.stat().st_size} B)")
 
-    path = OUT / "icon-maskable-512.png"
+    path = OUT / f"icon-maskable-512{SUFFIX}.png"
     render(512, master, maskable=True).save(path, "PNG", optimize=True)
     print(f"written: {path.relative_to(ROOT)} ({path.stat().st_size} B)")
 
-    write_svg(master)
+    path = OUT / f"icon{SUFFIX}.svg"
+    write_svg(master, path)
     return 0
 
 

@@ -12,11 +12,13 @@
  * Ответы команд и ошибки не кэшируются никогда.
  */
 
-const CACHE = 'coach-app-shell-v47';
+const CACHE = 'coach-app-shell-v48';
 const SHELL = ['/', '/index.html', '/app.js', '/api.js', '/store.js', '/link.js',
                '/chart.js', '/structure.js', '/style.css', '/manifest.json',
-               '/icons/icon-192.png', '/icons/icon-512.png',
-               '/icons/icon-maskable-512.png', '/icons/icon.svg',
+               // Иконки с версией в имени: Chrome обновляет иконку
+               // установленного приложения по URL, а не по содержимому.
+               '/icons/icon-192-v2.png', '/icons/icon-512-v2.png',
+               '/icons/icon-maskable-512-v2.png', '/icons/icon-v2.svg',
                // Мастер иконки: SVG-обёртка ссылается на него, без него
                // иконка вкладки в офлайне не покажется.
                '/icons/icon-source.png'];
