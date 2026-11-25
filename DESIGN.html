@@ -1220,16 +1220,21 @@ GET  /api/v1/events                  SSE: изменения версии</code>
 </tr>
 <tr>
 <td>Иконки 192×192 и 512×512 (+ maskable для Android)</td>
-<td><code>client/icons/</code>, рисует <code>tools/render_icons.py</code></td>
+<td><code>client/icons/</code>, рисует <code>tools/render_icons.py</code> из <code>icon-source.png</code></td>
 </tr>
 <tr>
 <td>Service worker с обработчиком <code>fetch</code></td>
 <td><code>client/sw.js</code></td>
 </tr>
 </table></div>
-<p>Иконки рисуются кодом, а не хранятся готовыми: палитра живёт в</p>
-<p><code>client/style.css</code>, и иконка обязана быть из неё же. <code>python3 tools/render_icons.py</code></p>
-<p>перерисовывает их после правки палитры.</p>
+<p>Иконка — <b>готовая картинка</b>: знак «Чёрный тренер» (Кирилл, 25.11.2026).</p>
+<p>Мастер-файл — <code>client/icons/icon-source.png</code>, он и есть источник правды.</p>
+<p><code>python3 tools/render_icons.py</code> выводит из него 192, 512, maskable и SVG.</p>
+<p><b>Maskable-версия — с запасом 80 % и фоном темы.</b> Android обрезает иконку</p>
+<p>по своей маске (круг, скруглённый квадрат): рисунок в полный размер</p>
+<p>срезался бы по краям, и обрезалась бы именно надпись.</p>
+<p><b>SVG — обёртка с растра</b> (<code>&lt;image&gt;</code> поверх фона), а не векторная иконка:</p>
+<p>знак пришёл картинкой, перерисовывать его вручную значит рисовать заново.</p>
 <h2>Кэширование статики: почему <code>Cache-Control: no-cache</code></h2>
 <p><b>Статика отдаётся с <code>Cache-Control: no-cache</code>.</b> Без этого заголовка телефон</p>
 <p>по обычному HTTP (service worker не работает) держит <code>app.js</code> в браузерном</p>

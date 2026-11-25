@@ -65,16 +65,25 @@ test('index.html: манифест подключён, иконка для вк�
   assert.match(HTML, /apple-touch-icon/, 'нет apple-touch-icon');
 });
 
-test('иконка: фон и цвета взяты из палитры интерфейса', () => {
-  // Палитра иконки — из :root в style.css. Расхождение видно глазом:
-  // иконка другого тона, чем приложение.
-  for (const token of ['--bg', '--panel', '--accent', '--accent2']) {
-    const match = CSS.match(new RegExp(`${token}:\\s*(#[0-9a-fA-F]{3,8})`));
-    assert.ok(match, `в style.css нет ${token}`);
-    const svg = readFileSync(`${ROOT}client/icons/icon.svg`, 'utf-8');
-    assert.ok(svg.includes(match[1]),
-      `${token} (${match[1]}) нет в иконке — она из другой палитры`);
-  }
+test('иконка: есть мастер-файл — из него рисуются все версии', () => {
+  // Иконка — готовая картинка (знак «Чёрный тренер»), а не рисунок из
+  // палитры. Мастер — источник правды: без него иконки не перерисовать.
+  const path = `${ROOT}client/icons/icon-source.png`;
+  const size = statSync(path).size;
+  assert.ok(size > 1000, `мастер-файл пустой или слишком мал (${size} B)`);
+});
+
+test('иконка: фон maskable-версии совпадает с фоном приложения', () => {
+  // Maskable-версия заливается фоном темы. Если он не совпадёт, по краям
+  // маски Android будет видно чужой прямоугольник.
+  const match = CSS.match(/--bg:\s*(#[0-9a-fA-F]{3,8})/);
+  assert.ok(match, 'в style.css нет --bg');
+  const hex = match[1];
+  const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const expected = `rgb(${rgb.join(',')})`;
+  const svg = readFileSync(`${ROOT}client/icons/icon.svg`, 'utf-8');
+  assert.ok(svg.includes(expected),
+    `фон иконки ${expected} не совпадает с --bg ${hex}`);
 });
 
 test('service worker: иконки в SHELL, а версия кэша поднята', () => {

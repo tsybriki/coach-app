@@ -19,6 +19,9 @@ dev = [
     "pytest-cov>=6.0",
     "mypy>=1.13",
     "ruff>=0.8",
+    # Pillow — для tools/render_icons.py: рисует иконки приложения из
+    # мастер-файла. Приложению он не нужен.
+    "pillow>=10",
 ]
 
 [tool.setuptools.packages.find]
