@@ -31,6 +31,8 @@ SVG-иконку, получают тот же знак.
 """
 from __future__ import annotations
 
+import base64
+import io
 from pathlib import Path
 
 from PIL import Image
@@ -100,14 +102,24 @@ def render(size: int, master: Image.Image, *, maskable: bool = False) -> Image.I
 
 
 def write_svg(master: Image.Image, path: Path) -> None:
-    """SVG-версия — обёртка с растра.
+    """SVG-версия — знак, встроенный в SVG как data URI.
 
-    Браузеры, просящие SVG-иконку, получают тот же знак. Свой SVG
-    рисовать вручную нельзя: знак пришёл картинкой.
+    **Растр внутри, а не ссылка на файл.** SVG, загруженный как `<img>`,
+    по правилам безопасности не грузит внешние ресурсы: обёртка со
+    `<image href="icon-source.png">` показывала пустой фон. Поэтому растр
+    встраивается прямо в SVG.
+
+    Свой SVG рисовать вручную нельзя: знак пришёл картинкой.
     """
-    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 {MASTER_SIZE} {MASTER_SIZE}">
-  <rect width="{MASTER_SIZE}" height="{MASTER_SIZE}" fill="rgb({BG[0]},{BG[1]},{BG[2]})"/>
-  <image width="{MASTER_SIZE}" height="{MASTER_SIZE}" xlink:href="icon-source.png"/>
+    embedded = master.resize((256, 256), Image.LANCZOS)
+    embedded = embedded.quantize(colors=256, method=Image.FASTOCTREE)
+    buffer = io.BytesIO()
+    embedded.save(buffer, "PNG", optimize=True)
+    data = base64.b64encode(buffer.getvalue()).decode("ascii")
+
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="rgb({BG[0]},{BG[1]},{BG[2]})"/>
+  <image width="256" height="256" xlink:href="data:image/png;base64,{data}"/>
 </svg>
 """
     path.write_text(svg, encoding="utf-8")

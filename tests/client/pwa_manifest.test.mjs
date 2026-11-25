@@ -121,3 +121,30 @@ test('версионированные файлы иконок физическ�
     assert.ok(size > 1000, `${icon.src} — пустой или слишком мал (${size} B)`);
   }
 });
+
+test('SVG-иконка самодостаточна — знак встроен, а не ссылка на файл', () => {
+  // SVG, загруженный как <img>, по правилам безопасности не грузит
+  // внешние ресурсы: обёртка `<image href="icon-source.png">` показывала
+  // пустой фон. Растр должен быть внутри SVG.
+  const svg = readFileSync(`${ROOT}client/icons/icon-v2.svg`, 'utf-8');
+  assert.match(svg, /data:image\/png;base64,/,
+    'в SVG нет встроенного растра — иконка покажет пустой фон');
+  assert.doesNotMatch(svg, /href="[^"]*\.png"/,
+    'SVG ссылается на внешний PNG — при загрузке как <img> он не грузится');
+});
+
+test('иконки не пустые: знак на месте, а не только фон', () => {
+  // PNG читаем по сигнатуре: после заголовка идут пиксельные данные.
+  // Файл в 200 КБ из одного фона — это не иконка.
+  for (const icon of MANIFEST.icons) {
+    if (!icon.src.endsWith('.png')) continue;
+    const buffer = readFileSync(`${ROOT}client${icon.src}`);
+    assert.equal(buffer.subarray(1, 4).toString('ascii'), 'PNG',
+      `${icon.src} — не PNG`);
+    // IHDR: ширина и высота по байтам 16..24
+    const width = buffer.readUInt32BE(16);
+    const height = buffer.readUInt32BE(20);
+    assert.ok(width >= 192 && height >= 192,
+      `${icon.src} — ${width}×${height}, а должно быть не меньше 192`);
+  }
+});
