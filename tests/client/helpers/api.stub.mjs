@@ -38,7 +38,14 @@ export function getCurrentWeek() {
     version: f.version ?? 42,
     // Неделя сезона по календарю. Ручной выбор недели хранится отдельно
     // (localStorage) и может указывать на другую неделю.
-    data: {season_week: f.currentWeek ?? f.seasonWeek ?? 3},
+    //
+    // `today` — сегодняшняя дата: клиент по ней помечает тренировки
+    // текущего дня и прокручивает список к ним. Может не прийти (старая
+    // версия сервера, кэш) — тогда «сегодня» просто не помечается.
+    data: {
+      season_week: f.currentWeek ?? f.seasonWeek ?? 3,
+      ...(f.today ? {today: f.today} : {}),
+    },
   });
 }
 

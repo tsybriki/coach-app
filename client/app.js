@@ -28,6 +28,7 @@ const state = {
   screen: 'week',
   seasonWeek: Number(localStorage.getItem('coach-app-week')) || null,
   currentWeek: null,     // неделя сезона по календарю — её считает сервер
+  today: null,           // сегодняшняя дата (ISO) — с сервера, для «сегодня»
   // Неделя выбрана руками в «Сезоне» — её не переключаем на текущую
   // автоматически: человек сам открыл прошлую неделю, чтобы её посмотреть.
   seasonWeekPinned: localStorage.getItem('coach-app-week-pinned') === '1',
@@ -217,6 +218,24 @@ function renderScreen() {
     : state.screen === 'compose' ? screenCompose()
     : screenAthlete();
   picker.innerHTML = body;
+  /* Экран недели — на всю высоту: саммари сверху, тренировки
+   * прокручиваются в своём контейнере. Класс на самом контейнере:
+   * `picker` прячется, когда открыты детали, и высота должна уезжать
+   * вместе с ним. */
+  picker.classList.toggle('week-screen', state.screen === 'week');
+  /* Неделя открывается прокрученной к сегодняшнему дню.
+   *
+   * Прокрутка — здесь, а не в местах вызова: экран недели рисуется
+   * десятком путей (загрузка, смена раздела, возврат из деталей,
+   * открытие недели из сезона), и в каждом забыть про прокрутку —
+   * значит открыть неделю не прокрученной.
+   *
+   * Прокрутка — **после кадра**: на момент рендера стили ещё не
+   * применены, блок тренировок не имеет высоты, и смещение выходит
+   * неверным. */
+  if (state.screen === 'week') {
+    afterPaint(scrollToToday);
+  }
 }
 
 function barInner() {
@@ -358,7 +377,7 @@ const MONTHS_SHORT = [
  * важен: обработчик клика сначала проверяет действия, иначе тап по
  * иконке открыл бы детали вместо удаления.
  */
-function slotCard(workout, actual) {
+function slotCard(workout, actual, today = false) {
   const objective = workout.objective || {};
   const placed = objective.day !== undefined && objective.day !== null
     && objective.day !== '';
@@ -381,8 +400,9 @@ function slotCard(workout, actual) {
     : `<button class="slot-act" data-bind-pick="${escapeHtml(workout.request_id || workout.id)}"
          title="Привязать к окну" aria-label="Привязать к окну">🔗</button>`;
 
-  return `<div class="slot-card">
-      <button class="slot${actual ? ' done' : ''}" data-slot="${escapeHtml(workout.id)}">
+  return `<div class="slot-card${today ? ' today' : ''}">
+      <button class="slot${actual ? ' done' : ''}" data-slot="${escapeHtml(workout.id)}"
+        ${today ? 'data-today="true"' : ''}>
         ${slotButtonBody(workout, actual)}
       </button>
       <div class="slot-acts">${bindBtn}${removeBtn}</div>
@@ -574,7 +594,7 @@ function screenWeek() {
 
   const slots = sortedWorkouts(placed).map((w) => {
     const actual = state.actual.find((a) => a.id === w.actual_id);
-    return slotCard(w, actual);
+    return slotCard(w, actual, isToday(w));
   }).join('');
 
   /* Счётчик — по всем тренировкам недели: «9 тренировок», из них
@@ -583,12 +603,58 @@ function screenWeek() {
   const total = (week.workouts || []).length;
   const placedCount = placed.length;
 
+  /* Два блока: саммари и тренировки.
+   *
+   * Саммари (фокус, прогресс, действия) — **вне** списка тренировок и
+   * всегда на виду: прокручивая неделю, человек не должен терять из
+   * виду, сколько ещё осталось. Список тренировок — свой прокручиваемый
+   * блок (`.week-trainings.scrolls`), а не часть общей страницы.
+   *
+   * Открывается неделя — список прокручен к сегодняшнему дню: неделя
+   * начинается в воскресенье, и без прокрутки человек смотрел бы на
+   * прошлые дни, а не на сегодняшние тренировки.
+   */
+  const todayCount = placed.filter((w) => isToday(w)).length;
+
   return `${messageBlock()}
-    ${focusCard(week)}
-    ${weekActions(week)}
-    <h2 class="slots-header">Тренировки · ${placedCount} из ${total}</h2>
-    <div class="slots-list">${slots || '<p class="empty">Размещённых тренировок нет.</p>'}</div>
-    ${unplacedBlock(week)}`;
+    <div class="week-summary">
+      ${focusCard(week)}
+      ${weekActions(week)}
+      ${todayLine(todayCount)}
+    </div>
+    <div class="week-trainings scrolls">
+      <h2 class="slots-header">Тренировки · ${placedCount} из ${total}</h2>
+      <div class="slots-list">${slots || '<p class="empty">Размещённых тренировок нет.</p>'}</div>
+      ${unplacedBlock(week)}
+    </div>`;
+}
+
+/* Тренировка — сегодняшняя?
+ *
+ * Дата тренировки приходит с сервера (`objective.date`), сегодняшняя —
+ * тоже (`/api/v1/current-week` → `today`). Сравниваются строки ISO:
+ * это один формат, и разбирать дату по календарю здесь незачем.
+ *
+ * Даты может не быть (висяк без окна, старая версия сервера) — тогда
+ * тренировка не сегодняшняя.
+ */
+function isToday(workout) {
+  const today = state.today;
+  if (!today) return false;
+  const objective = workout.objective || {};
+  const date = objective.date || workout.date || '';
+  return Boolean(date) && date === today;
+}
+
+/* Строка «сегодня» в саммари: сколько тренировок в сегодняшнем дне.
+ *
+ * Без неё «сегодня» видно только после прокрутки списка, а человек
+ * открывает неделю именно за тем, что сегодня делать.
+ */
+function todayLine(count) {
+  if (!state.today || !count) return '';
+  const word = count === 1 ? 'тренировка' : 'тренировки';
+  return `<p class="today-line">Сегодня · ${count} ${word}</p>`;
 }
 
 /* Карточка фокуса недели: заголовок, действия справа и прогресс.
@@ -2272,6 +2338,53 @@ function showPicker() {
   if (window.scrollY > 0) window.scrollTo(0, 0);
 }
 
+/* Действие после отрисовки.
+ *
+ * `requestAnimationFrame` — когда он есть. В jsdom его нет, и там
+ * достаточно `setTimeout`: проверка теста не про реальную анимацию, а
+ * про то, что действие вообще происходит.
+ */
+function afterPaint(action) {
+  const raf = window.requestAnimationFrame;
+  if (typeof raf === 'function') {
+    raf.call(window, action);
+  } else {
+    setTimeout(action, 0);
+  }
+}
+
+/* Прокрутка списка тренировок к сегодняшнему дню.
+ *
+ * Неделя начинается в воскресенье, и без прокрутки человек смотрел бы
+ * на прошлые дни, а не на сегодняшние тренировки. Прокручивается
+ * **список тренировок** (у него своя прокрутка), а не страница: саммари
+ * должно остаться на виду.
+ *
+ * Прокрутка — после кадра: элемент должен получить размеры, иначе
+ * браузер не знает, куда прокручивать.
+ */
+function scrollToToday() {
+  const list = document.querySelector('.week-trainings');
+  if (!list) return;
+  const today = list.querySelector('.slot[data-today="true"]');
+  if (!today) return;
+  /* Смещение — через прямоугольники, а не через `offsetTop`.
+   *
+   * `offsetTop` у карточки тренировки считается от её
+   * `offsetParent` — то есть от самой карточки, а не от
+   * прокручиваемого списка: он всегда 0. Смещение считается как
+   * разница позиций на экране.
+   */
+  const top = today.getBoundingClientRect().top
+    - list.getBoundingClientRect().top
+    + list.scrollTop - 8;
+  if (typeof list.scrollTo === 'function') {
+    list.scrollTo({top: Math.max(0, top), behavior: 'auto'});
+  } else {
+    list.scrollTop = Math.max(0, top);
+  }
+}
+
 /* Нижнее меню: пять разделов, активный подсвечен. */
 function renderNav() {
   nav.innerHTML = SCREENS
@@ -2576,6 +2689,9 @@ async function load() {
     // Текущая неделя — по дате на сервере: клиент не знает про начало сезона.
     if (current) {
       state.currentWeek = current.data.season_week;
+      // Сегодняшняя дата — с сервера: клиент не знает про календарь
+      // сезона. Без неё «сегодня» не помечается, и прокручивать некуда.
+      state.today = current.data.today || null;
     }
     state.seasonWeek = pickSeasonWeek(state.seasonWeek, state.currentWeek,
                                       state.weeks);
