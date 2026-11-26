@@ -33,13 +33,13 @@ from app.domain.enums import (
     WorkoutStatus,
 )
 from app.domain.methodology import (
-    EASY_PACE_SEC_PER_KM,
     ZONE_EASY,
     ZONE_INTERVAL,
     ZONE_MARATHON,
     ZONE_REPETITION,
     ZONE_THRESHOLD,
     athlete_zone_for,
+    easy_pace_sec,
     format_pace,
 )
 
@@ -351,14 +351,14 @@ def build_steps(
 
 
 def _pace_for(zone: str, pace_by_zone: dict[str, float]) -> float | None:
-    """Темп зоны. Лёгкий бег — всегда 5:30.
+    """Темп зоны. Лёгкий бег — «E» текущей формы плюс 12 секунд.
 
-    «E» из таблицы Дэниэлса для этого спортсмена — 5:13, верх лёгкой
-    зоны: в нём HR упирается в верх Z2, и лёгкий бег перестаёт быть
-    лёгким. Правило одно на все места, где встречается лёгкий бег.
+    «E» из таблицы Дэниэлса — верх лёгкой зоны: в нём HR упирается в
+    верх Z2, и лёгкий бег перестаёт быть лёгким. Правило одно на все
+    места, где встречается лёгкий бег.
     """
     if zone == ZONE_EASY:
-        return EASY_PACE_SEC_PER_KM
+        return easy_pace_sec(pace_by_zone)
     return pace_by_zone.get(zone)
 
 

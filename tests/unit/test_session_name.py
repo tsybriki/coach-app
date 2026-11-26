@@ -153,22 +153,27 @@ def test_base_name_wins_over_kind():
     assert name == "Длинный бег"
 
 
-def test_easy_pace_is_540_not_daniels_top_of_zone():
-    """Лёгкий темп — 5:40, а не 5:13.
+def test_easy_pace_at_vdot_48_is_540():
+    """При форме VDOT 48 лёгкий темп — 5:40.
 
-    «E» по таблице Дэниэлса для VDOT 51 — это верх лёгкой зоны: на
+    «E» по таблице Дэниэлса для VDOT 48 — это верх лёгкой зоны: на
     длинной дистанции в нём HR упирается в верх Z2, и «лёгкий бег»
-    перестаёт быть лёгким. Середина зоны — 5:40.
+    перестаёт быть лёгким. Середина зоны — плюс 12 секунд (5:40).
     """
     assert EASY_PACE_MIN_PER_KM == "5:40"
     assert EASY_PACE_SEC_PER_KM == 340.0
 
 
-def test_easy_pace_ignores_daniels_table():
-    """Таблица Дэниэлса не переопределяет решение по лёгкому темпу."""
-    # Таблица даёт 313 секунд на км (5:13) для зоны E.
-    table = {"E": 313.0, "R": 215.0}
-    assert easy_pace_sec_per_km(table) == 340.0
+def test_easy_pace_follows_table_plus_offset():
+    """Лёгкий темп — «E» таблицы плюс 12 секунд, а не константа.
+
+    При росте формы лёгкий бег ускоряется сам: иначе план остался бы
+    на прежнем темпе и разошёлся бы с карточкой профиля.
+    """
+    at_48 = {"E": 328.0, "R": 225.0}
+    at_49 = {"E": 323.0, "R": 222.0}
+    assert easy_pace_sec_per_km(at_48) == 340.0
+    assert easy_pace_sec_per_km(at_49) == 335.0
 
 
 def test_easy_pace_is_none_without_table():

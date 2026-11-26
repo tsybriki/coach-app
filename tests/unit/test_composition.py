@@ -21,9 +21,10 @@ from app.domain.enums import FocusType, Sport, StepRole, TargetType
 # Секунды на километр.
 PACE = {"E": 330.0, "T": 240.0, "I": 220.0, "R": 200.0, "M": 270.0}
 
-# Темпы настоящего спортсмена (VDOT 51) из таблицы Дэниэлса.
-# Лёгкая зона здесь — 5:13, но лёгкий бег в приложении всегда 5:40.
-REAL_PACE = {"E": 313.0, "M": 267.0, "T": 251.0, "I": 231.0, "R": 215.0}
+# Темпы настоящего спортсмена (VDOT 49) из таблицы Дэниэлса.
+# Лёгкая зона здесь — 5:23, но лёгкий бег в приложении идёт на 12 секунд
+# медленнее «E»: это середина лёгкой зоны, а не её верх.
+REAL_PACE = {"E": 323.0, "M": 276.0, "T": 260.0, "I": 239.0, "R": 222.0}
 
 
 def make_athlete() -> Athlete:
@@ -164,7 +165,7 @@ def test_short_repeats_use_repetition_pace():
 
     work = [s.step for s in composition.steps if s.step.role is StepRole.WORK]
     assert work[0].focus is FocusType.PACE
-    assert work[0].focus_value["pace_min_per_km"] == "3:35"  # R = 215 с/км
+    assert work[0].focus_value["pace_min_per_km"] == "3:42"  # R = 222 с/км
 
 
 def test_longer_repeats_keep_interval_zone():
@@ -177,7 +178,7 @@ def test_longer_repeats_keep_interval_zone():
 
     work = [s.step for s in composition.steps if s.step.role is StepRole.WORK]
     assert work[0].focus_value["zone"] == "Z7"
-    assert work[0].focus_value["pace_min_per_km"] == "3:51"  # I = 231 с/км
+    assert work[0].focus_value["pace_min_per_km"] == "3:59"  # I = 239 с/км
 
 
 def test_work_and_rest_alternate():
@@ -280,16 +281,16 @@ def test_set_round_carries_reps_and_block_count():
 
 
 def test_rest_block_has_its_pace():
-    """У блока отдыха свой темп: отдых 200 м — это «200 м по 5:40».
+    """У блока отдыха свой темп: отдых 200 м — это «200 м по 5:42».
 
     Без темпа отдых в структуре выглядит пустым: «отдых» без объёма
-    и скорости.
+    и скорости. Темп отдыха — лёгкий: «E» плюс 12 секунд (330 + 12).
     """
     composition = build_steps(
         [repetition_intent()], athlete=make_athlete(), pace_by_zone=PACE)
 
     rest = [s.step for s in composition.steps if s.step.role is StepRole.REST]
-    assert rest[0].focus_value["pace_min_per_km"] == "5:40"
+    assert rest[0].focus_value["pace_min_per_km"] == "5:42"
     assert rest[0].focus_value["zone"] == "Z2"
 
 
@@ -329,14 +330,17 @@ def test_group_name_describes_the_set():
     assert any("5×400" in g for g in groups)
 
 
-def test_easy_steps_use_easy_pace_5_40():
-    """Лёгкий бег — 5:40 на всех местах, включая разбор текста."""
+def test_easy_steps_use_easy_pace_from_form():
+    """Лёгкий бег — «E» формы плюс 12 секунд, на всех местах.
+
+    При VDOT 49 «E» = 323 с/км, лёгкий бег = 335 с/км = 5:35.
+    """
     composition = build_steps(
         [easy_intent(5000.0)], athlete=make_athlete(), pace_by_zone=REAL_PACE)
 
     step = composition.steps[0].step
-    assert step.focus_value["pace_min_per_km"] == "5:40"
-    assert step.duration_min == pytest.approx(5000.0 / 1000.0 * 340.0 / 60.0, abs=0.01)
+    assert step.focus_value["pace_min_per_km"] == "5:35"
+    assert step.duration_min == pytest.approx(5000.0 / 1000.0 * 335.0 / 60.0, abs=0.01)
 
 
 def test_composition_carries_intents_for_round_trip():

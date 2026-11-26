@@ -40,7 +40,11 @@ from __future__ import annotations
 
 from app.domain.entities import Step
 from app.domain.enums import Sport
-from app.domain.methodology import EASY_PACE_MIN_PER_KM, EASY_PACE_SEC_PER_KM
+from app.domain.methodology import (
+    EASY_PACE_MIN_PER_KM,
+    EASY_PACE_SEC_PER_KM,
+    easy_pace_sec,
+)
 
 __all__ = [
     "EASY_PACE_MIN_PER_KM",
@@ -68,18 +72,24 @@ __all__ = [
 
 
 def easy_pace_sec_per_km(pace_by_zone: dict[str, float]) -> float | None:
-    """Темп лёгкого бега — 5:30, а не «E» из таблицы Дэниэлса.
+    """Темп лёгкого бега — «E» текущей формы плюс 12 секунд.
 
-    «E» для VDOT 51 — это 5:13, то есть верх лёгкой зоны. Бег в этом
-    темпе на длинной дистанции держит HR у верхней границы Z2 и
-    перестаёт быть лёгким.
+    «E» из таблицы Дэниэлса — верх лёгкой зоны: бег в нём на длинной
+    дистанции держит HR у верхней границы Z2 и перестаёт быть лёгким.
+    Середина зоны — на 12 секунд медленнее.
 
-    Здесь не таблица Дэниэлса, а решение по этому спортсмену: 5:30 —
-    середина его лёгкой зоны. Темпы для отрезков и тестов не трогаем.
+    Темп считается от формы, а не зашит: при VDOT 48 это 5:40, при
+    VDOT 49 — 5:35. Зашитая константа перестала бы соответствовать
+    спортсмену при росте формы, и план разошёлся бы с карточкой
+    профиля.
+
+    Без справочника темпа нет: это «не задано», а не выдуманное число.
+    Темпы для отрезков и тестов не трогаем: там темп и есть содержание
+    работы.
     """
     if not pace_by_zone:
         return None
-    return EASY_PACE_SEC_PER_KM
+    return easy_pace_sec(pace_by_zone)
 
 # Названия основы сессии — по виду работы.
 BASE_BY_KIND = {
