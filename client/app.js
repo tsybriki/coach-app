@@ -614,13 +614,10 @@ function screenWeek() {
    * начинается в воскресенье, и без прокрутки человек смотрел бы на
    * прошлые дни, а не на сегодняшние тренировки.
    */
-  const todayCount = placed.filter((w) => isToday(w)).length;
-
   return `${messageBlock()}
     <div class="week-summary">
       ${focusCard(week)}
       ${weekActions(week)}
-      ${todayLine(todayCount)}
     </div>
     <div class="week-trainings scrolls">
       <h2 class="slots-header">Тренировки · ${placedCount} из ${total}</h2>
@@ -644,17 +641,6 @@ function isToday(workout) {
   const objective = workout.objective || {};
   const date = objective.date || workout.date || '';
   return Boolean(date) && date === today;
-}
-
-/* Строка «сегодня» в саммари: сколько тренировок в сегодняшнем дне.
- *
- * Без неё «сегодня» видно только после прокрутки списка, а человек
- * открывает неделю именно за тем, что сегодня делать.
- */
-function todayLine(count) {
-  if (!state.today || !count) return '';
-  const word = count === 1 ? 'тренировка' : 'тренировки';
-  return `<p class="today-line">Сегодня · ${count} ${word}</p>`;
 }
 
 /* Карточка фокуса недели: заголовок, действия справа и прогресс.
