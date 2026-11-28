@@ -103,6 +103,9 @@ class CommandType(StrEnum):
     REMOVE_WORKOUT = "remove_workout"
     LINK_ACTUAL = "link_actual"
     UNLINK_ACTUAL = "unlink_actual"
+    # Субъективная оценка тренировки: ставится при привязке факта и
+    # правится позже. Пустая оценка — тоже оценка («пропустил»).
+    SET_FEEDBACK = "set_feedback"
     EDIT_ACTUAL = "edit_actual"
     UPDATE_ATHLETE = "update_athlete"
     SET_GOAL = "set_goal"

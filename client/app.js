@@ -12,6 +12,12 @@ import {
   getCache, putCache, enqueue, pendingCommands, removeCommand, markAttempt,
 } from './store.js';
 import { linkCandidates } from './link.js';
+import {
+  COMMENT_FIELD,
+  FIELDS,
+  feedbackBadges,
+  feedbackFields,
+} from './feedback.js';
 import { axisLabels, polyline, timeLabels, toPoints, zoneBands } from './chart.js';
 import {
   groupBlocks,
@@ -47,6 +53,7 @@ const state = {
   composeBusy: false,    // идёт разбор: ждём модель
   composeError: null,    // разбор не удался
   composeAvailable: true, // доступен ли разбор (есть ли ключ модели)
+  feedback: null,        // форма оценки: что оцениваем и что уже выбрано
   weeks: [],
   summary: null,
   seasonPlan: null,      // макро-план сезона: фазы и недели целиком
@@ -111,6 +118,10 @@ function chromeBar() {
     return detailBar('Предложить тренировку',
                      state.week ? `Неделя ${state.week.season_week}` : '');
   }
+  if (state.screen === 'feedback') {
+    const form = state.feedback || {};
+    return detailBar('Оценка тренировки', form.title || '');
+  }
   if (state.openWorkoutId && state.week) {
     /* Тренировка может быть непривязанной — тогда у неё нет дня, и
      * в шапке это видно по подписи «не привязано». */
@@ -168,6 +179,10 @@ function screenTitle() {
   if (state.screen === 'compose') {
     return 'Предложить тренировку';
   }
+  // Оценка тренировки — тоже подэкран недели.
+  if (state.screen === 'feedback') {
+    return 'Оценка тренировки';
+  }
   const found = SCREENS.find(([id]) => id === state.screen);
   return found ? found[1] : 'Coach';
 }
@@ -216,6 +231,7 @@ function renderScreen() {
     : state.screen === 'season' ? screenSeason()
     : state.screen === 'fact' ? screenFact()
     : state.screen === 'compose' ? screenCompose()
+    : state.screen === 'feedback' ? screenFeedback()
     : screenAthlete();
   picker.innerHTML = body;
   /* Экран недели — на всю высоту: саммари сверху, тренировки
@@ -438,6 +454,14 @@ function slotButtonBody(workout, actual) {
     ? `<div class="done-line">${((actual.distance_m || 0) / 1000).toFixed(1)} км · ${formatDuration(actual.duration_min)}${actual.hr_avg ? ` · HR ${actual.hr_avg}` : ''}</div>`
     : '';
 
+  /* Маркеры оценки — коротко, чтобы картина недели читалась с одного
+   * взгляда: «Тело -1», «Ноги +1», «Ещё 1: Хватило». */
+  const badges = feedbackBadges(workout.feedback);
+  const badgeLine = badges.length
+    ? `<div class="slot-badges">${badges.map((b) =>
+        `<span class="fb-badge">${escapeHtml(b)}</span>`).join('')}</div>`
+    : '';
+
   return `<div class="slot-head">
         <span class="ico">${KIND_ICON[workout.sport] || '🎯'}</span>
         <span class="day">${when}</span>
@@ -445,7 +469,8 @@ function slotButtonBody(workout, actual) {
       </div>
       <div class="name">${escapeHtml(title)}</div>
       ${focus ? `<div class="focus">🎯 ${escapeHtml(focus)}</div>` : ''}
-      ${actualLine}`;
+      ${actualLine}
+      ${badgeLine}`;
 }
 
 /* Километраж тренировки — строкой «14,3 км» или пусто, если дистанции нет.
@@ -1022,6 +1047,32 @@ function factList(workout) {
   return facts || `<p>${SPORT_NAME[workout.sport] || workout.sport}: активностей нет</p>`;
 }
 
+/* Блок оценки у привязанной тренировки.
+ *
+ * Показывает, что уже отмечено, и даёт открыть форму. Если оценки нет
+ * — блока нет: пустой блок с кнопкой шумит.
+ */
+function feedbackBlock(workout) {
+  const kind = workoutFeedbackKind(workout);
+  if (kind === 'other') return '';
+
+  const values = workout.feedback || {};
+  const badges = feedbackBadges(values);
+  const saved = badges.length
+    ? `<div class="fb-badges">${badges.map((b) =>
+        `<span class="fb-badge">${escapeHtml(b)}</span>`).join('')}</div>`
+    : '';
+  const note = values.comment
+    ? `<div class="fb-note">${escapeHtml(values.comment)}</div>` : '';
+
+  return `<div class="feedback-block">
+      <div class="lbl">Оценка</div>
+      ${saved}${note}
+      <button class="action secondary" data-fb-edit="${escapeHtml(workout.id)}">
+        ${badges.length ? 'Изменить оценку' : 'Оценить тренировку'}</button>
+    </div>`;
+}
+
 /* Цвета фаз — по фокусу недели. Читаемая шкала, а не украшение:
  * по вертикали сезона видно, что тренируется. */
 const PHASE_COLOR = {
@@ -1578,6 +1629,59 @@ async function loadWorkoutMetrics(actualId, skipReload = false) {
  * Два состояния: ввод текста и результат разбора. Разбор — чтение,
  * неделя не меняется; добавление в неделю — отдельное действие.
  */
+/* Экран оценки тренировки.
+ *
+ * Отдельный подэкран недели: открывается в момент привязки факта, и
+ * оценку потом можно открыть снова с уже привязанной тренировки.
+ *
+ * Поля зависят от вида работы, и вид приходит с сервера: клиент по
+ * `kind` не разбирается (у интервальной тренировки, собранной из
+ * текста, `kind` = `composed` — по нему её не отличить от лёгкой).
+ *
+ * Всё выбирается чипсами: без выпадающих списков и без ввода цифр.
+ * У состояния тела значение «Фон» выбрано заранее — в обычный день
+ * человек ничего не трогает.
+ */
+function screenFeedback() {
+  const form = state.feedback;
+  if (!form) return `${messageBlock()}<h2>Оценка</h2>`;
+
+  const values = form.values || {};
+  const fields = feedbackFields(form.kind);
+
+  const groups = fields.map((key) => {
+    const field = FIELDS[key];
+    const chips = field.options.map((option) => {
+      const selected = values[key] === option.value;
+      return `<button class="chip${selected ? ' on' : ''}"
+        data-fb-field="${escapeHtml(key)}"
+        data-fb-value="${escapeHtml(String(option.value))}"
+        aria-pressed="${selected ? 'true' : 'false'}">${escapeHtml(option.label)}</button>`;
+    }).join('');
+    return `<div class="fb-group">
+        <div class="fb-label">${escapeHtml(field.label)}</div>
+        <div class="chips">${chips}</div>
+      </div>`;
+  }).join('');
+
+  const comment = `<div class="fb-group">
+      <div class="fb-label">Заметка</div>
+      <textarea id="fb-comment" class="fb-comment"
+        placeholder="Ветер, недосып, новые кроссовки…">${escapeHtml(values[COMMENT_FIELD] || '')}</textarea>
+    </div>`;
+
+  return `${messageBlock()}
+    <div class="card">
+      <div class="chead">Оценка тренировки</div>
+      ${groups}
+      ${comment}
+    </div>
+    <div class="card">
+      <button class="action primary" id="fb-save">Сохранить оценку</button>
+      <button class="action secondary" id="fb-skip">Пропустить</button>
+    </div>`;
+}
+
 function screenCompose() {
   const busy = state.composeBusy;
   const head = `<div class="card">
@@ -2166,6 +2270,7 @@ function showWorkout(workoutId, skipMetrics = false) {
           <button class="action" data-detail="${escapeHtml(linkedActual.id)}">Разбор тренировки →</button>
           <button class="action secondary" data-unlink="${escapeHtml(workout.id)}">Отвязать</button>
         </div>
+        ${feedbackBlock(workout)}
       </div>`
     : placed
       ? `<div class="actual-block empty">
@@ -2963,6 +3068,21 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
+  /* Открыть оценку у уже привязанной тренировки — чтобы отредактировать.
+   *
+   * Проверка **до** `[data-detail]`: блок «Выполнено» сам кликабелен
+   * (он ведёт в разбор), и кнопка правки оценки лежит внутри него.
+   * Без этой оговорки тап по «Изменить оценку» открывал бы разбор
+   * тренировки вместо формы. */
+  const fbEdit = closest('[data-fb-edit]');
+  if (fbEdit) {
+    const workout = findWorkout(fbEdit.dataset.fbEdit);
+    if (workout) {
+      openFeedback(workout, null);
+    }
+    return;
+  }
+
   // Разбор тренировки: загрузить детали или разобрать FIT
   const detail = closest('[data-detail]');
   if (detail) {
@@ -3090,6 +3210,45 @@ document.addEventListener('click', async (event) => {
     bar.innerHTML = chromeBar();
     renderNav();
     if (window.scrollY > 0) window.scrollTo(0, 0);
+    return;
+  }
+
+  /* Форма оценки: выбор чипа.
+   *
+   * Чип переключается: значение уже выбранное — снимается. Иначе
+   * «Фон» нельзя было бы вернуть, не выбрав другой вариант, а
+   * «Фон» — это и есть «проблем нет».
+   */
+  const fbChip = closest('[data-fb-field]');
+  if (fbChip) {
+    const form = state.feedback;
+    if (form) {
+      const field = fbChip.dataset.fbField;
+      const raw = fbChip.dataset.fbValue;
+      const option = (FIELDS[field] || {options: []}).options
+        .find((item) => String(item.value) === raw);
+      const value = option ? option.value : raw;
+      const current = form.values || {};
+      form.values = Object.assign({}, current);
+      if (current[field] === value) {
+        delete form.values[field];
+      } else {
+        form.values[field] = value;
+      }
+      renderScreen();
+    }
+    return;
+  }
+
+  /* Сохранить оценку. */
+  if (closest('#fb-save')) {
+    await saveFeedback(false);
+    return;
+  }
+
+  /* Пропустить оценку: привязка (если идёт) — без оценки. */
+  if (closest('#fb-skip')) {
+    await saveFeedback(true);
     return;
   }
 
@@ -3437,8 +3596,169 @@ async function loadDetail(actualId) {
   detailHost.innerHTML = `<div class="card detail-screen">${screenDetail()}</div>`;
   render();
 }
-/* Связать факт с тренировкой. */
+/* Логика формы оценки: открыть, выбрать, сохранить.
+ *
+ * Форма — подэкран недели. Открывается:
+ *   - в момент привязки факта (оценка снимается тогда, когда человек
+ *     привязывает выполненное);
+ *   - позже, с уже привязанной тренировки — чтобы отредактировать.
+ *
+ * Значение «Фон» у состояния тела выбрано заранее: в обычный день
+ * человек ничего не трогает, и форма не стоит ему лишнего тапа.
+ */
+
+/* Вид работы тренировки — с сервера (`feedback_kind` в ответе недели).
+ *
+ * Клиент по `kind` не разбирается: у интервальной тренировки,
+ * собранной из текста, `kind` = `composed`, и по нему её не отличить
+ * от лёгкой.
+ */
+function workoutFeedbackKind(workout) {
+  if (!workout) return 'other';
+  if (workout.feedback_kind) return workout.feedback_kind;
+  return 'other';
+}
+
+/* Открыть форму оценки.
+ *
+ * `pendingLink` — привязка факта, которая должна завершиться вместе с
+ * оценкой. Пусто — оценка правится отдельно, на уже привязанной
+ * тренировке.
+ */
+function openFeedback(workout, pendingLink) {
+  const values = Object.assign({}, workout.feedback || {});
+  /* Состояние тела по умолчанию — «Фон»: форма не должна стоить
+   * лишнего тапа в обычный день. */
+  if (values.body_status === undefined || values.body_status === null) {
+    values.body_status = 0;
+  }
+
+  state.feedback = {
+    workoutId: workout.id,
+    kind: workoutFeedbackKind(workout),
+    values,
+    title: (workout.objective || {}).name || workout.kind || '',
+    pendingLink: pendingLink || null,
+  };
+  state.screen = 'feedback';
+  /* Подэкран недели: у него своя запись истории, иначе свайп-назад
+   * с него уходит за пределы приложения. */
+  try {
+    history.replaceState({page: 'week'}, '', ' ');
+  } catch (error) { /* история недоступна */ }
+  try {
+    history.pushState({page: 'week', screen: 'feedback'}, '', ' ');
+  } catch (error) { /* история недоступна */ }
+  cardWrap.classList.add('hidden');
+  detailWrap.classList.add('hidden');
+  picker.classList.remove('hidden');
+  renderScreen();
+  bar.innerHTML = chromeBar();
+  renderNav();
+  if (window.scrollY > 0) window.scrollTo(0, 0);
+}
+
+/* Значения, собранные формой, — из состояния и из поля комментария.
+ *
+ * Комментарий живёт в textarea, а не в состоянии: значение
+ * перечитывается в момент сохранения, чтобы не терять то, что
+ * человек напечатал, если форма перерисовалась.
+ */
+function collectFeedbackValues() {
+  const form = state.feedback;
+  if (!form) return {};
+  const values = Object.assign({}, form.values || {});
+  const comment = document.getElementById('fb-comment');
+  if (comment) {
+    values.comment = comment.value || '';
+  }
+  return values;
+}
+
+/* Сохранить оценку.
+ *
+ * Если форма открыта в момент привязки — привязка и оценка уходят
+ * одной командой: человек оценивает тренировку ровно тогда, когда
+ * привязывает факт.
+ */
+async function saveFeedback(skip) {
+  const form = state.feedback;
+  if (!form) return;
+
+  const values = skip
+    ? {}
+    : collectFeedbackValues();
+  const workoutId = form.workoutId;
+  const pendingLink = form.pendingLink;
+
+  state.busy = true;
+  showMessage(skip ? 'Пропускаю…' : 'Сохраняю оценку…');
+  render();
+
+  if (pendingLink) {
+    /* Привязка и оценка — одной командой. */
+    await queueCommand({
+      id: `link-${pendingLink.actualId}-${workoutId}-${Date.now()}`,
+      type: 'link_actual',
+      args: {
+        season_week: state.seasonWeek,
+        actual_id: pendingLink.actualId,
+        workout_id: workoutId,
+        feedback: values,
+      },
+      reason: 'связь факта с тренировкой и оценка',
+      expected_version: state.version,
+    });
+  } else {
+    await queueCommand({
+      id: `fb-${workoutId}-${Date.now()}`,
+      type: 'set_feedback',
+      args: {
+        season_week: state.seasonWeek,
+        workout_id: workoutId,
+        feedback: values,
+      },
+      reason: 'оценка тренировки',
+      expected_version: state.version,
+    });
+  }
+
+  await flushOutbox();
+  await load();
+  state.message = null;
+  state.busy = false;
+  state.feedback = null;
+  state.screen = 'week';
+
+  /* Возвращаемся к тренировке: оценку ставили про неё, и с неё
+   * видно, что оценка сохранилась. */
+  if (state.week && workoutId) {
+    showWorkout(workoutId);
+  } else {
+    showPicker();
+  }
+}
+
+/* Связать факт с тренировкой.
+ *
+ * Привязка идёт **вместе с оценкой**: человек оценивает тренировку
+ * ровно тогда, когда привязывает выполненное. Поэтому по нажатию
+ * открывается форма, а привязка уходит одной командой из неё.
+ *
+ * Вид спорта не бег — формы нет: оценка про бег (тело, ощущение,
+ * динамика отрезков), и спрашивать её про велосипед бессмысленно.
+ */
 async function linkActual(actualId, workoutId) {
+  const workout = findWorkout(workoutId);
+  if (workout && workoutFeedbackKind(workout) !== 'other') {
+    openFeedback(workout, {actualId, workoutId});
+    return;
+  }
+  await linkActualWithoutFeedback(actualId, workoutId);
+}
+
+/* Привязка без оценки — для не-беговой работы и для «пропустить». */
+async function linkActualWithoutFeedback(actualId, workoutId) {
   showMessage('Связываю…');
   render();
   await queueCommand({

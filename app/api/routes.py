@@ -34,6 +34,7 @@ from app.domain.entities import (
     WorkoutDetail,
 )
 from app.domain.enums import CommandType, PlanStatus, WeekStatus
+from app.domain.feedback import feedback_for_workout, workout_kind_of
 from app.domain.methodology import pace_zone_rows
 from app.domain.metrics import estimate_ftp
 from app.ports.storage import (
@@ -520,6 +521,7 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         place_unplaced,
         remove_workout,
         replan_remainder,
+        set_feedback,
         unlink_actual,
         unplace_request,
     )
@@ -737,6 +739,25 @@ def _apply(command: Command, container: AppContainer) -> dict[str, Any]:
         # Обратная ссылка на факте: без неё факт снова предлагается к связыванию.
         container.fact_repo.upsert(
             link_actual_session(actual_session, workout_id))
+        # Оценка приходит вместе с привязкой: человек оценивает тренировку
+        # в момент, когда привязывает факт, а не отдельным шагом после.
+        # Оценки в команде нет — привязка просто без неё.
+        if "feedback" in command.args:
+            workout = next((w for w in updated.workouts
+                            if w.id == workout_id), None)
+            if workout is None:
+                raise ValueError(f"в неделе {week.id} нет тренировки {workout_id}")
+            feedback = feedback_for_workout(workout, command.args.get("feedback"))
+            updated = set_feedback(updated, workout_id, feedback.as_dict())
+    elif command.type is CommandType.SET_FEEDBACK:
+        # Субъективная оценка тренировки. Значения приводит домен: клиент
+        # может прислать что угодно, и мусор отбрасывается, а не падает.
+        workout_id = str(command.args.get("workout_id", ""))
+        workout = next((w for w in week.workouts if w.id == workout_id), None)
+        if workout is None:
+            raise ValueError(f"в неделе {week.id} нет тренировки {workout_id}")
+        feedback = feedback_for_workout(workout, command.args.get("feedback"))
+        updated = set_feedback(week, workout_id, feedback.as_dict())
     elif command.type is CommandType.UNLINK_ACTUAL:
         workout_id = str(command.args.get("workout_id", ""))
         updated = unlink_actual(week, workout_id)
@@ -1356,6 +1377,11 @@ def _workout_dict(
         "distance_m": workout_distance_m(workout),
         "status": workout.status.value,
         "actual_id": workout.actual_id,
+        # Оценка тренировки — вместе с видом работы: клиент по виду
+        # работы решает, какие поля показывать в форме, а по оценке —
+        # что уже отмечено.
+        "feedback": workout.feedback or {},
+        "feedback_kind": workout_kind_of(workout),
         "steps": _steps_dict(workout.steps),
     }
 

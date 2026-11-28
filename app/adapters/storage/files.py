@@ -558,6 +558,7 @@ def _workout_to_dict(workout: Workout) -> dict[str, Any]:
         "status": workout.status.value,
         "rationale": workout.rationale,
         "actual_id": workout.actual_id,
+        "feedback": workout.feedback or {},
     }
 
 
@@ -583,6 +584,7 @@ def _workout_from_dict(data: dict[str, Any]) -> Workout:
         priority=int(data.get("priority", 0)),
         status=WorkoutStatus(data.get("status", "planned")),
         rationale=data.get("rationale"), actual_id=data.get("actual_id"),
+        feedback=dict(data.get("feedback") or {}),
     )
 
 

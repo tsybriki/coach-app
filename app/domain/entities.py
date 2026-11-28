@@ -156,6 +156,13 @@ class Workout:
     status: WorkoutStatus = WorkoutStatus.PLANNED
     rationale: str | None = None
     actual_id: str | None = None
+    # Субъективная оценка тренировки. Ставится при привязке факта и
+    # правится позже; пусто — оценки нет.
+    #
+    # Живёт на тренировке, а не на факте: факт перезаписывается выкачкой
+    # (`upsert` пишет сессию целиком), а оценку ставят один раз и потом
+    # правят.
+    feedback: dict[str, Any] = field(default_factory=dict)
 
     def validate(self) -> None:
         """Проверить инварианты тренировки.

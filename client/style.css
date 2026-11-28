@@ -1329,6 +1329,88 @@ textarea::placeholder {
   border-color: var(--accent);
 }
 
+/* Форма оценки тренировки.
+ *
+ * Поля идут группами: подпись сверху, чипсы под ней. Всё выбирается
+ * одним нажатием, поэтому чипсы — крупные и с явным состоянием
+ * «выбрано».
+ *
+ * Чип `.on` — заливка: выбранный вариант должен читаться с одного
+ * взгляда, иначе «Фон» и «Ломает» выглядят одинаково.
+ */
+.fb-group {
+  margin: 14px 0;
+}
+
+.fb-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 7px;
+}
+
+.fb-group .chips {
+  margin-top: 0;
+}
+
+/* Выбранный чип — заливка, как у активной кнопки. */
+.chip.on {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* Комментарий: две строки, без растущей высоты. */
+.fb-comment {
+  width: 100%;
+  min-height: 54px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 11px;
+  resize: vertical;
+}
+
+/* Блок оценки у привязанной тренировки. */
+.feedback-block {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.feedback-block .lbl {
+  margin-bottom: 7px;
+}
+
+/* Маркеры оценки: короткие, чтобы не мешали читать плашку. */
+.fb-badges,
+.slot-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.fb-badge {
+  font-size: 11px;
+  color: var(--accent);
+  background: rgba(122, 162, 255, 0.09);
+  border: 1px solid rgba(122, 162, 255, 0.28);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+/* Заметка оценки — отдельной строкой под маркерами. */
+.fb-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
 /* Итог разбора — отдельной строкой под шагами. */
 .metrics-list .mrow.total {
   border-bottom: none;

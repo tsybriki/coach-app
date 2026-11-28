@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+from typing import Any
+
 from app.domain.entities import (
     ActualSession,
     Assignment,
@@ -257,6 +259,10 @@ def _as_done(workout: Workout, actual_id: str | None = None) -> Workout:
         status=WorkoutStatus.DONE,
         rationale=workout.rationale,
         actual_id=actual_id or workout.actual_id,
+        # Оценка переезжает вместе с тренировкой: пересборка недели
+        # возвращает выполненное на место, и оценка — часть сделанной
+        # работы. Без переноса она молча пропадала бы при переплане.
+        feedback=dict(workout.feedback or {}),
     )
 
 
@@ -288,6 +294,30 @@ def _as_plannable(workout: Workout) -> Workout:
         rationale=workout.rationale,
         actual_id=None,
     )
+
+
+def set_feedback(week: Week, workout_id: str, feedback: dict[str, Any]) -> Week:
+    """Оценка тренировки — на самой тренировке.
+
+    Оценка ставится в момент привязки факта и правится позже, поэтому
+    она не часть связи, а часть самой тренировки: вид работы известен
+    тренировке, и при пересборке недели выполненная тренировка
+    возвращается на место вместе с оценкой.
+
+    Пустая оценка — тоже оценка: человек мог сознательно пропустить
+    форму. Поэтому «оценки нет» и «оценка пустая» — разные вещи, и
+    первое хранится отсутствием поля, второе — пустым словарём.
+    """
+    workouts = [w for w in week.workouts if w.id == workout_id]
+    if not workouts:
+        raise TransitionError(f"в неделе {week.id} нет тренировки {workout_id}")
+
+    updated = week.copy_with()
+    for workout in updated.workouts:
+        if workout.id == workout_id:
+            workout.feedback = dict(feedback or {})
+    updated.validate()
+    return updated
 
 
 def link_actual(week: Week, workout_id: str, actual: ActualSession) -> Week:

@@ -12,9 +12,10 @@
  * Ответы команд и ошибки не кэшируются никогда.
  */
 
-const CACHE = 'coach-app-shell-v49';
+const CACHE = 'coach-app-shell-v50';
 const SHELL = ['/', '/index.html', '/app.js', '/api.js', '/store.js', '/link.js',
-               '/chart.js', '/structure.js', '/style.css', '/manifest.json',
+               '/chart.js', '/structure.js', '/feedback.js', '/style.css',
+               '/manifest.json',
                // Иконки с версией в имени: Chrome обновляет иконку
                // установленного приложения по URL, а не по содержимому.
                '/icons/icon-192-v2.png', '/icons/icon-512-v2.png',

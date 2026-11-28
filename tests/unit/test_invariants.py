@@ -319,6 +319,7 @@ def test_command_types_cover_all_operations():
         "remove_workout",
         "link_actual",
         "unlink_actual",
+        "set_feedback",
         "edit_actual",
         "update_athlete",
         "set_goal",
